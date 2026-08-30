@@ -30,6 +30,7 @@
         * { box-sizing: border-box; }
         body {
             font-family: 'Iansui', system-ui, sans-serif;
+            font-size: 18px;
             margin: 0; min-height: 100vh;
             background: var(--bg); color: var(--text);
             -webkit-font-smoothing: antialiased;
@@ -61,16 +62,26 @@
         }
 
         /* ---- 一般按鈕 ---- */
-        .btn { padding: 9px 22px; border-radius: 50px; border: 2px solid var(--accent); background: var(--accent); color: #fff; font-family: inherit; font-size: 1em; cursor: pointer; }
+        .btn { padding: 9px 22px; border-radius: 50px; border: 2px solid var(--accent); background: var(--accent); color: #fff; font-family: inherit; font-size: 1em; cursor: pointer; transition: background .15s, color .15s, border-color .15s, transform .1s; }
+        .btn:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+        .btn:active { transform: scale(0.97); }
         .btn.outline { background: transparent; color: var(--accent); }
+        .btn.outline:hover { background: var(--accent); color: #fff; }
         .btn.small { padding: 5px 14px; font-size: 0.85em; }
         .btn.danger { border-color: var(--danger); background: var(--danger); }
+        .btn.danger:hover { background: color-mix(in srgb, var(--danger) 82%, #000); border-color: color-mix(in srgb, var(--danger) 82%, #000); }
+        .btn.outline.danger { background: transparent; color: var(--danger); }
+        .btn.outline.danger:hover { background: var(--danger); color: #fff; }
 
         .admin-only.hidden { display: none; }
 
         /* ---- 本 app 專用樣式 ---- */
-        header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; }
-        header h1 { font-size: 1.3em; margin: 0; }
+        header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 16px 20px; }
+        header h1 { font-size: 2em; margin: 0; grid-column: 2; text-align: center; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .icon-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: background .15s, transform .1s; }
+        .icon-btn:hover { background: var(--accent-dark); transform: scale(1.06); }
+        .icon-btn:active { transform: scale(0.95); }
+        header .header-actions { grid-column: 3; justify-self: end; }
         main, #adminArea { max-width: 900px; margin: 0 auto; padding: 0 16px 60px; }
         .card { background: var(--surface); border: 2px solid var(--line); border-radius: 18px; padding: 20px 22px; margin-bottom: 20px; }
         .card h2 { margin: 0 0 16px; font-size: 1.15em; }
@@ -83,6 +94,17 @@
         .status-choices input { display: none; }
         .status-choices input:checked + span { color: var(--accent); font-weight: bold; }
         .status-choices label:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 10px 2px var(--focus-glow); }
+        .student-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+        .student-row:last-child { border-bottom: none; }
+        .student-name { flex: 1; font-size: 1em; }
+        .mini-status-group { display: flex; gap: 6px; flex-shrink: 0; }
+        .row-status-groups { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+        .mini-status-btn { padding: 7px 12px; border-radius: 20px; border: 2px solid var(--line); background: var(--surface); color: var(--text); font-family: inherit; font-size: 0.85em; cursor: pointer; transition: background .15s, border-color .15s; }
+        .mini-status-btn:hover { border-color: var(--accent); }
+        .mini-status-btn.active.submitted { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .mini-status-btn.active.late { background: #c98a2c; border-color: #c98a2c; color: #fff; }
+        .mini-status-btn.active.missing { background: var(--danger); border-color: var(--danger); color: #fff; }
+        .mini-status-btn.active.unsigned { background: #b8860c; border-color: #b8860c; color: #fff; }
         .row { display: flex; gap: 10px; margin-bottom: 14px; }
         .row .txt-input { flex: 1; }
         .group-block { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; }
@@ -90,7 +112,8 @@
         .group-block-head strong { font-size: 1.05em; }
         .chip-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
         .chip { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 20px; padding: 5px 6px 5px 12px; font-size: 0.9em; }
-        .chip button { border: none; background: transparent; color: var(--danger); cursor: pointer; font-size: 1em; line-height: 1; padding: 2px 6px; }
+        .chip button { border: none; background: transparent; color: var(--danger); cursor: pointer; font-size: 1em; line-height: 1; padding: 2px 6px; border-radius: 50%; transition: background .15s; }
+        .chip button:hover { background: rgba(196,103,79,0.15); }
         .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
         .filters select { flex: 1; min-width: 120px; }
         table { width: 100%; border-collapse: collapse; font-size: 0.92em; }
@@ -101,14 +124,43 @@
         .badge.missing { background: var(--danger); }
         .empty-hint { color: var(--muted); text-align: center; padding: 30px 10px; }
         .missing-box { background: var(--bg); border: 1px dashed var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; font-size: 0.92em; }
+        .admin-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+        .side-by-side { display: flex; gap: 20px; align-items: stretch; }
+        .side-by-side .card { flex: 1; margin-bottom: 20px; min-width: 0; }
+        .stat-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .stat-card { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px 6px; text-align: center; transition: border-color .15s, transform .1s; }
+        .stat-card.clickable { cursor: pointer; }
+        .stat-card.clickable:hover { border-color: var(--accent); transform: translateY(-2px); }
+        .stat-num { font-size: 1.6em; font-weight: bold; color: var(--accent); }
+        .stat-label { font-size: 0.85em; color: var(--muted); margin-top: 2px; }
+        .assignment-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+        .assignment-row:last-child { border-bottom: none; }
+        .assignment-name { font-size: 1em; flex: 1; }
+        .assignment-actions { display: flex; gap: 8px; flex-shrink: 0; }
+        .cell-status-btn { padding: 6px 14px; border-radius: 20px; border: none; font-family: inherit; font-size: 0.85em; cursor: pointer; color: #fff; transition: filter .15s, transform .1s; }
+        .cell-status-btn:hover { filter: brightness(0.9); }
+        .cell-status-btn:active { transform: scale(0.95); }
+        .cell-status-btn.submitted { background: var(--accent); }
+        .cell-status-btn.late { background: #c98a2c; }
+        .cell-status-btn.missing { background: var(--danger); }
+        .cell-status-btn.unsigned { background: #b8860c; }
+        .cell-stack { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+        .sign-tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); font-size: 0.75em; vertical-align: middle; }
+        .sign-placeholder { font-size: 0.75em; color: var(--muted); }
+        .tab-btn { flex: 1; min-width: 110px; padding: 10px 12px; border: 2px solid var(--line); background: var(--surface); color: var(--text); border-radius: 12px; font-family: inherit; font-size: 0.95em; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
+        .tab-btn:hover { border-color: var(--accent); }
+        .tab-btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+        .tab-btn.active:hover { background: var(--accent-dark); }
         .foot-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
         #fMsg { min-height: 1.4em; text-align: center; font-size: 0.9em; color: var(--accent); }
 
         /* ---- 響應式：小螢幕（手機）調整 ---- */
         .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         @media (max-width: 680px) {
-            header { flex-wrap: wrap; gap: 10px; padding: 14px 14px; }
-            header h1 { font-size: 1.15em; }
+            body { font-size: 17px; }
+            header { grid-template-columns: 1fr; row-gap: 10px; padding: 14px 14px; }
+            header h1 { font-size: 1.5em; grid-column: 1; }
+            header .header-actions { grid-column: 1; justify-self: center; }
             main, #adminArea { padding: 0 10px 40px; }
             .card { padding: 16px 14px; border-radius: 14px; margin-bottom: 14px; }
             .card h2 { font-size: 1.05em; }
@@ -124,6 +176,15 @@
             .chip { font-size: 0.85em; padding: 4px 4px 4px 10px; }
             .foot-actions { justify-content: stretch; }
             .foot-actions .btn { width: 100%; }
+            .student-row { flex-wrap: wrap; }
+            .mini-status-btn { padding: 6px 9px; font-size: 0.8em; }
+            .admin-tabs { flex-direction: column; }
+            .tab-btn { width: 100%; }
+            .stat-cards { grid-template-columns: repeat(3, 1fr); }
+            .assignment-row { flex-direction: column; align-items: stretch; }
+            .assignment-actions { justify-content: stretch; }
+            .assignment-actions .btn { flex: 1; }
+            .side-by-side { flex-direction: column; gap: 0; }
         }
         @media (max-width: 420px) {
             header button { padding: 8px 14px; font-size: 0.9em; }
@@ -134,8 +195,13 @@
 <body>
     <!-- ====== 版面骨架 ====== -->
     <header>
-        <h1 data-gated><span id="appTitle">作業登記</span></h1>
-        <div>
+        <h1 data-gated>
+            <span id="appTitle">608 作業登記</span>
+            <button id="editClassNameBtn" class="icon-btn admin-only hidden" title="更改班級名稱" aria-label="更改班級名稱">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+        </h1>
+        <div class="header-actions">
             <button id="loginBtn" class="btn outline">老師登入</button>
             <button id="logoutBtn" class="btn outline admin-only hidden">登出</button>
         </div>
@@ -148,6 +214,10 @@
     <section id="adminArea" class="admin-only hidden">
         <!-- 老師登入後：班級/科目管理 + 查看區 -->
     </section>
+
+    <footer style="text-align:center; padding:24px 16px; color:var(--muted); font-size:0.85em">
+        Created by 怡臻老師
+    </footer>
 
     <!-- ====== 密碼彈窗（登入模式 A） ====== -->
     <div id="inputModal" class="modal-overlay">
@@ -181,6 +251,15 @@
                 <button class="btn-cancel" id="promptNo">取消</button>
                 <button class="btn-ok" id="promptOk">確定</button>
             </div>
+        </div>
+    </div>
+
+    <!-- ====== 今日未繳作業名單（小老師用，方便抄到黑板上） ====== -->
+    <div id="missingListModal" class="modal-overlay">
+        <div class="modal-content" style="max-width:560px; text-align:left">
+            <p class="modal-title" id="missingListTitle" style="text-align:center">今日未繳作業名單</p>
+            <div id="missingListBody" style="max-height:60vh; overflow-y:auto; margin-bottom:20px; font-size:1.05em; line-height:1.9"></div>
+            <div class="modal-actions"><button class="btn-ok" onclick="closeMissingList()">關閉</button></div>
         </div>
     </div>
 
@@ -225,15 +304,22 @@
         const db = getFirestore(app);
         const coll = collection(db, COLL_PATH);
         const settingsRef = doc(db, ...SETTINGS_PATH);
+        const archivesColl = collection(db, "archives"); // 「結束並封存」的歷史紀錄
 
-        let isAdmin = false, editorReady = false, settingsArrived = false, recordsArrived = false, gateSettingsFailed = false;
-        let errored = false;
-        function showLoadError(){ if(!document.getElementById('loadError')){ const d=document.createElement('div'); d.id='loadError'; d.textContent='載入失敗，請重新整理頁面'; d.style.cssText='position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--danger);color:#fff;padding:10px 18px;border-radius:10px;z-index:2000;font-size:0.95em'; document.body.appendChild(d); } }
+        let isAdmin = false, editorReady = false, settingsArrived = false, recordsArrived = true, gateSettingsFailed = false;
+        let settingsErrored = false, recordsErrored = false;
+        let stopRecordsListener = null;
+        function refreshLoadError(){
+            const bad = settingsErrored || recordsErrored;
+            const el = document.getElementById('loadError');
+            if(bad && !el){ const d=document.createElement('div'); d.id='loadError'; d.textContent='載入失敗，請重新整理頁面'; d.style.cssText='position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--danger);color:#fff;padding:10px 18px;border-radius:10px;z-index:2000;font-size:0.95em'; document.body.appendChild(d); }
+            if(!bad && el) el.remove();
+        }
 
-        /* ---------- 載入 gate ---------- */
+        /* ---------- 載入 gate：公開首頁只需要 settings 到位，records 只有老師登入後才需要 ---------- */
         let readyTimer = setTimeout(markReady, 8000);
         function markReady(){ clearTimeout(readyTimer); document.body.classList.add("ready"); }
-        function gateCheck(){ if(recordsArrived && (settingsArrived || gateSettingsFailed)) markReady(); }
+        function gateCheck(){ if(settingsArrived || gateSettingsFailed) markReady(); }
         function maybeLoadEditor(){ if(isAdmin && settingsArrived && !editorReady) loadEditor(settings); }
 
         /* ---------- 通用資料層（流水帳型：collection 多筆，僅老師可用） ---------- */
@@ -252,18 +338,39 @@
         function saveSettings(obj){ if(!isAdmin) return; setDoc(settingsRef, obj, { merge: true }).catch(e=>console.warn(e)); }
 
         let records = [], settings = null;
-        onSnapshot(query(coll, orderBy(ORDER_FIELD, ORDER_DIR)), snap => {
-            records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            recordsArrived = true;
-            renderPublic(records, settings, { error: errored });
-            gateCheck();
-        }, err => { console.warn(err); recordsArrived = true; errored = true; renderPublic(records, settings, { error: true }); showLoadError(); gateCheck(); });
+        // 注意：records 依 Firestore 規則設計為「只有登入的老師能讀」（見交付說明的安全規則）。
+        // 未登入的小老師本來就不該去讀這個集合，所以監聽只在 isAdmin 後才啟動，
+        // 避免匿名使用者觸發權限拒絕、把公開登記表單卡在錯誤畫面。
+        function startRecordsListener(){
+            if(stopRecordsListener) return; // 已經在聽了
+            recordsArrived = false;
+            stopRecordsListener = onSnapshot(query(coll, orderBy(ORDER_FIELD, ORDER_DIR)), snap => {
+                records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                recordsArrived = true;
+                recordsErrored = false; refreshLoadError();
+                renderRecordsTab(records, settings);
+            }, err => {
+                console.warn(err);
+                recordsArrived = true; recordsErrored = true; refreshLoadError();
+            });
+        }
+        function stopRecordsListenerIfAny(){
+            if(stopRecordsListener){ stopRecordsListener(); stopRecordsListener = null; }
+            records = []; recordsArrived = true;
+        }
         onSnapshot(settingsRef, snap => {
             settings = snap.exists() ? snap.data() : null;
             settingsArrived = true;
-            renderPublic(records, settings, { error: errored });
+            settingsErrored = false; refreshLoadError();
+            $('appTitle').textContent = `${(settings && settings.className) || '608'} 作業登記`;
+            renderPublic(records, settings, { error: false });
             maybeLoadEditor(); gateCheck();
-        }, err => { console.warn(err); gateSettingsFailed = true; errored = true; renderPublic(records, settings, { error: true }); showLoadError(); gateCheck(); });
+        }, err => { console.warn(err); gateSettingsFailed = true; settingsErrored = true; refreshLoadError(); renderPublic(records, settings, { error: true }); gateCheck(); });
+
+        $('editClassNameBtn').onclick = async () => {
+            const name = await window.askInput('請輸入班級名稱', (settings && settings.className) || '608');
+            if(name && name.trim()) saveSettings({ className: name.trim() });
+        };
 
         /* ---------- 授權判斷（僅 gate 前端 UI，非安全邊界；見下方 Firestore 規則說明） ---------- */
         function isAuthorized(user){
@@ -276,8 +383,48 @@
         onAuthStateChanged(auth, user => {
             isAdmin = isAuthorized(user);
             document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin));
+            $('loginBtn').style.display = isAdmin ? 'none' : '';
+            $('content').style.display = isAdmin ? 'none' : '';
+            if(isAdmin) startRecordsListener(); else stopRecordsListenerIfAny();
             maybeLoadEditor();
         });
+
+        window.closeMissingList = () => { $('missingListModal').style.display = 'none'; };
+        window.showMissingListForToday = async () => {
+            $('missingListTitle').textContent = '今日未繳作業名單';
+            if(!settings || !Array.isArray(settings.assignments) || !settings.assignments.length){
+                $('missingListBody').innerHTML = '<p>目前尚無作業</p>';
+                $('missingListModal').style.display = 'flex';
+                return;
+            }
+            $('missingListBody').innerHTML = '<p>讀取中…</p>';
+            $('missingListModal').style.display = 'flex';
+            let recs = [];
+            try {
+                const snap = await getDocs(coll);
+                recs = snap.docs.map(d => d.data());
+            } catch(e){
+                console.warn(e);
+                $('missingListBody').innerHTML = '<p>讀取失敗，請檢查網路後重試</p>';
+                return;
+            }
+            const students = sortBySeat(settings.students || []);
+            $('missingListBody').innerHTML = settings.assignments.map(a => {
+                const missing = students.filter(s => {
+                    const rec = recs.find(r => r.studentId===s.id && r.assignmentId===a.id);
+                    return !rec || rec.status !== '已繳';
+                });
+                let html = `<p style="margin-bottom:4px"><strong>${a.name}</strong>${a.needsSign ? '（需簽名）' : ''}：${missing.length ? missing.map(s=>s.name).join('、') : '全部已繳'}</p>`;
+                if(a.needsSign){
+                    const unsigned = students.filter(s => {
+                        const rec = recs.find(r => r.studentId===s.id && r.assignmentId===a.id);
+                        return rec && rec.status === '已繳' && rec.signStatus !== '已簽名';
+                    });
+                    html += `<p style="margin:0 0 14px;color:var(--muted)">未簽名：${unsigned.length ? unsigned.map(s=>s.name).join('、') : '全部已簽名'}</p>`;
+                }
+                return html;
+            }).join('');
+        };
 
         window.showAlert = (msg) => { $('alertMsg').textContent = msg; $('alertModal').style.display = 'flex'; };
         window.closeAlert = () => { $('alertModal').style.display = 'none'; };
@@ -312,29 +459,60 @@
 
         /* =========================================================
            業務邏輯
-           - 公開登記（小老師，不需登入）：submitRecord() 直接寫入 records，
+           - 公開登記（小老師，不需登入）：submitGroupRecords() 直接寫入 records，
              不經過上面的 addRecord()（addRecord 鎖 isAdmin，只給老師管理用，
              例如刪除紀錄）。這是刻意新增的函式，未更動/更名既有骨架函式。
-           - 老師登入後台：管理 groups/students/subjects/assignments（存在 settings），
-             以及查看/篩選/刪除紀錄、清空全部、未繳名單。
+           - 紀錄採「覆蓋式」：文件 ID 固定為 學生ID_作業ID，同一位學生同一個作業
+             不管登記幾次、或老師事後補按狀態，永遠只會有一筆紀錄被覆蓋更新，
+             不會產生重複紀錄。
+           - 老師登入後台分三頁：① 繳交紀錄查看（含補按狀態按鈕）② 科目與作業管理
+             ③ 學生管理（含組別）。
            ========================================================= */
 
-        // 直接寫入 records，不檢查 isAdmin —— 小老師登記本來就設計成公開可寫。
-        // 真正的存取控制必須寫在 Firestore 規則（見檔案最後交付說明）。
-        function submitRecord(obj){ return addDoc(coll, { ...obj, [ORDER_FIELD]: Date.now() }).catch(e=>{ console.warn(e); window.showAlert('送出失敗，請檢查網路後重試'); }); }
+        function recordDocId(studentId, assignmentId){ return `${studentId}_${assignmentId}`; }
 
-        const STATUS_LIST = ['已繳','未繳','遲交'];
-        const badgeClass = s => s === '已繳' ? 'submitted' : (s === '遲交' ? 'late' : 'missing');
+        // 整組一次寫入（batch），仍不檢查 isAdmin —— 小老師登記本來就設計成公開可寫。
+        // 用固定 doc id 覆蓋，同學生同作業不會重複。用 merge，讓「繳交狀態」和
+        // 「簽名狀態」是兩個獨立欄位，更新其中一個不會清掉另一個。
+        // 真正的存取控制必須寫在 Firestore 規則（見檔案最後交付說明，注意規則需同時
+        // 開放 create 與 update，因為「覆蓋」對 Firestore 來說可能是 update）。
+        function submitGroupRecords(items){
+            const batch = writeBatch(db);
+            const ts = Date.now();
+            items.forEach(it => { const ref = doc(coll, recordDocId(it.studentId, it.assignmentId)); batch.set(ref, { ...it, [ORDER_FIELD]: ts }, { merge: true }); });
+            return batch.commit().catch(e=>{ console.warn(e); window.showAlert('送出失敗，請檢查網路後重試'); });
+        }
+        // 老師在查看區點狀態按鈕補登/修改：同樣是覆蓋式寫入（merge），只更新有帶到的欄位。
+        function adminSetStatus(item){
+            const ref = doc(coll, recordDocId(item.studentId, item.assignmentId));
+            return setDoc(ref, { ...item, [ORDER_FIELD]: Date.now() }, { merge: true }).catch(e=>{ console.warn(e); window.showAlert('操作失敗，請檢查網路後重試'); });
+        }
+
+        const STATUS_LIST = ['已繳','未繳'];
+        const badgeClass = s => s === '已繳' ? 'submitted' : 'missing';
+        const SIGN_LIST = ['已簽名','未簽名'];
+        const signClass = s => s === '已簽名' ? 'submitted' : 'unsigned';
+        // 依座號排序；沒填座號的排最後，其次用姓名排序
+        function sortBySeat(list){
+            return [...list].sort((a,b) => {
+                const an = a.seat === '' || a.seat == null ? Infinity : Number(a.seat);
+                const bn = b.seat === '' || b.seat == null ? Infinity : Number(b.seat);
+                if(an !== bn) return an - bn;
+                return (a.name||'').localeCompare(b.name||'', 'zh-Hant');
+            });
+        }
 
         /* ---- 公開登記表單：只依賴 settings，不依賴 records，避免每次有人送出
-               登記時（records 變動）就整個重畫、洗掉別人正在填的表單。 ---- */
+               登記時（records 變動）就整個重畫、洗掉別人正在填的表單。
+               流程：先選科目→作業，選定後才出現組別；選定組別後才出現該組
+               學生列表，每位學生右側三顆狀態按鈕（預設「未繳」），整組一次送出。 ---- */
         let lastSettingsJSON = null;
         function renderPublic(recs, st, status){
             const content = $('content');
             if(status.error){
                 content.innerHTML = '<p class="empty-hint">載入失敗，請重新整理頁面</p>';
                 lastSettingsJSON = null;
-                renderAdminLive(recs, st);
+                renderRecordsTab(recs, st);
                 return;
             }
             const hasGroups = st && Array.isArray(st.groups) && st.groups.length && Array.isArray(st.students) && st.students.length;
@@ -342,7 +520,7 @@
             if(!hasGroups || !hasSubjects){
                 content.innerHTML = '<p class="empty-hint">老師尚未設定班級/科目資料，請登入後台設定</p>';
                 lastSettingsJSON = null;
-                renderAdminLive(recs, st);
+                renderRecordsTab(recs, st);
                 return;
             }
             const sJSON = JSON.stringify(st);
@@ -350,155 +528,491 @@
                 lastSettingsJSON = sJSON;
                 content.innerHTML = `
                     <div class="card">
+                        <button class="btn outline" id="showMissingListBtn" style="width:100%">今日未繳作業名單</button>
+                    </div>
+                    <div class="card">
                         <h2>登記作業繳交</h2>
-                        <div class="field"><label>組別</label><select id="fGroup"></select></div>
-                        <div class="field"><label>學生</label><select id="fStudent"></select></div>
                         <div class="field"><label>科目</label><select id="fSubject"></select></div>
                         <div class="field"><label>作業</label><select id="fAssignment"></select></div>
-                        <div class="field">
-                            <label>狀態</label>
-                            <div class="status-choices">
-                                ${STATUS_LIST.map((s,i)=>`<label><input type="radio" name="fStatus" value="${s}" ${i===0?'checked':''}><span>${s}</span></label>`).join('')}
+                        <p id="noAssignmentHint" class="empty-hint" style="display:none">此科目尚無作業，請請老師先設定</p>
+                        <div id="groupStep" style="display:none">
+                            <div class="field"><label>組別</label><select id="fGroup"></select></div>
+                            <p id="noStudentHint" class="empty-hint" style="display:none">此組別尚無學生，請請老師先設定</p>
+                            <div id="studentStep" style="display:none">
+                                <div id="studentRows"></div>
+                                <button id="fSubmit" class="btn" style="width:100%;margin-top:14px">送出本組登記</button>
+                                <p id="fMsg"></p>
                             </div>
                         </div>
-                        <button id="fSubmit" class="btn" style="width:100%">送出登記</button>
-                        <p id="fMsg"></p>
                     </div>`;
-                const gSel = $('fGroup'), sSel = $('fStudent'), subSel = $('fSubject'), aSel = $('fAssignment');
-                st.groups.forEach(g => gSel.add(new Option(g.name, g.id)));
+                $('showMissingListBtn').onclick = window.showMissingListForToday;
+                const subSel = $('fSubject'), aSel = $('fAssignment'), gSel = $('fGroup');
                 st.subjects.forEach(s => subSel.add(new Option(s.name, s.id)));
+                st.groups.forEach(g => gSel.add(new Option(g.name, g.id)));
+
+                function setRowStatus(row, st2){
+                    row.dataset.status = st2;
+                    row.querySelectorAll('.mini-status-group.status-group .mini-status-btn').forEach(b => {
+                        const active = b.dataset.status === st2;
+                        b.classList.toggle('active', active);
+                        b.classList.toggle('submitted', active && st2 === '已繳');
+                        b.classList.toggle('missing', active && st2 === '未繳');
+                    });
+                    const signGroup = row.querySelector('.sign-group');
+                    if(signGroup){
+                        if(st2 === '已繳'){
+                            signGroup.style.display = 'flex';
+                        } else {
+                            signGroup.style.display = 'none';
+                            setRowSign(row, '未簽名'); // 未繳時簽名狀態沒有意義，重置避免不合邏輯的資料
+                        }
+                    }
+                }
+                function setRowSign(row, sg){
+                    row.dataset.signStatus = sg;
+                    row.querySelectorAll('.mini-status-group.sign-group .mini-status-btn').forEach(b => {
+                        const active = b.dataset.sign === sg;
+                        b.classList.toggle('active', active);
+                        b.classList.toggle('submitted', active && sg === '已簽名');
+                        b.classList.toggle('unsigned', active && sg === '未簽名');
+                    });
+                }
+                function buildStudentRows(students, needsSign){
+                    const wrap = $('studentRows');
+                    wrap.innerHTML = students.map(s => `
+                        <div class="student-row" data-student="${s.id}" data-name="${s.name}">
+                            <span class="student-name">${s.name}</span>
+                            <div class="row-status-groups">
+                                <div class="mini-status-group status-group">
+                                    ${STATUS_LIST.map(v => `<button type="button" class="mini-status-btn" data-status="${v}">${v}</button>`).join('')}
+                                </div>
+                                ${needsSign ? `<div class="mini-status-group sign-group" style="display:none">
+                                    ${SIGN_LIST.map(v => `<button type="button" class="mini-status-btn" data-sign="${v}">${v}</button>`).join('')}
+                                </div>` : ''}
+                            </div>
+                        </div>`).join('');
+                    wrap.querySelectorAll('.student-row').forEach(row => {
+                        row.querySelectorAll('.status-group .mini-status-btn').forEach(btn => {
+                            btn.onclick = () => setRowStatus(row, btn.dataset.status);
+                        });
+                        if(needsSign){
+                            row.dataset.signStatus = '未簽名';
+                            row.querySelectorAll('.sign-group .mini-status-btn').forEach(btn => {
+                                btn.onclick = () => setRowSign(row, btn.dataset.sign);
+                            });
+                        }
+                        setRowStatus(row, '未繳');
+                    });
+                }
                 function refreshStudents(){
-                    sSel.innerHTML = '';
-                    st.students.filter(s => s.groupId === gSel.value).forEach(s => sSel.add(new Option(s.name, s.id)));
+                    const list = sortBySeat(st.students.filter(s => s.groupId === gSel.value));
+                    const curAsg = st.assignments.find(a => a.id === aSel.value);
+                    buildStudentRows(list, !!(curAsg && curAsg.needsSign));
+                    $('studentStep').style.display = list.length ? 'block' : 'none';
+                    $('noStudentHint').style.display = list.length ? 'none' : 'block';
+                }
+                function updateGroupVisibility(){
+                    const show = !!aSel.value;
+                    $('groupStep').style.display = show ? 'block' : 'none';
+                    if(show) refreshStudents();
                 }
                 function refreshAssignments(){
                     aSel.innerHTML = '';
-                    st.assignments.filter(a => a.subjectId === subSel.value).forEach(a => aSel.add(new Option(a.name, a.id)));
+                    const list = st.assignments.filter(a => a.subjectId === subSel.value);
+                    list.forEach(a => aSel.add(new Option(a.name + (a.needsSign ? '（需簽名）' : ''), a.id)));
+                    $('noAssignmentHint').style.display = list.length ? 'none' : 'block';
+                    updateGroupVisibility();
                 }
-                gSel.onchange = refreshStudents; refreshStudents();
-                subSel.onchange = refreshAssignments; refreshAssignments();
+                subSel.onchange = refreshAssignments;
+                aSel.onchange = updateGroupVisibility;
+                gSel.onchange = refreshStudents;
+                refreshAssignments();
+
                 $('fSubmit').onclick = async () => {
-                    if(!sSel.value){ window.showAlert('該組別尚無學生，請請老師先設定'); return; }
-                    if(!aSel.value){ window.showAlert('該科目尚無作業，請請老師先設定'); return; }
-                    const statusVal = content.querySelector('input[name="fStatus"]:checked').value;
+                    const rows = [...document.querySelectorAll('#studentRows .student-row')];
+                    if(!rows.length) return;
                     $('fSubmit').disabled = true;
-                    await submitRecord({
-                        groupId: gSel.value, groupName: gSel.options[gSel.selectedIndex].text,
-                        studentId: sSel.value, studentName: sSel.options[sSel.selectedIndex].text,
+                    const groupName = gSel.options[gSel.selectedIndex].text;
+                    const curAsg = st.assignments.find(a => a.id === aSel.value);
+                    const items = rows.map(row => ({
+                        groupId: gSel.value, groupName,
+                        studentId: row.dataset.student, studentName: row.dataset.name,
                         subjectId: subSel.value, subjectName: subSel.options[subSel.selectedIndex].text,
-                        assignmentId: aSel.value, assignmentName: aSel.options[aSel.selectedIndex].text,
-                        status: statusVal
-                    });
+                        assignmentId: aSel.value, assignmentName: curAsg ? curAsg.name : '',
+                        status: row.dataset.status,
+                        ...(curAsg && curAsg.needsSign ? { signStatus: row.dataset.signStatus } : {})
+                    }));
+                    await submitGroupRecords(items);
                     $('fSubmit').disabled = false;
-                    $('fMsg').textContent = `已登記：${sSel.options[sSel.selectedIndex].text} - ${aSel.options[aSel.selectedIndex].text}（${statusVal}）`;
+                    $('fMsg').textContent = `已送出「${groupName}」共 ${items.length} 位學生的登記`;
                     setTimeout(()=>{ if($('fMsg')) $('fMsg').textContent=''; }, 4000);
                 };
             }
-            renderAdminLive(recs, st);
+            renderRecordsTab(recs, st);
         }
 
-        /* ---- 老師查看區的即時內容：紀錄列表 + 篩選 + 未繳名單。
-               每次 records/settings 有變動都會呼叫，全量重繪（列表本身不含使用者
-               正在輸入的欄位，重繪不會有干擾問題）。若後台尚未建立（未登入過），
-               直接跳過。 ---- */
-        function renderAdminLive(recs, st){
-            const wrap = $('recordsViewWrap');
-            if(!wrap) return; // 尚未登入建立過後台畫面
+        /* ---- 老師後台：三個分頁。登入後預設顯示「繳交紀錄查看」。
+               每次 records/settings 有變動都會呼叫 renderRecordsTab 全量重繪
+               （這裡沒有使用者正在輸入的欄位，重繪不會有干擾問題）。
+               若後台尚未建立（未登入過），直接跳過。 ---- */
+        function nextStatus(cur){ const i = STATUS_LIST.indexOf(cur); return STATUS_LIST[(i+1) % STATUS_LIST.length]; }
+
+        function renderRecordsTab(recs, st){
+            const panel = $('tabRecords');
+            if(!panel) return; // 尚未登入建立過後台畫面
             recs = recs || []; st = st || { groups:[], students:[], subjects:[], assignments:[] };
+            const students = sortBySeat(st.students);
+            const assignments = st.assignments;
 
-            const gf = $('filterGroup'), sf = $('filterSubject'), af = $('filterAssignment'), stf = $('filterStatus');
-            const curG = gf.value, curS = sf.value, curA = af.value, curSt = stf.value;
-            gf.innerHTML = '<option value="">全部組別</option>' + st.groups.map(g=>`<option value="${g.id}">${g.name}</option>`).join('');
-            sf.innerHTML = '<option value="">全部科目</option>' + st.subjects.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-            af.innerHTML = '<option value="">全部作業</option>' + st.assignments.filter(a=>!curS || a.subjectId===curS).map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
-            stf.innerHTML = '<option value="">全部狀態</option>' + STATUS_LIST.map(s=>`<option value="${s}">${s}</option>`).join('');
-            gf.value = curG; sf.value = [...sf.options].some(o=>o.value===curS)?curS:''; af.value = [...af.options].some(o=>o.value===curA)?curA:''; stf.value = curSt;
+            const statusOf = (studentId, assignmentId) => {
+                const r = recs.find(x=>x.studentId===studentId && x.assignmentId===assignmentId);
+                return r ? r.status : '未繳';
+            };
+            const signOf = (studentId, assignmentId) => {
+                const r = recs.find(x=>x.studentId===studentId && x.assignmentId===assignmentId);
+                return (r && r.signStatus) ? r.signStatus : '未簽名';
+            };
 
-            const filtered = recs.filter(r =>
-                (!gf.value || r.groupId === gf.value) &&
-                (!sf.value || r.subjectId === sf.value) &&
-                (!af.value || r.assignmentId === af.value) &&
-                (!stf.value || r.status === stf.value)
-            );
+            // ---- 快速新增作業的科目選單 ----
+            const quickSubjSel = $('quickAssignmentSubject');
+            const curQuickSubj = quickSubjSel.value;
+            quickSubjSel.innerHTML = '<option value="">未分類</option>' + st.subjects.map(s=>`<option value="${s.id}">${s.name}</option>`).join('') + '<option value="__new__">＋ 新增科目...</option>';
+            quickSubjSel.value = [...quickSubjSel.options].some(o=>o.value===curQuickSubj) ? curQuickSubj : '';
+            quickSubjSel.onchange = async () => {
+                if(quickSubjSel.value !== '__new__') return;
+                const name = await window.askInput('新增科目名稱，例如：數學', '');
+                if(name && name.trim()){
+                    const newSubj = { id: crypto.randomUUID(), name: name.trim() };
+                    st.subjects.push(newSubj);
+                    saveSettings({ subjects: st.subjects });
+                    renderRecordsTab(records, settings);
+                    setTimeout(() => { const sel = $('quickAssignmentSubject'); if(sel) sel.value = newSubj.id; }, 0);
+                } else {
+                    quickSubjSel.value = '';
+                }
+            };
 
-            const tbody = $('recordsTbody');
-            tbody.innerHTML = filtered.length ? filtered.map(r => `
-                <tr>
-                    <td>${r.groupName||''}</td>
-                    <td>${r.studentName||''}</td>
-                    <td>${r.subjectName||''}</td>
-                    <td>${r.assignmentName||''}</td>
-                    <td><span class="badge ${badgeClass(r.status)}">${r.status||''}</span></td>
-                    <td>${r.timestamp ? new Date(r.timestamp).toLocaleString('zh-TW') : ''}</td>
-                    <td><button class="btn small outline" data-del="${r.id}">刪除</button></td>
-                </tr>`).join('') : '';
-            tbody.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
-                await deleteRecord(b.getAttribute('data-del'));
+            // ---- 數字清單 ----
+            let doneCount=0, missingCount=0, unsignedCount=0;
+            students.forEach(s => assignments.forEach(a => {
+                const v = statusOf(s.id, a.id);
+                if(v==='已繳') doneCount++; else missingCount++;
+                if(a.needsSign && v==='已繳' && signOf(s.id, a.id) !== '已簽名') unsignedCount++;
+            }));
+            const statDefs = [
+                { label:'學生', val: students.length },
+                { label:'作業', val: assignments.length },
+                { label:'已繳', val: doneCount },
+                { label:'未繳', val: missingCount, detail: 'missing' },
+                { label:'未簽名', val: unsignedCount, detail: 'unsigned' }
+            ];
+            $('statCards').innerHTML = statDefs.map(d => `<div class="stat-card${d.detail ? ' clickable' : ''}" ${d.detail ? `data-stat="${d.detail}"` : ''}><div class="stat-num">${d.val}</div><div class="stat-label">${d.label}</div></div>`).join('');
+            $('statCards').querySelectorAll('[data-stat]').forEach(el => {
+                el.onclick = () => {
+                    const type = el.getAttribute('data-stat');
+                    if(type === 'missing'){
+                        $('missingListTitle').textContent = '未繳詳情';
+                        $('missingListBody').innerHTML = assignments.length ? assignments.map(a => {
+                            const missing = students.filter(s => statusOf(s.id, a.id) !== '已繳');
+                            return `<p><strong>${a.name}</strong>：${missing.length ? missing.map(s=>s.name).join('、') : '全部已繳'}</p>`;
+                        }).join('') : '<p>目前尚無作業</p>';
+                    } else {
+                        const signAssignments = assignments.filter(a => a.needsSign);
+                        $('missingListTitle').textContent = '未簽名詳情';
+                        $('missingListBody').innerHTML = signAssignments.length ? signAssignments.map(a => {
+                            const unsigned = students.filter(s => statusOf(s.id, a.id) === '已繳' && signOf(s.id, a.id) !== '已簽名');
+                            return `<p><strong>${a.name}</strong>：${unsigned.length ? unsigned.map(s=>s.name).join('、') : '全部已簽名'}</p>`;
+                        }).join('') : '<p>目前沒有需要簽名的作業</p>';
+                    }
+                    $('missingListModal').style.display = 'flex';
+                };
             });
-            $('recordsEmpty').style.display = filtered.length ? 'none' : 'block';
 
-            // 未繳名單：需選定作業才計算
-            const missBox = $('missingBox');
-            if(af.value){
-                const asg = st.assignments.find(a=>a.id===af.value);
-                const groupStudents = st.students.filter(s => !gf.value || s.groupId === gf.value);
-                const submittedIds = new Set(recs.filter(r => r.assignmentId === af.value && (r.status === '已繳' || r.status === '遲交')).map(r=>r.studentId));
-                const missing = groupStudents.filter(s => !submittedIds.has(s.id));
-                missBox.style.display = 'block';
-                missBox.innerHTML = missing.length
-                    ? `<strong>「${asg ? asg.name : ''}」尚未繳交（${missing.length} 人）：</strong> ${missing.map(s=>s.name).join('、')}`
-                    : `<strong>「${asg ? asg.name : ''}」目前所選範圍內全數已繳交或遲交登記。</strong>`;
-            } else {
-                missBox.style.display = 'none';
-            }
+            // ---- 今日作業管理 ----
+            $('assignmentMgmtList').innerHTML = assignments.length ? assignments.map(a => `
+                <div class="assignment-row" data-assignment="${a.id}">
+                    <span class="assignment-name">${a.name}${a.needsSign ? '<span class="sign-tag">需簽名</span>' : ''}</span>
+                    <div class="assignment-actions">
+                        <button class="btn small" data-mark-all="${a.id}">✓ 全班已繳</button>
+                        <button class="btn small outline danger" data-del-assignment2="${a.id}">刪除</button>
+                    </div>
+                </div>`).join('') : '<p class="empty-hint">尚未新增作業</p>';
+
+            $('assignmentMgmtList').querySelectorAll('[data-mark-all]').forEach(b => b.onclick = async () => {
+                const aid = b.getAttribute('data-mark-all');
+                const a = assignments.find(x=>x.id===aid);
+                const subj = a ? st.subjects.find(s=>s.id===a.subjectId) : null;
+                const items = students.map(s => {
+                    const grp = st.groups.find(g=>g.id===s.groupId);
+                    return {
+                        groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                        studentId: s.id, studentName: s.name,
+                        subjectId: a?a.subjectId||'':'', subjectName: subj?subj.name:'',
+                        assignmentId: aid, assignmentName: a?a.name:'',
+                        status: '已繳'
+                    };
+                });
+                await submitGroupRecords(items);
+            });
+            $('assignmentMgmtList').querySelectorAll('[data-del-assignment2]').forEach(b => b.onclick = async () => {
+                const aid = b.getAttribute('data-del-assignment2');
+                const v = await window.askInput('刪除這份作業會一併刪除所有學生對它的繳交紀錄，輸入「確定」以繼續', '');
+                if(v !== '確定') return;
+                st.assignments = st.assignments.filter(x=>x.id!==aid);
+                saveSettings({ assignments: st.assignments });
+                const batch = writeBatch(db);
+                students.forEach(s => batch.delete(doc(coll, recordDocId(s.id, aid))));
+                await batch.commit().catch(e=>console.warn(e));
+            });
+
+            // ---- 扁平總表（依座號排序，不顯示組別/科目） ----
+            const thead = $('matrixThead');
+            thead.innerHTML = '<tr><th>學生</th>' + assignments.map(a=>`<th>${a.name}${a.needsSign ? '<br><span class="sign-tag">需簽名</span>' : ''}</th>`).join('') + '</tr>';
+            const tbody = $('matrixTbody');
+            tbody.innerHTML = students.length ? students.map(s => {
+                const seatLabel = (s.seat!=null && s.seat!=='') ? `${s.seat}號 ` : '';
+                const cells = assignments.map(a => {
+                    const v = statusOf(s.id, a.id);
+                    const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(v)}" data-student="${s.id}" data-assignment="${a.id}">${v}</button>`;
+                    if(!a.needsSign) return `<td>${statusBtn}</td>`;
+                    if(v !== '已繳'){
+                        // 還沒標記已繳，簽名沒有意義，先不能點——避免未繳卻顯示已簽名這種不合邏輯的狀態
+                        return `<td><div class="cell-stack">${statusBtn}<span class="sign-placeholder">先標記已繳</span></div></td>`;
+                    }
+                    const sv = signOf(s.id, a.id);
+                    const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(sv)}" data-sign-student="${s.id}" data-sign-assignment="${a.id}">${sv}</button>`;
+                    return `<td><div class="cell-stack">${statusBtn}${signBtn}</div></td>`;
+                }).join('');
+                return `<tr><td>${seatLabel}${s.name}</td>${cells}</tr>`;
+            }).join('') : '';
+            $('matrixEmpty').style.display = students.length && assignments.length ? 'none' : 'block';
+            $('matrixEmpty').textContent = !students.length ? '尚未新增學生，請到「學生管理」新增' : (!assignments.length ? '尚未新增作業，請在上方新增今日作業' : '');
+
+            tbody.querySelectorAll('.cell-status-btn:not(.cell-sign-btn)').forEach(btn => btn.onclick = async () => {
+                const sid = btn.getAttribute('data-student'), aid = btn.getAttribute('data-assignment');
+                const stu = st.students.find(x=>x.id===sid);
+                const grp = st.groups.find(x=>x.id===stu?.groupId);
+                const a = st.assignments.find(x=>x.id===aid);
+                const subj = a ? st.subjects.find(x=>x.id===a.subjectId) : null;
+                const nv = nextStatus(btn.textContent.trim());
+                const payload = {
+                    groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                    studentId: sid, studentName: stu?stu.name:'',
+                    subjectId: a?a.subjectId||'':'', subjectName: subj?subj.name:'',
+                    assignmentId: aid, assignmentName: a?a.name:'',
+                    status: nv
+                };
+                if(nv !== '已繳') payload.signStatus = '未簽名'; // 改回未繳時，簽名狀態一併重置，避免不合邏輯的資料殘留
+                await adminSetStatus(payload);
+                let rec = recs.find(r=>r.studentId===sid && r.assignmentId===aid);
+                if(rec) Object.assign(rec, payload); else recs.push(payload);
+                renderRecordsTab(recs, st);
+            });
+            tbody.querySelectorAll('.cell-sign-btn').forEach(btn => btn.onclick = async () => {
+                const sid = btn.getAttribute('data-sign-student'), aid = btn.getAttribute('data-sign-assignment');
+                const stu = st.students.find(x=>x.id===sid);
+                const grp = st.groups.find(x=>x.id===stu?.groupId);
+                const a = st.assignments.find(x=>x.id===aid);
+                const subj = a ? st.subjects.find(x=>x.id===a.subjectId) : null;
+                const nv = btn.textContent.trim() === '已簽名' ? '未簽名' : '已簽名';
+                const payload = {
+                    groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                    studentId: sid, studentName: stu?stu.name:'',
+                    subjectId: a?a.subjectId||'':'', subjectName: subj?subj.name:'',
+                    assignmentId: aid, assignmentName: a?a.name:'',
+                    signStatus: nv
+                };
+                await adminSetStatus(payload);
+                let rec = recs.find(r=>r.studentId===sid && r.assignmentId===aid);
+                if(rec) rec.signStatus = nv; else recs.push({ ...payload, status: '已繳' });
+                renderRecordsTab(recs, st);
+            });
         }
 
-        /* ---- 老師後台：班級/學生、科目/作業管理（首次登入建立一次骨架，
-               之後管理清單皆用區域刷新，不動到輸入框，避免打字打到一半被清掉）。 ---- */
+        /* ---- 老師後台：三分頁骨架（首次登入建立一次），科目/學生管理清單
+               皆用區域刷新，不動到輸入框，避免打字打到一半被清掉）。 ---- */
         function loadEditor(st){
             st = st || { groups: [], students: [], subjects: [], assignments: [] };
             st.groups = st.groups || []; st.students = st.students || [];
             st.subjects = st.subjects || []; st.assignments = st.assignments || [];
 
             $('adminArea').innerHTML = `
-                <div class="card">
-                    <h2>班級與學生管理</h2>
-                    <div class="row">
-                        <input id="newGroupName" class="txt-input" placeholder="新增組別名稱，例如：第一組">
-                        <button class="btn" id="addGroupBtn">新增組別</button>
-                    </div>
-                    <div id="groupsList"></div>
+                <div class="admin-tabs">
+                    <button class="tab-btn active" data-tab="tabRecords">繳交紀錄查看</button>
+                    <button class="tab-btn" data-tab="tabStudents">學生管理</button>
                 </div>
-                <div class="card">
-                    <h2>科目與作業管理</h2>
-                    <div class="row">
-                        <input id="newSubjectName" class="txt-input" placeholder="新增科目名稱，例如：數學">
-                        <button class="btn" id="addSubjectBtn">新增科目</button>
+                <div id="tabRecords" class="tab-panel">
+                    <div class="card">
+                        <div class="row">
+                            <select id="quickAssignmentSubject" style="max-width:160px"></select>
+                            <input id="quickAssignmentName" class="txt-input" placeholder="新增今日作業，例如：數學習作 P.26-28">
+                            <label style="display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:0.9em;color:var(--muted)">
+                                <input type="checkbox" id="quickAssignmentNeedsSign" style="width:auto">需要簽名
+                            </label>
+                            <button class="btn" id="quickAddAssignmentBtn">＋ 新增作業</button>
+                            <button class="btn outline" id="copyMissingBtn">複製未繳名單</button>
+                        </div>
                     </div>
-                    <div id="subjectsList"></div>
-                </div>
-                <div class="card">
-                    <h2>繳交紀錄查看</h2>
-                    <div class="filters">
-                        <select id="filterGroup"></select>
-                        <select id="filterSubject"></select>
-                        <select id="filterAssignment"></select>
-                        <select id="filterStatus"></select>
+                    <div class="card">
+                        <div id="statCards" class="stat-cards"></div>
                     </div>
-                    <div id="missingBox" class="missing-box" style="display:none"></div>
-                    <div id="recordsViewWrap">
+                    <div class="side-by-side">
+                        <div class="card">
+                            <h2>今日作業管理</h2>
+                            <div id="assignmentMgmtList"></div>
+                        </div>
+                        <div class="card">
+                            <h2>今日快速結算</h2>
+                            <p class="empty-hint" style="text-align:left;padding:0 0 14px">「結束並封存」把作業與狀態存成歷史紀錄後清空；「確定完成直接刪除」則是不封存，直接清空（適合不需要留存的日子）。</p>
+                            <div class="row" style="flex-direction:column">
+                                <button class="btn outline" id="archiveBtn">結束並封存</button>
+                                <button class="btn outline danger" id="deleteNoArchiveBtn">確定完成，直接刪除（不封存）</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h2>繳交狀態一覽（依座號排序）</h2>
                         <div class="table-scroll">
                             <table>
-                                <thead><tr><th>組別</th><th>學生</th><th>科目</th><th>作業</th><th>狀態</th><th>時間</th><th></th></tr></thead>
-                                <tbody id="recordsTbody"></tbody>
+                                <thead id="matrixThead"></thead>
+                                <tbody id="matrixTbody"></tbody>
                             </table>
                         </div>
-                        <p id="recordsEmpty" class="empty-hint">目前沒有符合條件的紀錄</p>
+                        <p id="matrixEmpty" class="empty-hint" style="display:none"></p>
                     </div>
-                    <div class="foot-actions">
-                        <button class="btn outline danger" id="clearAllBtn">清空全部紀錄</button>
+                    <div class="card">
+                        <h2>歷史封存紀錄</h2>
+                        <button class="btn outline" id="loadArchivesBtn">載入歷史封存</button>
+                        <div id="archivesList" style="margin-top:14px"></div>
+                    </div>
+                </div>
+                <div id="tabStudents" class="tab-panel" style="display:none">
+                    <div class="card">
+                        <h2>學生管理</h2>
+                        <div class="row">
+                            <input id="newGroupName" class="txt-input" placeholder="新增組別名稱，例如：第一組">
+                            <button class="btn" id="addGroupBtn">新增組別</button>
+                        </div>
+                        <div id="groupsList"></div>
                     </div>
                 </div>`;
+
+            $('adminArea').querySelectorAll('.tab-btn').forEach(btn => btn.onclick = () => {
+                $('adminArea').querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b===btn));
+                $('adminArea').querySelectorAll('.tab-panel').forEach(p=>p.style.display = (p.id===btn.dataset.tab) ? 'block' : 'none');
+            });
+
+            $('quickAddAssignmentBtn').onclick = () => {
+                const inp = $('quickAssignmentName');
+                const subjSel = $('quickAssignmentSubject');
+                const signChk = $('quickAssignmentNeedsSign');
+                const name = inp.value.trim();
+                if(!name) return;
+                st.assignments.push({ id: crypto.randomUUID(), name, subjectId: subjSel.value || '', needsSign: signChk.checked });
+                saveSettings({ assignments: st.assignments });
+                inp.value = '';
+                signChk.checked = false;
+                renderRecordsTab(records, settings);
+            };
+            $('copyMissingBtn').onclick = async () => {
+                const students = sortBySeat(st.students);
+                const lines = st.assignments.map(a => {
+                    const missing = students.filter(s => {
+                        const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
+                        return !rec || rec.status === '未繳';
+                    });
+                    let line = `${a.name}${a.needsSign ? '（需簽名）' : ''}：${missing.length ? missing.map(s=>s.name).join('、') : '無人未繳'}`;
+                    if(a.needsSign){
+                        const unsigned = students.filter(s => {
+                            const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
+                            return rec && rec.status === '已繳' && rec.signStatus !== '已簽名';
+                        });
+                        line += `\n　未簽名：${unsigned.length ? unsigned.map(s=>s.name).join('、') : '全部已簽名'}`;
+                    }
+                    return line;
+                });
+                const text = lines.join('\n') || '目前尚無作業';
+                try { await navigator.clipboard.writeText(text); window.showAlert('未繳名單已複製'); }
+                catch(e){ window.showAlert('複製失敗，請手動選取文字'); }
+            };
+            function todayStr(){
+                const d = new Date();
+                return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+            }
+            $('archiveBtn').onclick = async () => {
+                const dateLabel = await window.askInput('這批作業要標記的日期（方便日後查看，可修改）', todayStr());
+                if(dateLabel === null) return;
+                const v = await window.askInput('結束並封存會把目前作業與繳交狀態存成歷史紀錄，並清空目前作業，輸入「確定」以繼續', '');
+                if(v !== '確定') return;
+                const students2 = sortBySeat(st.students);
+                const snapshotRecords = students2.flatMap(s => st.assignments.map(a => {
+                    const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
+                    return { studentId: s.id, studentName: s.name, assignmentId: a.id, assignmentName: a.name, status: rec?rec.status:'未繳' };
+                }));
+                await addDoc(archivesColl, {
+                    timestamp: Date.now(),
+                    dateLabel: dateLabel || todayStr(),
+                    assignments: st.assignments.map(a=>({id:a.id,name:a.name})),
+                    records: snapshotRecords,
+                    studentCount: st.students.length,
+                    assignmentCount: st.assignments.length
+                }).catch(e=>console.warn(e));
+                await clearAll();
+                st.assignments = [];
+                saveSettings({ assignments: [] });
+            };
+            $('deleteNoArchiveBtn').onclick = async () => {
+                const v = await window.askInput('確定當天已全部完成、不需要保留歷史紀錄嗎？輸入「確定」直接刪除今日作業與繳交紀錄', '');
+                if(v !== '確定') return;
+                await clearAll();
+                st.assignments = [];
+                saveSettings({ assignments: [] });
+            };
+            $('loadArchivesBtn').onclick = async () => {
+                $('archivesList').innerHTML = '<p class="empty-hint">載入中…</p>';
+                try {
+                    const snap = await getDocs(query(archivesColl, orderBy('timestamp','desc')));
+                    const list = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+                    $('archivesList').innerHTML = list.length ? list.map(a => `
+                        <div class="group-block" data-archive="${a.id}">
+                            <div class="group-block-head">
+                                <strong>${a.dateLabel || new Date(a.timestamp).toLocaleDateString('zh-TW')}</strong>
+                                <button class="btn small outline" data-view-archive="${a.id}">查看內容</button>
+                            </div>
+                            <p class="empty-hint" style="text-align:left;padding:0">封存時間：${new Date(a.timestamp).toLocaleString('zh-TW')}｜${a.assignmentCount||0} 份作業、${a.studentCount||0} 位學生</p>
+                            <div class="table-scroll archive-detail" data-detail="${a.id}" style="display:none"></div>
+                        </div>`).join('') : '<p class="empty-hint">尚無歷史封存紀錄</p>';
+
+                    function renderArchiveDetail(item){
+                        const box = $('archivesList').querySelector(`[data-detail="${item.id}"]`);
+                        box.innerHTML = `<table><thead><tr><th>學生</th><th>作業</th><th>狀態</th><th>備註</th><th></th></tr></thead><tbody>${
+                            (item.records||[]).map((r,i)=>`<tr>
+                                <td>${r.studentName}</td><td>${r.assignmentName}</td>
+                                <td><span class="badge ${badgeClass(r.status)}">${r.status}</span></td>
+                                <td>${r.remark||''}</td>
+                                <td>${r.status!=='已繳' && !r.remark ? `<button class="btn small outline" data-makeup="${i}">新增補交</button>` : ''}</td>
+                            </tr>`).join('')
+                        }</tbody></table>`;
+                        box.querySelectorAll('[data-makeup]').forEach(btn => btn.onclick = async () => {
+                            const idx = Number(btn.getAttribute('data-makeup'));
+                            const remarkText = `已補交（${new Date().toLocaleString('zh-TW')}）`;
+                            const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, remark: remarkText } : r);
+                            item.records = updatedRecords;
+                            await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
+                            renderArchiveDetail(item);
+                        });
+                    }
+
+                    $('archivesList').querySelectorAll('[data-view-archive]').forEach(b => b.onclick = () => {
+                        const aid = b.getAttribute('data-view-archive');
+                        const item = list.find(x=>x.id===aid);
+                        const box = $('archivesList').querySelector(`[data-detail="${aid}"]`);
+                        if(box.style.display === 'block'){ box.style.display = 'none'; return; }
+                        renderArchiveDetail(item);
+                        box.style.display = 'block';
+                    });
+                } catch(e){ console.warn(e); $('archivesList').innerHTML = '<p class="empty-hint">載入失敗</p>'; }
+            };
 
             function renderGroups(){
                 $('groupsList').innerHTML = st.groups.map(g => `
@@ -508,9 +1022,10 @@
                             <button class="btn small outline danger" data-del-group="${g.id}">刪除組別</button>
                         </div>
                         <div class="chip-list">
-                            ${st.students.filter(s=>s.groupId===g.id).map(s => `<span class="chip">${s.name}<button data-del-student="${s.id}">✕</button></span>`).join('') || '<span style="color:var(--muted)">尚無學生</span>'}
+                            ${sortBySeat(st.students.filter(s=>s.groupId===g.id)).map(s => `<span class="chip">${s.seat!=null && s.seat!=='' ? s.seat+'號 ' : ''}${s.name}<button data-del-student="${s.id}">✕</button></span>`).join('') || '<span style="color:var(--muted)">尚無學生</span>'}
                         </div>
                         <div class="row" style="margin-bottom:0">
+                            <input class="txt-input" data-new-seat="${g.id}" placeholder="座號（選填）" style="max-width:110px" inputmode="numeric">
                             <input class="txt-input" data-new-student="${g.id}" placeholder="新增學生姓名">
                             <button class="btn small" data-add-student="${g.id}">新增</button>
                         </div>
@@ -531,51 +1046,13 @@
                 });
                 $('groupsList').querySelectorAll('[data-add-student]').forEach(b => b.onclick = () => {
                     const gid = b.getAttribute('data-add-student');
-                    const inp = $('groupsList').querySelector(`[data-new-student="${gid}"]`);
-                    const name = inp.value.trim();
+                    const nameInp = $('groupsList').querySelector(`[data-new-student="${gid}"]`);
+                    const seatInp = $('groupsList').querySelector(`[data-new-seat="${gid}"]`);
+                    const name = nameInp.value.trim();
                     if(!name) return;
-                    st.students.push({ id: crypto.randomUUID(), name, groupId: gid });
+                    st.students.push({ id: crypto.randomUUID(), name, groupId: gid, seat: seatInp.value.trim() });
                     saveSettings({ students: st.students });
                     renderGroups();
-                });
-            }
-            function renderSubjects(){
-                $('subjectsList').innerHTML = st.subjects.map(s => `
-                    <div class="group-block" data-subject="${s.id}">
-                        <div class="group-block-head">
-                            <strong>${s.name}</strong>
-                            <button class="btn small outline danger" data-del-subject="${s.id}">刪除科目</button>
-                        </div>
-                        <div class="chip-list">
-                            ${st.assignments.filter(a=>a.subjectId===s.id).map(a => `<span class="chip">${a.name}<button data-del-assignment="${a.id}">✕</button></span>`).join('') || '<span style="color:var(--muted)">尚無作業</span>'}
-                        </div>
-                        <div class="row" style="margin-bottom:0">
-                            <input class="txt-input" data-new-assignment="${s.id}" placeholder="新增作業名稱">
-                            <button class="btn small" data-add-assignment="${s.id}">新增</button>
-                        </div>
-                    </div>`).join('') || '<p class="empty-hint">尚未新增科目</p>';
-
-                $('subjectsList').querySelectorAll('[data-del-subject]').forEach(b => b.onclick = () => {
-                    const sid = b.getAttribute('data-del-subject');
-                    st.subjects = st.subjects.filter(s=>s.id!==sid);
-                    st.assignments = st.assignments.filter(a=>a.subjectId!==sid);
-                    saveSettings({ subjects: st.subjects, assignments: st.assignments });
-                    renderSubjects();
-                });
-                $('subjectsList').querySelectorAll('[data-del-assignment]').forEach(b => b.onclick = () => {
-                    const aid = b.getAttribute('data-del-assignment');
-                    st.assignments = st.assignments.filter(a=>a.id!==aid);
-                    saveSettings({ assignments: st.assignments });
-                    renderSubjects();
-                });
-                $('subjectsList').querySelectorAll('[data-add-assignment]').forEach(b => b.onclick = () => {
-                    const sid = b.getAttribute('data-add-assignment');
-                    const inp = $('subjectsList').querySelector(`[data-new-assignment="${sid}"]`);
-                    const name = inp.value.trim();
-                    if(!name) return;
-                    st.assignments.push({ id: crypto.randomUUID(), name, subjectId: sid });
-                    saveSettings({ assignments: st.assignments });
-                    renderSubjects();
                 });
             }
 
@@ -587,28 +1064,12 @@
                 $('newGroupName').value = '';
                 renderGroups();
             };
-            $('addSubjectBtn').onclick = () => {
-                const name = $('newSubjectName').value.trim();
-                if(!name) return;
-                st.subjects.push({ id: crypto.randomUUID(), name });
-                saveSettings({ subjects: st.subjects });
-                $('newSubjectName').value = '';
-                renderSubjects();
-            };
-            $('clearAllBtn').onclick = async () => {
-                const v = await window.askInput('清空全部紀錄無法復原，輸入「確定」以繼續', '');
-                if(v === '確定') await clearAll();
-            };
-            ['filterGroup','filterSubject','filterAssignment','filterStatus'].forEach(id => {
-                $(id).onchange = () => renderAdminLive(records, settings);
-            });
 
             renderGroups();
-            renderSubjects();
-            renderAdminLive(records, settings);
+            renderRecordsTab(records, settings);
             editorReady = true;
         }
-        /* 可用 API：addRecord(obj) / deleteRecord(id) / clearAll() / saveSettings(obj) / submitRecord(obj) */
+        /* 可用 API：addRecord(obj) / deleteRecord(id) / clearAll() / saveSettings(obj) / submitGroupRecords(items) / adminSetStatus(item) */
         /* ================================================== */
     </script>
 </body>
