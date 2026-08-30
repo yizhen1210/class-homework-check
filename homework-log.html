@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>作業登記</title>
+
+    <!-- PWA / 桌面圖示：三張 PNG 與此檔同目錄一起上傳，檔名須與 manifest 一致 -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+    <meta name="theme-color" content="#8FA6A9">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Iansui&display=swap" rel="stylesheet">
+
+    <style>
+        /* ---- 全站設計變數：顏色一律用變數，勿寫死 ---- */
+        :root {
+            --bg: #e8e8e2;          /* 頁面底色 */
+            --surface: #ffffff;     /* 卡片/輸入框底 */
+            --text: #2e3a35;        /* 主文字 */
+            --muted: #9aa39d;       /* 次要/placeholder */
+            --accent-rgb: 143,166,169;             /* 主色 RGB（改這裡即可，其餘自動跟隨） #8FA6A9 */
+            --accent: rgb(var(--accent-rgb));     /* 主色（按鈕、邊框、focus） */
+            --focus-glow: color-mix(in srgb, var(--accent) 50%, transparent); /* focus 光暈：自動＝主色 */
+            --accent-dark: color-mix(in srgb, var(--accent) 82%, #000); /* 主色 hover：自動加深 */
+            --line: #b4bab2;        /* 分隔線/淺邊框 */
+            --danger: #c4674f;      /* 刪除/警示 */
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Iansui', system-ui, sans-serif;
+            margin: 0; min-height: 100vh;
+            background: var(--bg); color: var(--text);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ---- 載入 gate：首次資料到齊前隱藏會變動的內容，避免預設值閃現 ---- */
+        body:not(.ready) [data-gated] { visibility: hidden; }
+
+        /* ---- 彈窗 base（所有 app 共用這組命名，勿改名） ---- */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: var(--surface); border: 3px solid var(--line); padding: 36px 44px; border-radius: 20px; text-align: center; box-shadow: 0 20px 55px rgba(0,0,0,0.4); width: min(520px, 90vw); }
+        .modal-title { font-size: 1.4em; margin: 0 0 22px; }
+        .modal-content input { display: block; width: 100%; margin: 0 0 24px; padding: 12px 18px; border: 2px solid var(--line); border-radius: 14px; font-family: inherit; font-size: 1.1em; outline: none; text-align: center; background: var(--surface); color: var(--text); }
+        .modal-content input::placeholder { color: var(--muted); }
+        .modal-input { display: block; width: 100%; margin: 0 0 24px; padding: 12px 18px; border: 2px solid var(--line); border-radius: 14px; font-family: inherit; font-size: 1.1em; outline: none; text-align: center; background: var(--surface); color: var(--text); }
+        .modal-input::placeholder { color: var(--muted); }
+        .modal-input:focus { border-color: var(--accent); box-shadow: 0 0 12px 3px var(--focus-glow); }
+        .modal-content input:focus { border-color: var(--accent); box-shadow: 0 0 12px 3px var(--focus-glow); }
+        .modal-hint { display: none; margin: -14px 0 18px; font-size: 0.9em; color: var(--danger); }
+        .modal-actions { display: flex; justify-content: center; gap: 18px; }
+        .modal-actions button { padding: 11px 38px; border-radius: 50px; cursor: pointer; font-family: inherit; font-size: 1.15em; border: 2px solid var(--accent); }
+        .btn-ok { background: var(--accent); color: #fff; }
+        .btn-ok:hover { background: var(--accent-dark); }
+        .btn-cancel { background: #f2f8f9; color: var(--accent); }
+        .btn-cancel:hover { background: var(--accent); color: #fff; }
+        @media (max-width: 640px) {
+            .modal-content { padding: 26px 22px; width: min(420px, 88vw); }
+            .modal-title { white-space: nowrap; }
+        }
+
+        /* ---- 一般按鈕 ---- */
+        .btn { padding: 9px 22px; border-radius: 50px; border: 2px solid var(--accent); background: var(--accent); color: #fff; font-family: inherit; font-size: 1em; cursor: pointer; }
+        .btn.outline { background: transparent; color: var(--accent); }
+        .btn.small { padding: 5px 14px; font-size: 0.85em; }
+        .btn.danger { border-color: var(--danger); background: var(--danger); }
+
+        .admin-only.hidden { display: none; }
+
+        /* ---- 本 app 專用樣式 ---- */
+        header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; }
+        header h1 { font-size: 1.3em; margin: 0; }
+        main, #adminArea { max-width: 900px; margin: 0 auto; padding: 0 16px 60px; }
+        .card { background: var(--surface); border: 2px solid var(--line); border-radius: 18px; padding: 20px 22px; margin-bottom: 20px; }
+        .card h2 { margin: 0 0 16px; font-size: 1.15em; }
+        .field { margin-bottom: 14px; }
+        .field label { display: block; margin-bottom: 6px; font-size: 0.9em; color: var(--muted); }
+        select, .txt-input { width: 100%; padding: 10px 14px; border: 2px solid var(--line); border-radius: 12px; font-family: inherit; font-size: 1em; background: var(--surface); color: var(--text); outline: none; }
+        select:focus, .txt-input:focus { border-color: var(--accent); box-shadow: 0 0 12px 3px var(--focus-glow); }
+        .status-choices { display: flex; gap: 10px; flex-wrap: wrap; }
+        .status-choices label { flex: 1; min-width: 84px; text-align: center; padding: 10px 6px; border: 2px solid var(--line); border-radius: 12px; cursor: pointer; font-size: 0.95em; }
+        .status-choices input { display: none; }
+        .status-choices input:checked + span { color: var(--accent); font-weight: bold; }
+        .status-choices label:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 10px 2px var(--focus-glow); }
+        .row { display: flex; gap: 10px; margin-bottom: 14px; }
+        .row .txt-input { flex: 1; }
+        .group-block { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; }
+        .group-block-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .group-block-head strong { font-size: 1.05em; }
+        .chip-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+        .chip { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 20px; padding: 5px 6px 5px 12px; font-size: 0.9em; }
+        .chip button { border: none; background: transparent; color: var(--danger); cursor: pointer; font-size: 1em; line-height: 1; padding: 2px 6px; }
+        .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+        .filters select { flex: 1; min-width: 120px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.92em; }
+        th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+        .badge { padding: 2px 10px; border-radius: 20px; font-size: 0.85em; color: #fff; display: inline-block; }
+        .badge.submitted { background: var(--accent); }
+        .badge.late { background: #c98a2c; }
+        .badge.missing { background: var(--danger); }
+        .empty-hint { color: var(--muted); text-align: center; padding: 30px 10px; }
+        .missing-box { background: var(--bg); border: 1px dashed var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; font-size: 0.92em; }
+        .foot-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+        #fMsg { min-height: 1.4em; text-align: center; font-size: 0.9em; color: var(--accent); }
+
+        /* ---- 響應式：小螢幕（手機）調整 ---- */
+        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        @media (max-width: 680px) {
+            header { flex-wrap: wrap; gap: 10px; padding: 14px 14px; }
+            header h1 { font-size: 1.15em; }
+            main, #adminArea { padding: 0 10px 40px; }
+            .card { padding: 16px 14px; border-radius: 14px; margin-bottom: 14px; }
+            .card h2 { font-size: 1.05em; }
+            .row { flex-direction: column; gap: 8px; }
+            .row .txt-input { width: 100%; }
+            .status-choices { gap: 8px; }
+            .status-choices label { min-width: 72px; padding: 9px 4px; font-size: 0.88em; }
+            .filters { flex-direction: column; }
+            .filters select { width: 100%; }
+            table { font-size: 0.85em; }
+            th, td { padding: 7px 5px; }
+            .group-block-head { flex-wrap: wrap; gap: 8px; }
+            .chip { font-size: 0.85em; padding: 4px 4px 4px 10px; }
+            .foot-actions { justify-content: stretch; }
+            .foot-actions .btn { width: 100%; }
+        }
+        @media (max-width: 420px) {
+            header button { padding: 8px 14px; font-size: 0.9em; }
+            .btn { padding: 8px 16px; font-size: 0.95em; }
+        }
+    </style>
+</head>
+<body>
+    <!-- ====== 版面骨架 ====== -->
+    <header>
+        <h1 data-gated><span id="appTitle">作業登記</span></h1>
+        <div>
+            <button id="loginBtn" class="btn outline">老師登入</button>
+            <button id="logoutBtn" class="btn outline admin-only hidden">登出</button>
+        </div>
+    </header>
+
+    <main id="content" data-gated>
+        <!-- 小老師登記表單（公開，不需登入） -->
+    </main>
+
+    <section id="adminArea" class="admin-only hidden">
+        <!-- 老師登入後：班級/科目管理 + 查看區 -->
+    </section>
+
+    <!-- ====== 密碼彈窗（登入模式 A） ====== -->
+    <div id="inputModal" class="modal-overlay">
+        <div class="modal-content">
+            <p class="modal-title">請輸入密碼</p>
+            <input type="password" id="passInput" placeholder="密碼" autocomplete="off">
+            <p id="imeHint" class="modal-hint">偵測到中文輸入法，密碼請切換為英數</p>
+            <div class="modal-actions">
+                <button class="btn-ok" onclick="checkPass()">確定</button>
+                <button class="btn-cancel" onclick="closeModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== 通用提示框 ====== -->
+    <div id="alertModal" class="modal-overlay">
+        <div class="modal-content">
+            <p class="modal-title" id="alertMsg"></p>
+            <div class="modal-actions">
+                <button class="btn-ok" onclick="closeAlert()">確定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== 通用輸入框 ====== -->
+    <div id="promptModal" class="modal-overlay">
+        <div class="modal-content">
+            <p class="modal-title" id="promptMsg"></p>
+            <input type="text" id="promptInput" class="modal-input">
+            <div class="modal-actions">
+                <button class="btn-cancel" id="promptNo">取消</button>
+                <button class="btn-ok" id="promptOk">確定</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        /* =========================================================
+           通用骨架：Firebase + 三種登入模式 + 通用資料層 + 載入 gate
+           ========================================================= */
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut,
+                 signInWithEmailAndPassword,
+                 GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, query, orderBy, onSnapshot,
+                 addDoc, deleteDoc, setDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const $ = id => document.getElementById(id);
+
+        /* ========== 業務設定 ========== */
+        const firebaseConfig = {
+            apiKey: "AIzaSyACHWb3UBP-RGFw4mX9suOGL0M-2Zz-eAo",
+            authDomain: "class-homework-check.firebaseapp.com",
+            projectId: "class-homework-check",
+            storageBucket: "class-homework-check.firebasestorage.app",
+            messagingSenderId: "426793456547",
+            appId: "1:426793456547:web:e7b87de8e1b05ef4d48016"
+        };
+        const COLL_PATH = "records";              // 流水帳集合名：每筆一次繳交登記
+        const ORDER_FIELD = "timestamp";
+        const ORDER_DIR = "desc";
+        const SETTINGS_PATH = ["config", "settings"]; // 存班級/學生/科目/作業清單
+
+        const LOGIN_MODE = 'A';                    // 老師共用帳號、只輸密碼
+        const SHARED_EMAIL = "annychen1210@gmail.com";  // 老師登入帳號 email
+        const ALLOWED_EMAILS = ["one@gmail.com", "two@gmail.com"];
+        /* ================================================ */
+
+        if(!firebaseConfig.apiKey || !firebaseConfig.projectId){
+            document.body.innerHTML = '<div style="max-width:520px;margin:80px auto;padding:24px;font-family:sans-serif;line-height:1.7;color:#2e3a35;text-align:center">尚未填入 Firebase 設定。<br>請在原始碼「業務設定」區的 <code>firebaseConfig</code> 填入你的專案設定後再開啟。</div>';
+            throw new Error('firebaseConfig 未設定');
+        }
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const coll = collection(db, COLL_PATH);
+        const settingsRef = doc(db, ...SETTINGS_PATH);
+
+        let isAdmin = false, editorReady = false, settingsArrived = false, recordsArrived = false, gateSettingsFailed = false;
+        let errored = false;
+        function showLoadError(){ if(!document.getElementById('loadError')){ const d=document.createElement('div'); d.id='loadError'; d.textContent='載入失敗，請重新整理頁面'; d.style.cssText='position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--danger);color:#fff;padding:10px 18px;border-radius:10px;z-index:2000;font-size:0.95em'; document.body.appendChild(d); } }
+
+        /* ---------- 載入 gate ---------- */
+        let readyTimer = setTimeout(markReady, 8000);
+        function markReady(){ clearTimeout(readyTimer); document.body.classList.add("ready"); }
+        function gateCheck(){ if(recordsArrived && (settingsArrived || gateSettingsFailed)) markReady(); }
+        function maybeLoadEditor(){ if(isAdmin && settingsArrived && !editorReady) loadEditor(settings); }
+
+        /* ---------- 通用資料層（流水帳型：collection 多筆，僅老師可用） ---------- */
+        function addRecord(obj){ if(!isAdmin) return; return addDoc(coll, { ...obj, [ORDER_FIELD]: Date.now() }).catch(e=>console.warn(e)); }
+        function deleteRecord(id){ if(!isAdmin) return; return deleteDoc(doc(db, COLL_PATH, id)).catch(e=>console.warn(e)); }
+        async function clearAll(){
+            if(!isAdmin) return;
+            const snap = await getDocs(coll);
+            const ids = snap.docs.map(d=>d.id);
+            for(let i=0;i<ids.length;i+=500){
+                const batch = writeBatch(db);
+                ids.slice(i,i+500).forEach(id=>batch.delete(doc(db, COLL_PATH, id)));
+                await batch.commit();
+            }
+        }
+        function saveSettings(obj){ if(!isAdmin) return; setDoc(settingsRef, obj, { merge: true }).catch(e=>console.warn(e)); }
+
+        let records = [], settings = null;
+        onSnapshot(query(coll, orderBy(ORDER_FIELD, ORDER_DIR)), snap => {
+            records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            recordsArrived = true;
+            renderPublic(records, settings, { error: errored });
+            gateCheck();
+        }, err => { console.warn(err); recordsArrived = true; errored = true; renderPublic(records, settings, { error: true }); showLoadError(); gateCheck(); });
+        onSnapshot(settingsRef, snap => {
+            settings = snap.exists() ? snap.data() : null;
+            settingsArrived = true;
+            renderPublic(records, settings, { error: errored });
+            maybeLoadEditor(); gateCheck();
+        }, err => { console.warn(err); gateSettingsFailed = true; errored = true; renderPublic(records, settings, { error: true }); showLoadError(); gateCheck(); });
+
+        /* ---------- 授權判斷（僅 gate 前端 UI，非安全邊界；見下方 Firestore 規則說明） ---------- */
+        function isAuthorized(user){
+            if(!user) return false;
+            if(LOGIN_MODE === 'A') return user.email === SHARED_EMAIL;
+            if(LOGIN_MODE === 'B') return user.email === ALLOWED_EMAILS[0];
+            if(LOGIN_MODE === 'C') return ALLOWED_EMAILS.slice(0,2).includes(user.email);
+            return false;
+        }
+        onAuthStateChanged(auth, user => {
+            isAdmin = isAuthorized(user);
+            document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin));
+            maybeLoadEditor();
+        });
+
+        window.showAlert = (msg) => { $('alertMsg').textContent = msg; $('alertModal').style.display = 'flex'; };
+        window.closeAlert = () => { $('alertModal').style.display = 'none'; };
+        window.askInput = (msg, def) => new Promise(res => {
+            const m = $('promptModal'), inp = $('promptInput'), ok = $('promptOk'), no = $('promptNo');
+            $('promptMsg').textContent = msg; inp.value = def || '';
+            m.style.display = 'flex'; setTimeout(() => { inp.focus(); inp.select(); }, 50);
+            const done = v => { m.style.display = 'none'; ok.onclick = null; no.onclick = null; inp.onkeydown = null; res(v); };
+            ok.onclick = () => done(inp.value);
+            no.onclick = () => done(null);
+            inp.onkeydown = e => { if(e.key === 'Enter') done(inp.value); else if(e.key === 'Escape') done(null); };
+        });
+
+        /* ---------- 登入 / 登出 ---------- */
+        $('loginBtn').onclick = () => {
+            if(LOGIN_MODE === 'A'){ window.openLogin(); }
+            else { signInWithPopup(auth, new GoogleAuthProvider()).catch(e=>window.showAlert("登入失敗")); }
+        };
+        $('logoutBtn').onclick = () => signOut(auth);
+        window.openLogin  = () => { $('passInput').value=''; $('imeHint').style.display='none'; $('inputModal').style.display='flex'; setTimeout(()=>$('passInput').focus(),50); };
+        window.closeModal = () => { $('inputModal').style.display='none'; $('passInput').value=''; $('imeHint').style.display='none'; };
+        window.checkPass  = async () => {
+            const pw = $('passInput').value; if(!pw){ window.showAlert('請輸入密碼'); return; }
+            try { await signInWithEmailAndPassword(auth, SHARED_EMAIL, pw); window.closeModal(); }
+            catch(e){ window.showAlert("密碼錯誤"); $('passInput').value=''; $('passInput').focus(); }
+        };
+        const checkIME = () => { $('imeHint').style.display = /[^\x00-\x7F]/.test($('passInput').value) ? 'block' : 'none'; };
+        $('passInput').addEventListener('keydown', e => { if(e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) window.checkPass(); });
+        $('passInput').addEventListener('compositionstart', () => { $('imeHint').style.display='block'; });
+        $('passInput').addEventListener('input', e => { if(!e.isComposing) checkIME(); });
+        $('passInput').addEventListener('compositionend', checkIME);
+
+        /* =========================================================
+           業務邏輯
+           - 公開登記（小老師，不需登入）：submitRecord() 直接寫入 records，
+             不經過上面的 addRecord()（addRecord 鎖 isAdmin，只給老師管理用，
+             例如刪除紀錄）。這是刻意新增的函式，未更動/更名既有骨架函式。
+           - 老師登入後台：管理 groups/students/subjects/assignments（存在 settings），
+             以及查看/篩選/刪除紀錄、清空全部、未繳名單。
+           ========================================================= */
+
+        // 直接寫入 records，不檢查 isAdmin —— 小老師登記本來就設計成公開可寫。
+        // 真正的存取控制必須寫在 Firestore 規則（見檔案最後交付說明）。
+        function submitRecord(obj){ return addDoc(coll, { ...obj, [ORDER_FIELD]: Date.now() }).catch(e=>{ console.warn(e); window.showAlert('送出失敗，請檢查網路後重試'); }); }
+
+        const STATUS_LIST = ['已繳','未繳','遲交'];
+        const badgeClass = s => s === '已繳' ? 'submitted' : (s === '遲交' ? 'late' : 'missing');
+
+        /* ---- 公開登記表單：只依賴 settings，不依賴 records，避免每次有人送出
+               登記時（records 變動）就整個重畫、洗掉別人正在填的表單。 ---- */
+        let lastSettingsJSON = null;
+        function renderPublic(recs, st, status){
+            const content = $('content');
+            if(status.error){
+                content.innerHTML = '<p class="empty-hint">載入失敗，請重新整理頁面</p>';
+                lastSettingsJSON = null;
+                renderAdminLive(recs, st);
+                return;
+            }
+            const hasGroups = st && Array.isArray(st.groups) && st.groups.length && Array.isArray(st.students) && st.students.length;
+            const hasSubjects = st && Array.isArray(st.subjects) && st.subjects.length && Array.isArray(st.assignments) && st.assignments.length;
+            if(!hasGroups || !hasSubjects){
+                content.innerHTML = '<p class="empty-hint">老師尚未設定班級/科目資料，請登入後台設定</p>';
+                lastSettingsJSON = null;
+                renderAdminLive(recs, st);
+                return;
+            }
+            const sJSON = JSON.stringify(st);
+            if(sJSON !== lastSettingsJSON){
+                lastSettingsJSON = sJSON;
+                content.innerHTML = `
+                    <div class="card">
+                        <h2>登記作業繳交</h2>
+                        <div class="field"><label>組別</label><select id="fGroup"></select></div>
+                        <div class="field"><label>學生</label><select id="fStudent"></select></div>
+                        <div class="field"><label>科目</label><select id="fSubject"></select></div>
+                        <div class="field"><label>作業</label><select id="fAssignment"></select></div>
+                        <div class="field">
+                            <label>狀態</label>
+                            <div class="status-choices">
+                                ${STATUS_LIST.map((s,i)=>`<label><input type="radio" name="fStatus" value="${s}" ${i===0?'checked':''}><span>${s}</span></label>`).join('')}
+                            </div>
+                        </div>
+                        <button id="fSubmit" class="btn" style="width:100%">送出登記</button>
+                        <p id="fMsg"></p>
+                    </div>`;
+                const gSel = $('fGroup'), sSel = $('fStudent'), subSel = $('fSubject'), aSel = $('fAssignment');
+                st.groups.forEach(g => gSel.add(new Option(g.name, g.id)));
+                st.subjects.forEach(s => subSel.add(new Option(s.name, s.id)));
+                function refreshStudents(){
+                    sSel.innerHTML = '';
+                    st.students.filter(s => s.groupId === gSel.value).forEach(s => sSel.add(new Option(s.name, s.id)));
+                }
+                function refreshAssignments(){
+                    aSel.innerHTML = '';
+                    st.assignments.filter(a => a.subjectId === subSel.value).forEach(a => aSel.add(new Option(a.name, a.id)));
+                }
+                gSel.onchange = refreshStudents; refreshStudents();
+                subSel.onchange = refreshAssignments; refreshAssignments();
+                $('fSubmit').onclick = async () => {
+                    if(!sSel.value){ window.showAlert('該組別尚無學生，請請老師先設定'); return; }
+                    if(!aSel.value){ window.showAlert('該科目尚無作業，請請老師先設定'); return; }
+                    const statusVal = content.querySelector('input[name="fStatus"]:checked').value;
+                    $('fSubmit').disabled = true;
+                    await submitRecord({
+                        groupId: gSel.value, groupName: gSel.options[gSel.selectedIndex].text,
+                        studentId: sSel.value, studentName: sSel.options[sSel.selectedIndex].text,
+                        subjectId: subSel.value, subjectName: subSel.options[subSel.selectedIndex].text,
+                        assignmentId: aSel.value, assignmentName: aSel.options[aSel.selectedIndex].text,
+                        status: statusVal
+                    });
+                    $('fSubmit').disabled = false;
+                    $('fMsg').textContent = `已登記：${sSel.options[sSel.selectedIndex].text} - ${aSel.options[aSel.selectedIndex].text}（${statusVal}）`;
+                    setTimeout(()=>{ if($('fMsg')) $('fMsg').textContent=''; }, 4000);
+                };
+            }
+            renderAdminLive(recs, st);
+        }
+
+        /* ---- 老師查看區的即時內容：紀錄列表 + 篩選 + 未繳名單。
+               每次 records/settings 有變動都會呼叫，全量重繪（列表本身不含使用者
+               正在輸入的欄位，重繪不會有干擾問題）。若後台尚未建立（未登入過），
+               直接跳過。 ---- */
+        function renderAdminLive(recs, st){
+            const wrap = $('recordsViewWrap');
+            if(!wrap) return; // 尚未登入建立過後台畫面
+            recs = recs || []; st = st || { groups:[], students:[], subjects:[], assignments:[] };
+
+            const gf = $('filterGroup'), sf = $('filterSubject'), af = $('filterAssignment'), stf = $('filterStatus');
+            const curG = gf.value, curS = sf.value, curA = af.value, curSt = stf.value;
+            gf.innerHTML = '<option value="">全部組別</option>' + st.groups.map(g=>`<option value="${g.id}">${g.name}</option>`).join('');
+            sf.innerHTML = '<option value="">全部科目</option>' + st.subjects.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+            af.innerHTML = '<option value="">全部作業</option>' + st.assignments.filter(a=>!curS || a.subjectId===curS).map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
+            stf.innerHTML = '<option value="">全部狀態</option>' + STATUS_LIST.map(s=>`<option value="${s}">${s}</option>`).join('');
+            gf.value = curG; sf.value = [...sf.options].some(o=>o.value===curS)?curS:''; af.value = [...af.options].some(o=>o.value===curA)?curA:''; stf.value = curSt;
+
+            const filtered = recs.filter(r =>
+                (!gf.value || r.groupId === gf.value) &&
+                (!sf.value || r.subjectId === sf.value) &&
+                (!af.value || r.assignmentId === af.value) &&
+                (!stf.value || r.status === stf.value)
+            );
+
+            const tbody = $('recordsTbody');
+            tbody.innerHTML = filtered.length ? filtered.map(r => `
+                <tr>
+                    <td>${r.groupName||''}</td>
+                    <td>${r.studentName||''}</td>
+                    <td>${r.subjectName||''}</td>
+                    <td>${r.assignmentName||''}</td>
+                    <td><span class="badge ${badgeClass(r.status)}">${r.status||''}</span></td>
+                    <td>${r.timestamp ? new Date(r.timestamp).toLocaleString('zh-TW') : ''}</td>
+                    <td><button class="btn small outline" data-del="${r.id}">刪除</button></td>
+                </tr>`).join('') : '';
+            tbody.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+                await deleteRecord(b.getAttribute('data-del'));
+            });
+            $('recordsEmpty').style.display = filtered.length ? 'none' : 'block';
+
+            // 未繳名單：需選定作業才計算
+            const missBox = $('missingBox');
+            if(af.value){
+                const asg = st.assignments.find(a=>a.id===af.value);
+                const groupStudents = st.students.filter(s => !gf.value || s.groupId === gf.value);
+                const submittedIds = new Set(recs.filter(r => r.assignmentId === af.value && (r.status === '已繳' || r.status === '遲交')).map(r=>r.studentId));
+                const missing = groupStudents.filter(s => !submittedIds.has(s.id));
+                missBox.style.display = 'block';
+                missBox.innerHTML = missing.length
+                    ? `<strong>「${asg ? asg.name : ''}」尚未繳交（${missing.length} 人）：</strong> ${missing.map(s=>s.name).join('、')}`
+                    : `<strong>「${asg ? asg.name : ''}」目前所選範圍內全數已繳交或遲交登記。</strong>`;
+            } else {
+                missBox.style.display = 'none';
+            }
+        }
+
+        /* ---- 老師後台：班級/學生、科目/作業管理（首次登入建立一次骨架，
+               之後管理清單皆用區域刷新，不動到輸入框，避免打字打到一半被清掉）。 ---- */
+        function loadEditor(st){
+            st = st || { groups: [], students: [], subjects: [], assignments: [] };
+            st.groups = st.groups || []; st.students = st.students || [];
+            st.subjects = st.subjects || []; st.assignments = st.assignments || [];
+
+            $('adminArea').innerHTML = `
+                <div class="card">
+                    <h2>班級與學生管理</h2>
+                    <div class="row">
+                        <input id="newGroupName" class="txt-input" placeholder="新增組別名稱，例如：第一組">
+                        <button class="btn" id="addGroupBtn">新增組別</button>
+                    </div>
+                    <div id="groupsList"></div>
+                </div>
+                <div class="card">
+                    <h2>科目與作業管理</h2>
+                    <div class="row">
+                        <input id="newSubjectName" class="txt-input" placeholder="新增科目名稱，例如：數學">
+                        <button class="btn" id="addSubjectBtn">新增科目</button>
+                    </div>
+                    <div id="subjectsList"></div>
+                </div>
+                <div class="card">
+                    <h2>繳交紀錄查看</h2>
+                    <div class="filters">
+                        <select id="filterGroup"></select>
+                        <select id="filterSubject"></select>
+                        <select id="filterAssignment"></select>
+                        <select id="filterStatus"></select>
+                    </div>
+                    <div id="missingBox" class="missing-box" style="display:none"></div>
+                    <div id="recordsViewWrap">
+                        <div class="table-scroll">
+                            <table>
+                                <thead><tr><th>組別</th><th>學生</th><th>科目</th><th>作業</th><th>狀態</th><th>時間</th><th></th></tr></thead>
+                                <tbody id="recordsTbody"></tbody>
+                            </table>
+                        </div>
+                        <p id="recordsEmpty" class="empty-hint">目前沒有符合條件的紀錄</p>
+                    </div>
+                    <div class="foot-actions">
+                        <button class="btn outline danger" id="clearAllBtn">清空全部紀錄</button>
+                    </div>
+                </div>`;
+
+            function renderGroups(){
+                $('groupsList').innerHTML = st.groups.map(g => `
+                    <div class="group-block" data-group="${g.id}">
+                        <div class="group-block-head">
+                            <strong>${g.name}</strong>
+                            <button class="btn small outline danger" data-del-group="${g.id}">刪除組別</button>
+                        </div>
+                        <div class="chip-list">
+                            ${st.students.filter(s=>s.groupId===g.id).map(s => `<span class="chip">${s.name}<button data-del-student="${s.id}">✕</button></span>`).join('') || '<span style="color:var(--muted)">尚無學生</span>'}
+                        </div>
+                        <div class="row" style="margin-bottom:0">
+                            <input class="txt-input" data-new-student="${g.id}" placeholder="新增學生姓名">
+                            <button class="btn small" data-add-student="${g.id}">新增</button>
+                        </div>
+                    </div>`).join('') || '<p class="empty-hint">尚未新增組別</p>';
+
+                $('groupsList').querySelectorAll('[data-del-group]').forEach(b => b.onclick = () => {
+                    const gid = b.getAttribute('data-del-group');
+                    st.groups = st.groups.filter(g=>g.id!==gid);
+                    st.students = st.students.filter(s=>s.groupId!==gid);
+                    saveSettings({ groups: st.groups, students: st.students });
+                    renderGroups();
+                });
+                $('groupsList').querySelectorAll('[data-del-student]').forEach(b => b.onclick = () => {
+                    const sid = b.getAttribute('data-del-student');
+                    st.students = st.students.filter(s=>s.id!==sid);
+                    saveSettings({ students: st.students });
+                    renderGroups();
+                });
+                $('groupsList').querySelectorAll('[data-add-student]').forEach(b => b.onclick = () => {
+                    const gid = b.getAttribute('data-add-student');
+                    const inp = $('groupsList').querySelector(`[data-new-student="${gid}"]`);
+                    const name = inp.value.trim();
+                    if(!name) return;
+                    st.students.push({ id: crypto.randomUUID(), name, groupId: gid });
+                    saveSettings({ students: st.students });
+                    renderGroups();
+                });
+            }
+            function renderSubjects(){
+                $('subjectsList').innerHTML = st.subjects.map(s => `
+                    <div class="group-block" data-subject="${s.id}">
+                        <div class="group-block-head">
+                            <strong>${s.name}</strong>
+                            <button class="btn small outline danger" data-del-subject="${s.id}">刪除科目</button>
+                        </div>
+                        <div class="chip-list">
+                            ${st.assignments.filter(a=>a.subjectId===s.id).map(a => `<span class="chip">${a.name}<button data-del-assignment="${a.id}">✕</button></span>`).join('') || '<span style="color:var(--muted)">尚無作業</span>'}
+                        </div>
+                        <div class="row" style="margin-bottom:0">
+                            <input class="txt-input" data-new-assignment="${s.id}" placeholder="新增作業名稱">
+                            <button class="btn small" data-add-assignment="${s.id}">新增</button>
+                        </div>
+                    </div>`).join('') || '<p class="empty-hint">尚未新增科目</p>';
+
+                $('subjectsList').querySelectorAll('[data-del-subject]').forEach(b => b.onclick = () => {
+                    const sid = b.getAttribute('data-del-subject');
+                    st.subjects = st.subjects.filter(s=>s.id!==sid);
+                    st.assignments = st.assignments.filter(a=>a.subjectId!==sid);
+                    saveSettings({ subjects: st.subjects, assignments: st.assignments });
+                    renderSubjects();
+                });
+                $('subjectsList').querySelectorAll('[data-del-assignment]').forEach(b => b.onclick = () => {
+                    const aid = b.getAttribute('data-del-assignment');
+                    st.assignments = st.assignments.filter(a=>a.id!==aid);
+                    saveSettings({ assignments: st.assignments });
+                    renderSubjects();
+                });
+                $('subjectsList').querySelectorAll('[data-add-assignment]').forEach(b => b.onclick = () => {
+                    const sid = b.getAttribute('data-add-assignment');
+                    const inp = $('subjectsList').querySelector(`[data-new-assignment="${sid}"]`);
+                    const name = inp.value.trim();
+                    if(!name) return;
+                    st.assignments.push({ id: crypto.randomUUID(), name, subjectId: sid });
+                    saveSettings({ assignments: st.assignments });
+                    renderSubjects();
+                });
+            }
+
+            $('addGroupBtn').onclick = () => {
+                const name = $('newGroupName').value.trim();
+                if(!name) return;
+                st.groups.push({ id: crypto.randomUUID(), name });
+                saveSettings({ groups: st.groups });
+                $('newGroupName').value = '';
+                renderGroups();
+            };
+            $('addSubjectBtn').onclick = () => {
+                const name = $('newSubjectName').value.trim();
+                if(!name) return;
+                st.subjects.push({ id: crypto.randomUUID(), name });
+                saveSettings({ subjects: st.subjects });
+                $('newSubjectName').value = '';
+                renderSubjects();
+            };
+            $('clearAllBtn').onclick = async () => {
+                const v = await window.askInput('清空全部紀錄無法復原，輸入「確定」以繼續', '');
+                if(v === '確定') await clearAll();
+            };
+            ['filterGroup','filterSubject','filterAssignment','filterStatus'].forEach(id => {
+                $(id).onchange = () => renderAdminLive(records, settings);
+            });
+
+            renderGroups();
+            renderSubjects();
+            renderAdminLive(records, settings);
+            editorReady = true;
+        }
+        /* 可用 API：addRecord(obj) / deleteRecord(id) / clearAll() / saveSettings(obj) / submitRecord(obj) */
+        /* ================================================== */
+    </script>
+</body>
+</html>
