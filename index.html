@@ -410,13 +410,16 @@
             }
             const students = sortBySeat(settings.students || []);
             $('missingListBody').innerHTML = settings.assignments.map(a => {
-                const missing = students.filter(s => {
+                const subj = (settings.subjects || []).find(x=>x.id===a.subjectId);
+                const subjName = subj ? subj.name : '';
+                const applicable = students.filter(s => !isPulledOut(s, subjName));
+                const missing = applicable.filter(s => {
                     const rec = recs.find(r => r.studentId===s.id && r.assignmentId===a.id);
                     return !rec || rec.status !== '已繳';
                 });
                 let html = `<p style="margin-bottom:4px"><strong>${a.name}</strong>${a.needsSign ? '（需簽名）' : ''}：${missing.length ? missing.map(s=>s.name).join('、') : '全部已繳'}</p>`;
                 if(a.needsSign){
-                    const unsigned = students.filter(s => {
+                    const unsigned = applicable.filter(s => {
                         const rec = recs.find(r => r.studentId===s.id && r.assignmentId===a.id);
                         return rec && rec.status === '已繳' && rec.signStatus !== '已簽名';
                     });
@@ -500,6 +503,28 @@
                 if(an !== bn) return an - bn;
                 return (a.name||'').localeCompare(b.name||'', 'zh-Hant');
             });
+        }
+        // 抽離上課：固定分「國語抽離」「數學抽離」兩類，用科目名稱是否恰為「國語」/「數學」判斷。
+        // 若老師的科目命名不是這兩個字，這個判斷不會生效。
+        function isPulledOut(student, subjectName){
+            if(!student || !student.pullout) return false;
+            if(subjectName === '國語' && student.pullout.chinese) return true;
+            if(subjectName === '數學' && student.pullout.math) return true;
+            return false;
+        }
+        function pulloutLabel(p){
+            if(!p) return '抽離';
+            const parts = [];
+            if(p.chinese) parts.push('國');
+            if(p.math) parts.push('數');
+            return parts.length ? `抽離:${parts.join('')}` : '抽離';
+        }
+        function nextPullout(p){
+            p = p || { chinese:false, math:false };
+            if(!p.chinese && !p.math) return { chinese:true, math:false };
+            if(p.chinese && !p.math) return { chinese:false, math:true };
+            if(!p.chinese && p.math) return { chinese:true, math:true };
+            return { chinese:false, math:false };
         }
 
         /* ---- 公開登記表單：只依賴 settings，不依賴 records，避免每次有人送出
@@ -605,8 +630,10 @@
                     });
                 }
                 function refreshStudents(){
-                    const list = sortBySeat(st.students.filter(s => s.groupId === gSel.value));
                     const curAsg = st.assignments.find(a => a.id === aSel.value);
+                    const curSubj = curAsg ? st.subjects.find(x=>x.id===curAsg.subjectId) : null;
+                    const curSubjName = curSubj ? curSubj.name : '';
+                    const list = sortBySeat(st.students.filter(s => s.groupId === gSel.value && !isPulledOut(s, curSubjName)));
                     buildStudentRows(list, !!(curAsg && curAsg.needsSign));
                     $('studentStep').style.display = list.length ? 'block' : 'none';
                     $('noStudentHint').style.display = list.length ? 'none' : 'block';
@@ -691,10 +718,35 @@
                     quickSubjSel.value = '';
                 }
             };
+            $('renameSubjectBtn').onclick = async () => {
+                if(!quickSubjSel.value || quickSubjSel.value === '__new__'){ window.showAlert('請先在左邊下拉選單選擇要改名的科目'); return; }
+                const subj = st.subjects.find(x=>x.id===quickSubjSel.value);
+                if(!subj) return;
+                const name = await window.askInput('修改科目名稱', subj.name);
+                if(name === null) return;
+                if(!name.trim()){ window.showAlert('名稱不能空白'); return; }
+                subj.name = name.trim();
+                saveSettings({ subjects: st.subjects });
+                renderRecordsTab(records, settings);
+            };
+            $('deleteSubjectBtn').onclick = async () => {
+                if(!quickSubjSel.value || quickSubjSel.value === '__new__'){ window.showAlert('請先在左邊下拉選單選擇要刪除的科目'); return; }
+                const subj = st.subjects.find(x=>x.id===quickSubjSel.value);
+                if(!subj) return;
+                const v = await window.askInput(`刪除科目「${subj.name}」不會刪除底下已建立的作業（會變成未分類），輸入「確定」以繼續`, '');
+                if(v !== '確定') return;
+                st.subjects = st.subjects.filter(x=>x.id!==subj.id);
+                st.assignments.forEach(a => { if(a.subjectId === subj.id) a.subjectId = ''; });
+                saveSettings({ subjects: st.subjects, assignments: st.assignments });
+                renderRecordsTab(records, settings);
+            };
+
+            const subjNameOf = a => { const s = st.subjects.find(x=>x.id===a.subjectId); return s ? s.name : ''; };
 
             // ---- 數字清單 ----
             let doneCount=0, missingCount=0, unsignedCount=0;
             students.forEach(s => assignments.forEach(a => {
+                if(isPulledOut(s, subjNameOf(a))) return; // 抽離該科的學生，這門作業不列入計算
                 const v = statusOf(s.id, a.id);
                 if(v==='已繳') doneCount++; else missingCount++;
                 if(a.needsSign && v==='已繳' && signOf(s.id, a.id) !== '已簽名') unsignedCount++;
@@ -713,14 +765,16 @@
                     if(type === 'missing'){
                         $('missingListTitle').textContent = '未繳詳情';
                         $('missingListBody').innerHTML = assignments.length ? assignments.map(a => {
-                            const missing = students.filter(s => statusOf(s.id, a.id) !== '已繳');
+                            const applicable = students.filter(s => !isPulledOut(s, subjNameOf(a)));
+                            const missing = applicable.filter(s => statusOf(s.id, a.id) !== '已繳');
                             return `<p><strong>${a.name}</strong>：${missing.length ? missing.map(s=>s.name).join('、') : '全部已繳'}</p>`;
                         }).join('') : '<p>目前尚無作業</p>';
                     } else {
                         const signAssignments = assignments.filter(a => a.needsSign);
                         $('missingListTitle').textContent = '未簽名詳情';
                         $('missingListBody').innerHTML = signAssignments.length ? signAssignments.map(a => {
-                            const unsigned = students.filter(s => statusOf(s.id, a.id) === '已繳' && signOf(s.id, a.id) !== '已簽名');
+                            const applicable = students.filter(s => !isPulledOut(s, subjNameOf(a)));
+                            const unsigned = applicable.filter(s => statusOf(s.id, a.id) === '已繳' && signOf(s.id, a.id) !== '已簽名');
                             return `<p><strong>${a.name}</strong>：${unsigned.length ? unsigned.map(s=>s.name).join('、') : '全部已簽名'}</p>`;
                         }).join('') : '<p>目前沒有需要簽名的作業</p>';
                     }
@@ -742,7 +796,7 @@
                 const aid = b.getAttribute('data-mark-all');
                 const a = assignments.find(x=>x.id===aid);
                 const subj = a ? st.subjects.find(s=>s.id===a.subjectId) : null;
-                const items = students.map(s => {
+                const items = students.filter(s => !isPulledOut(s, subj?subj.name:'')).map(s => {
                     const grp = st.groups.find(g=>g.id===s.groupId);
                     return {
                         groupId: grp?grp.id:'', groupName: grp?grp.name:'',
@@ -772,6 +826,9 @@
             tbody.innerHTML = students.length ? students.map(s => {
                 const seatLabel = (s.seat!=null && s.seat!=='') ? `${s.seat}號 ` : '';
                 const cells = assignments.map(a => {
+                    if(isPulledOut(s, subjNameOf(a))){
+                        return `<td><span class="sign-placeholder">抽離</span></td>`;
+                    }
                     const v = statusOf(s.id, a.id);
                     const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(v)}" data-student="${s.id}" data-assignment="${a.id}">${v}</button>`;
                     if(!a.needsSign) return `<td>${statusBtn}</td>`;
@@ -836,6 +893,18 @@
             st.groups = st.groups || []; st.students = st.students || [];
             st.subjects = st.subjects || []; st.assignments = st.assignments || [];
 
+            // 這個 st 是登入當下的快照，後續不會隨每次 settings 更新自動換掉（避免打字打到一半被蓋掉）。
+            // 但這代表如果資料是從別的地方（例如「今日作業管理」的刪除）改的，這份快照會過期。
+            // 所以每個會修改 st 的動作，一律先呼叫這個函式，跟最新的全域 settings 同步，
+            // 才不會把舊資料（含已經刪除的作業/學生/組別）整包存回去、變成「復活」。
+            function resyncFromGlobal(){
+                if(!settings) return;
+                st.groups = settings.groups || [];
+                st.students = settings.students || [];
+                st.subjects = settings.subjects || [];
+                st.assignments = settings.assignments || [];
+            }
+
             $('adminArea').innerHTML = `
                 <div class="admin-tabs">
                     <button class="tab-btn active" data-tab="tabRecords">繳交紀錄查看</button>
@@ -845,6 +914,12 @@
                     <div class="card">
                         <div class="row">
                             <select id="quickAssignmentSubject" style="max-width:160px"></select>
+                            <button type="button" id="renameSubjectBtn" class="icon-btn" title="修改選取科目的名稱" style="width:26px;height:26px">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                            </button>
+                            <button type="button" id="deleteSubjectBtn" class="icon-btn" title="刪除選取的科目" style="width:26px;height:26px;background:var(--danger)">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                            </button>
                             <input id="quickAssignmentName" class="txt-input" placeholder="新增今日作業，例如：數學習作 P.26-28">
                             <label style="display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:0.9em;color:var(--muted)">
                                 <input type="checkbox" id="quickAssignmentNeedsSign" style="width:auto">需要簽名
@@ -903,6 +978,7 @@
             });
 
             $('quickAddAssignmentBtn').onclick = () => {
+                resyncFromGlobal();
                 const inp = $('quickAssignmentName');
                 const subjSel = $('quickAssignmentSubject');
                 const signChk = $('quickAssignmentNeedsSign');
@@ -917,13 +993,15 @@
             $('copyMissingBtn').onclick = async () => {
                 const students = sortBySeat(st.students);
                 const lines = st.assignments.map(a => {
-                    const missing = students.filter(s => {
+                    const subj = st.subjects.find(x=>x.id===a.subjectId);
+                    const applicable = students.filter(s => !isPulledOut(s, subj?subj.name:''));
+                    const missing = applicable.filter(s => {
                         const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
                         return !rec || rec.status === '未繳';
                     });
                     let line = `${a.name}${a.needsSign ? '（需簽名）' : ''}：${missing.length ? missing.map(s=>s.name).join('、') : '無人未繳'}`;
                     if(a.needsSign){
-                        const unsigned = students.filter(s => {
+                        const unsigned = applicable.filter(s => {
                             const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
                             return rec && rec.status === '已繳' && rec.signStatus !== '已簽名';
                         });
@@ -977,7 +1055,10 @@
                         <div class="group-block" data-archive="${a.id}">
                             <div class="group-block-head">
                                 <strong>${a.dateLabel || new Date(a.timestamp).toLocaleDateString('zh-TW')}</strong>
-                                <button class="btn small outline" data-view-archive="${a.id}">查看內容</button>
+                                <div class="assignment-actions">
+                                    <button class="btn small outline" data-view-archive="${a.id}">查看內容</button>
+                                    <button class="btn small outline danger" data-del-archive="${a.id}">刪除</button>
+                                </div>
                             </div>
                             <p class="empty-hint" style="text-align:left;padding:0">封存時間：${new Date(a.timestamp).toLocaleString('zh-TW')}｜${a.assignmentCount||0} 份作業、${a.studentCount||0} 位學生</p>
                             <div class="table-scroll archive-detail" data-detail="${a.id}" style="display:none"></div>
@@ -1011,6 +1092,15 @@
                         renderArchiveDetail(item);
                         box.style.display = 'block';
                     });
+                    $('archivesList').querySelectorAll('[data-del-archive]').forEach(b => b.onclick = async () => {
+                        const aid = b.getAttribute('data-del-archive');
+                        const item = list.find(x=>x.id===aid);
+                        const label = item ? (item.dateLabel || new Date(item.timestamp).toLocaleDateString('zh-TW')) : '';
+                        const v = await window.askInput(`刪除「${label}」這筆封存紀錄無法復原，輸入「確定」以繼續`, '');
+                        if(v !== '確定') return;
+                        await deleteDoc(doc(db, 'archives', aid)).catch(e=>{ console.warn(e); window.showAlert('刪除失敗，請檢查網路或權限後重試'); });
+                        $('loadArchivesBtn').click();
+                    });
                 } catch(e){ console.warn(e); $('archivesList').innerHTML = '<p class="empty-hint">載入失敗</p>'; }
             };
 
@@ -1022,7 +1112,7 @@
                             <button class="btn small outline danger" data-del-group="${g.id}">刪除組別</button>
                         </div>
                         <div class="chip-list">
-                            ${sortBySeat(st.students.filter(s=>s.groupId===g.id)).map(s => `<span class="chip">${s.seat!=null && s.seat!=='' ? s.seat+'號 ' : ''}${s.name}<button data-del-student="${s.id}">✕</button></span>`).join('') || '<span style="color:var(--muted)">尚無學生</span>'}
+                            ${sortBySeat(st.students.filter(s=>s.groupId===g.id)).map(s => `<span class="chip">${s.seat!=null && s.seat!=='' ? s.seat+'號 ' : ''}${s.name}${s.pullout && (s.pullout.chinese||s.pullout.math) ? `<span class="sign-tag" style="color:#b8860c">${pulloutLabel(s.pullout)}</span>` : ''}<button data-pullout-student="${s.id}" title="設定抽離上課" style="color:#b8860c">抽</button><button data-move-student="${s.id}" title="搬到其他組別" style="color:var(--accent)">⇄</button><button data-del-student="${s.id}">✕</button></span>`).join('') || '<span style="color:var(--muted)">尚無學生</span>'}
                         </div>
                         <div class="row" style="margin-bottom:0">
                             <input class="txt-input" data-new-seat="${g.id}" placeholder="座號（選填）" style="max-width:110px" inputmode="numeric">
@@ -1032,6 +1122,7 @@
                     </div>`).join('') || '<p class="empty-hint">尚未新增組別</p>';
 
                 $('groupsList').querySelectorAll('[data-del-group]').forEach(b => b.onclick = () => {
+                    resyncFromGlobal();
                     const gid = b.getAttribute('data-del-group');
                     st.groups = st.groups.filter(g=>g.id!==gid);
                     st.students = st.students.filter(s=>s.groupId!==gid);
@@ -1039,12 +1130,42 @@
                     renderGroups();
                 });
                 $('groupsList').querySelectorAll('[data-del-student]').forEach(b => b.onclick = () => {
+                    resyncFromGlobal();
                     const sid = b.getAttribute('data-del-student');
                     st.students = st.students.filter(s=>s.id!==sid);
                     saveSettings({ students: st.students });
                     renderGroups();
                 });
+                $('groupsList').querySelectorAll('[data-move-student]').forEach(b => b.onclick = async () => {
+                    resyncFromGlobal();
+                    const sid = b.getAttribute('data-move-student');
+                    const stu = st.students.find(x=>x.id===sid);
+                    if(!stu) return;
+                    const curGroup = st.groups.find(g=>g.id===stu.groupId);
+                    const otherNames = st.groups.filter(g=>g.id!==stu.groupId).map(g=>g.name).join('、');
+                    const target = await window.askInput(`「${stu.name}」目前在「${curGroup?curGroup.name:'（無組別）'}」，要搬到哪一組？（可選：${otherNames || '尚無其他組別'}）`, '');
+                    if(!target || !target.trim()) return;
+                    const targetGroup = st.groups.find(g => g.name === target.trim());
+                    if(!targetGroup){ window.showAlert('找不到這個組別名稱，請輸入完全一致的組別名稱'); return; }
+                    resyncFromGlobal();
+                    const freshStu = st.students.find(x=>x.id===sid);
+                    if(freshStu) freshStu.groupId = targetGroup.id;
+                    // 只改 students 這個欄位（學生 ID 不變），records/archives 是登記當下就寫死的獨立資料，
+                    // 不會因為這裡改組別而被回頭修改，過去的紀錄與封存完全不受影響。
+                    saveSettings({ students: st.students });
+                    renderGroups();
+                });
+                $('groupsList').querySelectorAll('[data-pullout-student]').forEach(b => b.onclick = () => {
+                    resyncFromGlobal();
+                    const sid = b.getAttribute('data-pullout-student');
+                    const stu = st.students.find(x=>x.id===sid);
+                    if(!stu) return;
+                    stu.pullout = nextPullout(stu.pullout);
+                    saveSettings({ students: st.students });
+                    renderGroups();
+                });
                 $('groupsList').querySelectorAll('[data-add-student]').forEach(b => b.onclick = () => {
+                    resyncFromGlobal();
                     const gid = b.getAttribute('data-add-student');
                     const nameInp = $('groupsList').querySelector(`[data-new-student="${gid}"]`);
                     const seatInp = $('groupsList').querySelector(`[data-new-seat="${gid}"]`);
@@ -1057,6 +1178,7 @@
             }
 
             $('addGroupBtn').onclick = () => {
+                resyncFromGlobal();
                 const name = $('newGroupName').value.trim();
                 if(!name) return;
                 st.groups.push({ id: crypto.randomUUID(), name });
