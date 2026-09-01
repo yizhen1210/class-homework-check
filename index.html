@@ -279,7 +279,7 @@
         import { getAuth, onAuthStateChanged, signOut,
                  signInWithEmailAndPassword,
                  GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, query, orderBy, onSnapshot,
+        import { getFirestore, collection, doc, query, orderBy, where, onSnapshot,
                  addDoc, deleteDoc, setDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const $ = id => document.getElementById(id);
@@ -645,6 +645,21 @@
                     buildStudentRows(list, !!(curAsg && curAsg.needsSign));
                     $('studentStep').style.display = list.length ? 'block' : 'none';
                     $('noStudentHint').style.display = list.length ? 'none' : 'block';
+                    // 回填這個作業已經送出過的狀態，避免使用者切走再切回來時被重置成未繳
+                    if(curAsg && list.length){
+                        const assignmentIdAtFetch = curAsg.id;
+                        getDocs(query(coll, where('assignmentId','==', assignmentIdAtFetch))).then(snap => {
+                            if(aSel.value !== assignmentIdAtFetch) return; // 抓取期間已經切換，資料對不上就不套用
+                            const wrap = $('studentRows');
+                            snap.docs.forEach(d => {
+                                const data = d.data();
+                                const row = wrap.querySelector(`.student-row[data-student="${data.studentId}"]`);
+                                if(!row) return;
+                                if(data.status) setRowStatus(row, data.status);
+                                if(curAsg.needsSign && data.signStatus) setRowSign(row, data.signStatus);
+                            });
+                        }).catch(e => console.warn(e));
+                    }
                 }
                 function updateGroupVisibility(){
                     const show = !!aSel.value;
