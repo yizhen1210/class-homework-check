@@ -185,8 +185,11 @@
             .foot-actions .btn { width: 100%; }
             .student-row { flex-wrap: wrap; }
             .mini-status-btn { padding: 6px 9px; font-size: 0.8em; }
-            .admin-tabs { flex-direction: column; }
-            .tab-btn { width: 100%; }
+            .admin-tabs { flex-direction: row; }
+            .tab-btn { width: auto; }
+            .inline-add-row { flex-direction: row; }
+            .inline-add-row .txt-input { width: auto; flex: 1; min-width: 0; }
+            .inline-add-row .btn { flex-shrink: 0; padding: 8px 14px; font-size: 0.85em; white-space: nowrap; }
             .stat-cards { grid-template-columns: repeat(3, 1fr); }
             .assignment-row { flex-direction: column; align-items: stretch; }
             .assignment-actions { justify-content: stretch; }
@@ -930,7 +933,7 @@
 
             $('adminArea').innerHTML = `
                 <div class="admin-tabs">
-                    <button class="tab-btn active" data-tab="tabRecords">繳交紀錄查看</button>
+                    <button class="tab-btn active" data-tab="tabRecords">查看繳交紀錄</button>
                     <button class="tab-btn" data-tab="tabStudents">學生管理</button>
                 </div>
                 <div id="tabRecords" class="tab-panel">
@@ -989,7 +992,7 @@
                 <div id="tabStudents" class="tab-panel" style="display:none">
                     <div class="card">
                         <h2>學生管理</h2>
-                        <div class="row">
+                        <div class="row inline-add-row">
                             <input id="newGroupName" class="txt-input" placeholder="新增組別名稱，例如：第一組">
                             <button class="btn" id="addGroupBtn">新增組別</button>
                         </div>
@@ -1139,10 +1142,9 @@
                         <div class="chip-list">
                             ${sortBySeat(st.students.filter(s=>s.groupId===g.id)).map(s => `<span class="chip">${s.seat!=null && s.seat!=='' ? s.seat+'號 ' : ''}${s.name}${s.pullout && (s.pullout.chinese||s.pullout.math) ? `<span class="sign-tag" style="color:#b8860c">${pulloutLabel(s.pullout)}</span>` : ''}<button data-pullout-student="${s.id}" title="設定抽離上課" style="color:#b8860c">抽</button><button data-move-student="${s.id}" title="搬到其他組別" style="color:var(--accent)">⇄</button><button data-del-student="${s.id}">✕</button></span>`).join('') || '<span style="color:var(--muted)">尚無學生</span>'}
                         </div>
-                        <div class="row" style="margin-bottom:0">
-                            <input class="txt-input" data-new-seat="${g.id}" placeholder="座號（選填）" style="max-width:110px" inputmode="numeric">
+                        <div class="row inline-add-row" style="margin-bottom:0">
                             <input class="txt-input" data-new-student="${g.id}" placeholder="新增學生姓名">
-                            <button class="btn small" data-add-student="${g.id}">新增</button>
+                            <button class="btn" data-add-student="${g.id}">新增</button>
                         </div>
                     </div>`).join('') || '<p class="empty-hint">尚未新增組別</p>';
 
@@ -1193,10 +1195,9 @@
                     resyncFromGlobal();
                     const gid = b.getAttribute('data-add-student');
                     const nameInp = $('groupsList').querySelector(`[data-new-student="${gid}"]`);
-                    const seatInp = $('groupsList').querySelector(`[data-new-seat="${gid}"]`);
                     const name = nameInp.value.trim();
                     if(!name) return;
-                    st.students.push({ id: crypto.randomUUID(), name, groupId: gid, seat: seatInp.value.trim() });
+                    st.students.push({ id: crypto.randomUUID(), name, groupId: gid });
                     saveSettings({ students: st.students });
                     renderGroups();
                 });
