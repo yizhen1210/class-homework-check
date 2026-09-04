@@ -112,7 +112,7 @@
         .group-block-head strong { font-size: 1.05em; }
         .chip-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
         .chip { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 20px; padding: 5px 6px 5px 12px; font-size: 0.9em; }
-        .chip button { border: none; background: transparent; color: var(--danger); cursor: pointer; font-size: 1em; line-height: 1; padding: 2px 6px; border-radius: 50%; transition: background .15s; }
+        .chip button { border: none; background: transparent; color: var(--danger); cursor: pointer; font-size: 1em; line-height: 1; padding: 2px 6px; border-radius: 50%; transition: background .15s; font-family: inherit; }
         .chip button:hover { background: rgba(196,103,79,0.15); }
         .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
         .filters select { flex: 1; min-width: 120px; }
@@ -400,6 +400,14 @@
             maybeLoadEditor();
         });
 
+        // 視窗大小改變（含手機轉向）時，重新判斷「繳交狀態一覽」要不要用精簡兩行顯示。
+        // debounce 一下，避免拖曳調整視窗大小時過度重繪。
+        let resizeTimer = null;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => { renderRecordsTab(records, settings); }, 150);
+        });
+
         window.closeMissingList = () => { $('missingListModal').style.display = 'none'; };
         window.showMissingListForToday = async () => {
             $('missingListTitle').textContent = '今日未繳作業名單';
@@ -444,12 +452,21 @@
         window.closeAlert = () => { $('alertModal').style.display = 'none'; };
         window.askInput = (msg, def) => new Promise(res => {
             const m = $('promptModal'), inp = $('promptInput'), ok = $('promptOk'), no = $('promptNo');
-            $('promptMsg').textContent = msg; inp.value = def || '';
+            $('promptMsg').textContent = msg; inp.value = def || ''; inp.style.display = '';
             m.style.display = 'flex'; setTimeout(() => { inp.focus(); inp.select(); }, 50);
             const done = v => { m.style.display = 'none'; ok.onclick = null; no.onclick = null; inp.onkeydown = null; res(v); };
             ok.onclick = () => done(inp.value);
             no.onclick = () => done(null);
             inp.onkeydown = e => { if(e.key === 'Enter') done(inp.value); else if(e.key === 'Escape') done(null); };
+        });
+        // 純按鈕確認（不用打字），回傳 true/false
+        window.askConfirm = (msg) => new Promise(res => {
+            const m = $('promptModal'), inp = $('promptInput'), ok = $('promptOk'), no = $('promptNo');
+            $('promptMsg').textContent = msg; inp.style.display = 'none';
+            m.style.display = 'flex';
+            const done = v => { m.style.display = 'none'; inp.style.display = ''; ok.onclick = null; no.onclick = null; res(v); };
+            ok.onclick = () => done(true);
+            no.onclick = () => done(false);
         });
 
         /* ---------- 登入 / 登出 ---------- */
@@ -759,8 +776,8 @@
                 if(!quickSubjSel.value || quickSubjSel.value === '__new__'){ window.showAlert('請先在左邊下拉選單選擇要刪除的科目'); return; }
                 const subj = st.subjects.find(x=>x.id===quickSubjSel.value);
                 if(!subj) return;
-                const v = await window.askInput(`刪除科目「${subj.name}」不會刪除底下已建立的作業（會變成未分類），輸入「確定」以繼續`, '');
-                if(v !== '確定') return;
+                const ok2 = await window.askConfirm(`刪除科目「${subj.name}」不會刪除底下已建立的作業（會變成未分類），確定要刪除嗎？`);
+                if(!ok2) return;
                 st.subjects = st.subjects.filter(x=>x.id!==subj.id);
                 st.assignments.forEach(a => { if(a.subjectId === subj.id) a.subjectId = ''; });
                 saveSettings({ subjects: st.subjects, assignments: st.assignments });
@@ -836,8 +853,8 @@
             });
             $('assignmentMgmtList').querySelectorAll('[data-del-assignment2]').forEach(b => b.onclick = async () => {
                 const aid = b.getAttribute('data-del-assignment2');
-                const v = await window.askInput('刪除這份作業會一併刪除所有學生對它的繳交紀錄，輸入「確定」以繼續', '');
-                if(v !== '確定') return;
+                const ok2 = await window.askConfirm('刪除這份作業會一併刪除所有學生對它的繳交紀錄，確定要刪除嗎？');
+                if(!ok2) return;
                 st.assignments = st.assignments.filter(x=>x.id!==aid);
                 saveSettings({ assignments: st.assignments });
                 const batch = writeBatch(db);
@@ -846,11 +863,24 @@
             });
 
             // ---- 扁平總表（依座號排序，不顯示組別/科目） ----
+            // 手機版且作業欄位較多時，標題與姓名改成精簡兩行顯示，避免欄位被擠壓
+            const compactCols = window.innerWidth <= 680 && assignments.length > 3;
+            function formatAssignmentLabel(name){
+                if(!compactCols) return name;
+                if(name === '聯絡簿每日任務') return '聯絡簿<br>每日任務';
+                const m = name.match(/^([Ll]\d+)(.*)$/);
+                if(m && m[2]) return `${m[1]}<br>${m[2]}`;
+                return name;
+            }
+            function formatStudentCell(seat, name){
+                if(!compactCols) return (seat!=null && seat!=='' ? `${seat}號 ` : '') + name;
+                if(seat!=null && seat!=='') return `${seat}號<br>${name}`;
+                return name;
+            }
             const thead = $('matrixThead');
-            thead.innerHTML = '<tr><th>學生</th>' + assignments.map(a=>`<th>${a.name}${a.needsSign ? '<br><span class="sign-tag">需簽名</span>' : ''}</th>`).join('') + '</tr>';
+            thead.innerHTML = '<tr><th>學生</th>' + assignments.map(a=>`<th>${formatAssignmentLabel(a.name)}${a.needsSign ? `<br><span class="sign-tag">${compactCols ? '簽' : '需簽名'}</span>` : ''}</th>`).join('') + '</tr>';
             const tbody = $('matrixTbody');
             tbody.innerHTML = students.length ? students.map(s => {
-                const seatLabel = (s.seat!=null && s.seat!=='') ? `${s.seat}號 ` : '';
                 const cells = assignments.map(a => {
                     if(isPulledOut(s, subjNameOf(a))){
                         return `<td><span class="sign-placeholder">抽離</span></td>`;
@@ -866,7 +896,7 @@
                     const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(sv)}" data-sign-student="${s.id}" data-sign-assignment="${a.id}">${sv}</button>`;
                     return `<td><div class="cell-stack">${statusBtn}${signBtn}</div></td>`;
                 }).join('');
-                return `<tr><td>${seatLabel}${s.name}</td>${cells}</tr>`;
+                return `<tr><td>${formatStudentCell(s.seat, s.name)}</td>${cells}</tr>`;
             }).join('') : '';
             $('matrixEmpty').style.display = students.length && assignments.length ? 'none' : 'block';
             $('matrixEmpty').textContent = !students.length ? '尚未新增學生，請到「學生管理」新增' : (!assignments.length ? '尚未新增作業，請在上方新增今日作業' : '');
@@ -914,6 +944,22 @@
 
         /* ---- 老師後台：三分頁骨架（首次登入建立一次），科目/學生管理清單
                皆用區域刷新，不動到輸入框，避免打字打到一半被清掉）。 ---- */
+        // 綁定為「每天一定有」的固定作業：只要目前作業清單裡沒有同名的，就自動補上。
+        // 用在：老師登入時，以及每次「結束並封存」把作業歸零之後。
+        const DAILY_FIXED_ASSIGNMENTS = [
+            { name: '聯絡簿每日任務', needsSign: true }
+        ];
+        function ensureDailyAssignments(st){
+            let changed = false;
+            DAILY_FIXED_ASSIGNMENTS.forEach(fixed => {
+                if(!st.assignments.some(a => a.name === fixed.name)){
+                    st.assignments.push({ id: crypto.randomUUID(), name: fixed.name, subjectId: '', needsSign: fixed.needsSign });
+                    changed = true;
+                }
+            });
+            if(changed) saveSettings({ assignments: st.assignments });
+        }
+
         function loadEditor(st){
             st = st || { groups: [], students: [], subjects: [], assignments: [] };
             st.groups = st.groups || []; st.students = st.students || [];
@@ -930,6 +976,7 @@
                 st.subjects = settings.subjects || [];
                 st.assignments = settings.assignments || [];
             }
+            ensureDailyAssignments(st);
 
             $('adminArea').innerHTML = `
                 <div class="admin-tabs">
@@ -1048,8 +1095,8 @@
             $('archiveBtn').onclick = async () => {
                 const dateLabel = await window.askInput('這批作業要標記的日期（方便日後查看，可修改）', todayStr());
                 if(dateLabel === null) return;
-                const v = await window.askInput('結束並封存會把目前作業與繳交狀態存成歷史紀錄，並清空目前作業，輸入「確定」以繼續', '');
-                if(v !== '確定') return;
+                const ok2 = await window.askConfirm('結束並封存會把目前作業與繳交狀態存成歷史紀錄，並清空目前作業，確定要繼續嗎？');
+                if(!ok2) return;
                 const students2 = sortBySeat(st.students);
                 const snapshotRecords = students2.flatMap(s => st.assignments.map(a => {
                     const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
@@ -1066,13 +1113,15 @@
                 await clearAll();
                 st.assignments = [];
                 saveSettings({ assignments: [] });
+                ensureDailyAssignments(st);
             };
             $('deleteNoArchiveBtn').onclick = async () => {
-                const v = await window.askInput('確定當天已全部完成、不需要保留歷史紀錄嗎？輸入「確定」直接刪除今日作業與繳交紀錄', '');
-                if(v !== '確定') return;
+                const ok2 = await window.askConfirm('確定當天已全部完成、不需要保留歷史紀錄嗎？這會直接刪除今日作業與繳交紀錄。');
+                if(!ok2) return;
                 await clearAll();
                 st.assignments = [];
                 saveSettings({ assignments: [] });
+                ensureDailyAssignments(st);
             };
             $('loadArchivesBtn').onclick = async () => {
                 $('archivesList').innerHTML = '<p class="empty-hint">載入中…</p>';
@@ -1124,8 +1173,8 @@
                         const aid = b.getAttribute('data-del-archive');
                         const item = list.find(x=>x.id===aid);
                         const label = item ? (item.dateLabel || new Date(item.timestamp).toLocaleDateString('zh-TW')) : '';
-                        const v = await window.askInput(`刪除「${label}」這筆封存紀錄無法復原，輸入「確定」以繼續`, '');
-                        if(v !== '確定') return;
+                        const ok2 = await window.askConfirm(`刪除「${label}」這筆封存紀錄無法復原，確定要刪除嗎？`);
+                        if(!ok2) return;
                         await deleteDoc(doc(db, 'archives', aid)).catch(e=>{ console.warn(e); window.showAlert('刪除失敗，請檢查網路或權限後重試'); });
                         $('loadArchivesBtn').click();
                     });
