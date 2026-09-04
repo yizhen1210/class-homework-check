@@ -307,7 +307,7 @@
         /* ================================================ */
 
         if(!firebaseConfig.apiKey || !firebaseConfig.projectId){
-            document.body.innerHTML = '<div style="max-width:520px;margin:80px auto;padding:24px;font-family:sans-serif;line-height:1.7;color:#2e3a35;text-align:center">尚未填入 Firebase 設定。<br>請在原始碼「業務設定」區的 <code>firebaseConfig</code> 填入你的專案設定後再開啟。</div>';
+            document.body.innerHTML = '<div style="max-width:520px;margin:80px auto;padding:24px;font-family:\'Iansui\',system-ui,sans-serif;line-height:1.7;color:#2e3a35;text-align:center">尚未填入 Firebase 設定。<br>請在原始碼「業務設定」區的 <code>firebaseConfig</code> 填入你的專案設定後再開啟。</div>';
             throw new Error('firebaseConfig 未設定');
         }
         const app = initializeApp(firebaseConfig);
@@ -868,13 +868,25 @@
             function formatAssignmentLabel(name){
                 if(!compactCols) return name;
                 if(name === '聯絡簿每日任務') return '聯絡簿<br>每日任務';
-                const m = name.match(/^([Ll]\d+)(.*)$/);
-                if(m && m[2]) return `${m[1]}<br>${m[2]}`;
+                // 國語課文編號：L1、L2...
+                const lMatch = name.match(/^([Ll]\d+)(.*)$/);
+                if(lMatch && lMatch[2]) return `${lMatch[1]}<br>${lMatch[2]}`;
+                // 數學：結尾若是「P.幾到幾」頁碼，名稱放第一行、頁碼放第二行
+                const pageMatch = name.match(/^(.*?)\s*([Pp]\.?\s*\d+\s*[-~至到]\s*\d+)\s*$/);
+                if(pageMatch && pageMatch[1]) return `${pageMatch[1]}<br>${pageMatch[2]}`;
+                // 數學：結尾若是純數字的「幾-幾」範圍（沒有 P. 前綴），名稱放第一行、範圍放第二行
+                const rangeMatch = name.match(/^(.*?)\s*(\d+\s*[-~至到]\s*\d+)\s*$/);
+                if(rangeMatch && rangeMatch[1]) return `${rangeMatch[1]}<br>${rangeMatch[2]}`;
+                // 數學：結尾若是「單元幾」，名稱放第一行、單元放第二行
+                const unitMatch = name.match(/^(.*?)\s*(第?\d+\s*單元)\s*$/);
+                if(unitMatch && unitMatch[1]) return `${unitMatch[1]}<br>${unitMatch[2]}`;
                 return name;
             }
-            function formatStudentCell(seat, name){
-                if(!compactCols) return (seat!=null && seat!=='' ? `${seat}號 ` : '') + name;
-                if(seat!=null && seat!=='') return `${seat}號<br>${name}`;
+            function formatStudentCell(name){
+                if(!compactCols) return name;
+                // 座號直接打在姓名前面（例如「23施姵岑」），偵測開頭數字拆成第一行，姓名放第二行
+                const m = (name||'').match(/^(\d+)\s*(.*)$/);
+                if(m && m[2]) return `${m[1]}<br>${m[2]}`;
                 return name;
             }
             const thead = $('matrixThead');
@@ -896,7 +908,7 @@
                     const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(sv)}" data-sign-student="${s.id}" data-sign-assignment="${a.id}">${sv}</button>`;
                     return `<td><div class="cell-stack">${statusBtn}${signBtn}</div></td>`;
                 }).join('');
-                return `<tr><td>${formatStudentCell(s.seat, s.name)}</td>${cells}</tr>`;
+                return `<tr><td>${formatStudentCell(s.name)}</td>${cells}</tr>`;
             }).join('') : '';
             $('matrixEmpty').style.display = students.length && assignments.length ? 'none' : 'block';
             $('matrixEmpty').textContent = !students.length ? '尚未新增學生，請到「學生管理」新增' : (!assignments.length ? '尚未新增作業，請在上方新增今日作業' : '');
