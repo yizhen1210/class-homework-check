@@ -843,7 +843,7 @@
             // ---- 快速新增作業的科目選單 ----
             const quickSubjSel = $('quickAssignmentSubject');
             const curQuickSubj = quickSubjSel.value;
-            quickSubjSel.innerHTML = '<option value="">未分類</option>' + st.subjects.map(s=>`<option value="${s.id}">${s.name}</option>`).join('') + '<option value="__new__">＋ 新增科目...</option>';
+            quickSubjSel.innerHTML = '<option value="">未分類</option>' + st.subjects.filter(s=>!s.isSystem).map(s=>`<option value="${s.id}">${s.name}</option>`).join('') + '<option value="__new__">＋ 新增科目...</option>';
             quickSubjSel.value = [...quickSubjSel.options].some(o=>o.value===curQuickSubj) ? curQuickSubj : '';
             quickSubjSel.onchange = async () => {
                 if(quickSubjSel.value !== '__new__') return;
@@ -1229,10 +1229,18 @@
             if(archivedBox){
                 const currentIds = new Set(st.assignments.map(a=>a.id));
                 // 先從 gradingRecords 裡找出「作業已不在目前清單」但評過分的，湊出可選清單（不用額外抓資料）。
-                // 這裡沒有封存日期資訊，日期要靠下面「載入更多歷史作業」從 archives 補上。
+                // 聯絡簿的 ID 本身就帶日期（daily-作業名-YYYY-MM-DD），直接從 ID 解析出日期跟科目，
+                // 不用等「載入更多歷史作業」抓到封存快照才有日期。其他一般作業沒有這個規律，日期留空，
+                // 要看日期要按下面「載入更多歷史作業」從 archives 補上。
                 const knownPast = {};
                 gradingRecs.forEach(g => {
-                    if(!currentIds.has(g.assignmentId) && g.assignmentName && !knownPast[g.assignmentId]) knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: '', subjectName: '未分類' };
+                    if(currentIds.has(g.assignmentId) || !g.assignmentName || knownPast[g.assignmentId]) return;
+                    const m = g.assignmentId.match(/^daily-.+-(\d{4})-(\d{2})-(\d{2})$/);
+                    if(g.assignmentName === '聯絡簿每日任務'){
+                        knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: m ? `${m[1]}/${m[2]}/${m[3]}` : '', subjectName: '聯絡簿' };
+                    } else {
+                        knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: '', subjectName: '未分類' };
+                    }
                 });
                 Object.assign(knownPast, window.__extraPastAssignments || {});
                 const pastOptions = Object.entries(knownPast); // [id, {name,dateLabel,subjectName}][]
@@ -1264,22 +1272,20 @@
                     const aName = knownPast[aid] ? knownPast[aid].name : '';
                     const isPastDaily = aName === '聯絡簿每日任務';
                     const gradeOfPast = sid => gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
-                    const dSubj = isPastDaily ? st.subjects.find(x=>x.id===(st.assignments.find(a=>a.name==='聯絡簿每日任務')||{}).subjectId) : null;
+                    const pastSubjName = knownPast[aid] ? (knownPast[aid].subjectName||'') : '';
+                    const dSubj = isPastDaily ? st.subjects.find(x=>x.id===(st.assignments.find(a=>a.name==='聯絡簿每日任務')||{}).subjectId) : st.subjects.find(x=>x.name===pastSubjName);
                     box.innerHTML = sortBySeat(st.students).map(s => {
                         const g = gradeOfPast(s.id);
                         const cur = g ? g.correctness : '';
                         const thirdVal = isPastDaily ? '沒寫任務' : '遺失';
                         const thirdIcon = isPastDaily ? '－' : '✗';
-                        let subRow = '';
-                        if(isPastDaily){
-                            const rec = records.find(r=>r.studentId===s.id && r.assignmentId===aid);
-                            const dStatus = rec ? rec.status : '未繳';
-                            const dSign = (rec && rec.signStatus) ? rec.signStatus : '未簽名';
-                            subRow = `
-                                <button type="button" class="toggle-pill ${dStatus==='已繳'?'submitted':'missing'}" data-past-status-toggle>${dStatus}</button>
-                                ${dStatus==='已繳' ? `<button type="button" class="toggle-pill ${dSign==='已簽名'?'submitted':'unsigned'}" data-past-sign-toggle>${dSign}</button>` : ''}
-                            `;
-                        }
+                        const rec = records.find(r=>r.studentId===s.id && r.assignmentId===aid);
+                        const dStatus = rec ? rec.status : '未繳';
+                        const dSign = (rec && rec.signStatus) ? rec.signStatus : '未簽名';
+                        const subRow = `
+                            <button type="button" class="toggle-pill ${dStatus==='已繳'?'submitted':'missing'}" data-past-status-toggle>${dStatus}</button>
+                            ${dStatus==='已繳' ? `<button type="button" class="toggle-pill ${dSign==='已簽名'?'submitted':'unsigned'}" data-past-sign-toggle>${dSign}</button>` : ''}
+                        `;
                         return `<div class="daily-row" data-past-student="${s.id}">
                             <span class="student-name">${s.name}</span>
                             ${subRow}
@@ -1292,46 +1298,44 @@
                             ${pointsOf(g)>0 ? `<span class="empty-hint" style="padding:0">${g.pointsGiven?'已加點':'尚未加點'}</span>` : ''}
                         </div>`;
                     }).join('');
-                    if(isPastDaily){
-                        box.querySelectorAll('[data-past-status-toggle]').forEach(btn => btn.onclick = async () => {
-                            const row = btn.closest('.daily-row');
-                            const sid = row.getAttribute('data-past-student');
-                            const stu = st.students.find(x=>x.id===sid);
-                            const grp = st.groups.find(x=>x.id===stu?.groupId);
-                            const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
-                            const nv = (cur2 && cur2.status === '已繳') ? '未繳' : '已繳';
-                            const payload = {
-                                groupId: grp?grp.id:'', groupName: grp?grp.name:'',
-                                studentId: sid, studentName: stu?stu.name:'',
-                                subjectId: dSubj?dSubj.id:'', subjectName: dSubj?dSubj.name:'',
-                                assignmentId: aid, assignmentName: aName,
-                                status: nv
-                            };
-                            if(nv !== '已繳') payload.signStatus = '未簽名';
-                            await adminSetStatus(payload);
-                            let r = records.find(x=>x.studentId===sid && x.assignmentId===aid);
-                            if(r) Object.assign(r, payload); else records.push(payload);
-                            renderPastAssignmentGrader();
+                    box.querySelectorAll('[data-past-status-toggle]').forEach(btn => btn.onclick = async () => {
+                        const row = btn.closest('.daily-row');
+                        const sid = row.getAttribute('data-past-student');
+                        const stu = st.students.find(x=>x.id===sid);
+                        const grp = st.groups.find(x=>x.id===stu?.groupId);
+                        const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        const nv = (cur2 && cur2.status === '已繳') ? '未繳' : '已繳';
+                        const payload = {
+                            groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                            studentId: sid, studentName: stu?stu.name:'',
+                            subjectId: dSubj?dSubj.id:'', subjectName: dSubj?dSubj.name:'',
+                            assignmentId: aid, assignmentName: aName,
+                            status: nv
+                        };
+                        if(nv !== '已繳') payload.signStatus = '未簽名';
+                        await adminSetStatus(payload);
+                        let r = records.find(x=>x.studentId===sid && x.assignmentId===aid);
+                        if(r) Object.assign(r, payload); else records.push(payload);
+                        renderPastAssignmentGrader();
+                    });
+                    box.querySelectorAll('[data-past-sign-toggle]').forEach(btn => btn.onclick = async () => {
+                        const row = btn.closest('.daily-row');
+                        const sid = row.getAttribute('data-past-student');
+                        const stu = st.students.find(x=>x.id===sid);
+                        const grp = st.groups.find(x=>x.id===stu?.groupId);
+                        const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        const nv = (cur2 && cur2.signStatus === '已簽名') ? '未簽名' : '已簽名';
+                        await adminSetStatus({
+                            groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                            studentId: sid, studentName: stu?stu.name:'',
+                            subjectId: dSubj?dSubj.id:'', subjectName: dSubj?dSubj.name:'',
+                            assignmentId: aid, assignmentName: aName,
+                            signStatus: nv
                         });
-                        box.querySelectorAll('[data-past-sign-toggle]').forEach(btn => btn.onclick = async () => {
-                            const row = btn.closest('.daily-row');
-                            const sid = row.getAttribute('data-past-student');
-                            const stu = st.students.find(x=>x.id===sid);
-                            const grp = st.groups.find(x=>x.id===stu?.groupId);
-                            const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
-                            const nv = (cur2 && cur2.signStatus === '已簽名') ? '未簽名' : '已簽名';
-                            await adminSetStatus({
-                                groupId: grp?grp.id:'', groupName: grp?grp.name:'',
-                                studentId: sid, studentName: stu?stu.name:'',
-                                subjectId: dSubj?dSubj.id:'', subjectName: dSubj?dSubj.name:'',
-                                assignmentId: aid, assignmentName: aName,
-                                signStatus: nv
-                            });
-                            let r = records.find(x=>x.studentId===sid && x.assignmentId===aid);
-                            if(r) r.signStatus = nv;
-                            renderPastAssignmentGrader();
-                        });
-                    }
+                        let r = records.find(x=>x.studentId===sid && x.assignmentId===aid);
+                        if(r) r.signStatus = nv;
+                        renderPastAssignmentGrader();
+                    });
                     box.querySelectorAll('[data-past-grade]').forEach(btn => btn.onclick = async () => {
                         const row = btn.closest('.daily-row');
                         const sid = row.getAttribute('data-past-student');
@@ -1375,6 +1379,18 @@
                         renderGradingTab(gradingRecs, recs, st);
                         window.showAlert('已載入歷史封存的作業清單，請在上方下拉選單選擇');
                     } catch(e){ console.warn(e); window.showAlert('載入失敗，請檢查網路後重試'); }
+                };
+                $('cleanupUnfiledBtn').onclick = async () => {
+                    const unfiledIds = pastOptions.filter(([id,info]) => (info.subjectName||'未分類') === '未分類').map(([id])=>id);
+                    if(!unfiledIds.length){ window.showAlert('目前沒有未分類的舊紀錄'); return; }
+                    const ok2 = await window.askConfirm(`確定要清空「未分類」裡的 ${unfiledIds.length} 項舊紀錄嗎？這會刪除這些作業的訂正與繳交資料，無法復原。`);
+                    if(!ok2) return;
+                    for(const gid of unfiledIds){
+                        await clearGradingForAssignment(gid);
+                        await clearRecordsForAssignment(gid);
+                        if(window.__extraPastAssignments) delete window.__extraPastAssignments[gid];
+                    }
+                    window.showAlert('已清空未分類的舊紀錄');
                 };
             }
 
@@ -1548,16 +1564,24 @@
         ];
         function ensureDailyAssignments(st){
             let changed = false;
+            // 自動建立一個獨立的「聯絡簿」科目（如果還沒有），聯絡簿每日任務固定歸在這個科目下，
+            // 但這個科目刻意不出現在一般作業的科目下拉選單裡（見 quickAssignmentSubject 建立處）。
+            let contactSubj = st.subjects.find(s => s.name === '聯絡簿');
+            if(!contactSubj){
+                contactSubj = { id: crypto.randomUUID(), name: '聯絡簿', isSystem: true };
+                st.subjects = [...st.subjects, contactSubj];
+                changed = true;
+            }
             DAILY_FIXED_ASSIGNMENTS.forEach(fixed => {
                 const todayId = `daily-${fixed.name}-${todayISODate()}`;
                 const existing = st.assignments.find(a => a.name === fixed.name);
                 if(!existing || existing.id !== todayId){
                     st.assignments = st.assignments.filter(a => a.name !== fixed.name); // 把昨天那份從「目前清單」移除，資料本身留在 Firestore 不會刪
-                    st.assignments.push({ id: todayId, name: fixed.name, subjectId: existing ? existing.subjectId : '', needsSign: fixed.needsSign });
+                    st.assignments.push({ id: todayId, name: fixed.name, subjectId: contactSubj.id, needsSign: fixed.needsSign });
                     changed = true;
                 }
             });
-            if(changed) saveSettings({ assignments: st.assignments });
+            if(changed) saveSettings({ assignments: st.assignments, subjects: st.subjects });
         }
 
         function loadEditor(st){
@@ -1652,6 +1676,11 @@
                         </div>
                         <div id="dailyQuickGradeList"></div>
                     </div>
+                    <div class="card">
+                        <h2>結束今日並封存</h2>
+                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">把今天的聯絡簿狀態存成正式的歷史封存紀錄，並換成新的一輪——今天這份會從這個分頁移除（資料不會被刪除，之後在「已封存作業的訂正紀錄」還能繼續補交/補訂正），適合下班前一次按完。</p>
+                        <button class="btn outline" id="archiveContactBtn">結束今日並封存</button>
+                    </div>
                 </div>
                 <div id="tabGrading" class="tab-panel" style="display:none">
                     <div class="card">
@@ -1673,6 +1702,7 @@
                                 <select id="pastSubjectSelect" style="flex:1"></select>
                                 <select id="pastAssignmentSelect" style="flex:1"></select>
                                 <button class="btn outline" id="loadPastArchivesBtn">載入更多歷史作業</button>
+                                <button class="btn outline danger" id="cleanupUnfiledBtn">清空未分類的舊紀錄</button>
                             </div>
                             <div id="pastAssignmentGradeList"></div>
                         </div>
@@ -1750,14 +1780,21 @@
             $('archiveBtn').onclick = async () => {
                 const dateLabel = await window.askInput('這批作業要標記的日期（方便日後查看，可修改）', todayStr());
                 if(dateLabel === null) return;
-                const ok2 = await window.askConfirm('結束並封存會把目前作業與繳交狀態存成歷史紀錄，並清空目前作業，確定要繼續嗎？');
+                const ok2 = await window.askConfirm('結束並封存會把目前作業與繳交/訂正狀態存成歷史紀錄，並從目前作業清單移除（資料不會被刪除，之後在「已封存作業的訂正紀錄」都還能繼續補交/補訂正），確定要繼續嗎？');
                 if(!ok2) return;
-                const archivableAssignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務'); // 聯絡簿獨立管理，不跟著這裡封存/清空
+                const archivableAssignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務'); // 聯絡簿獨立管理
                 const students2 = sortBySeat(st.students);
                 const snapshotRecords = students2.flatMap(s => archivableAssignments.map(a => {
                     const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
+                    const g = gradingRecords.find(x=>x.studentId===s.id && x.assignmentId===a.id);
                     const subj = st.subjects.find(x=>x.id===a.subjectId);
-                    return { studentId: s.id, studentName: s.name, assignmentId: a.id, assignmentName: a.name, status: rec?rec.status:'未繳', pulledOut: isPulledOut(s, subj?subj.name:'') };
+                    return {
+                        studentId: s.id, studentName: s.name, assignmentId: a.id, assignmentName: a.name,
+                        status: rec?rec.status:'未繳',
+                        correctness: g?g.correctness:'',
+                        corrected: g?g.corrected:false,
+                        pulledOut: isPulledOut(s, subj?subj.name:'')
+                    };
                 }));
                 await addDoc(archivesColl, {
                     timestamp: Date.now(),
@@ -1767,8 +1804,9 @@
                     studentCount: st.students.length,
                     assignmentCount: archivableAssignments.length
                 }).catch(e=>console.warn(e));
+                // 不刪除任何資料——只是把這批作業從「目前清單」移除，資料本身留在 records/gradingRecords，
+                // 之後在「已封存作業的訂正紀錄」還能繼續查看、補交、補訂正。
                 const dailyAsg = st.assignments.find(a => a.name === '聯絡簿每日任務');
-                await clearAll(dailyAsg ? [dailyAsg.id] : []);
                 st.assignments = dailyAsg ? [dailyAsg] : [];
                 saveSettings({ assignments: st.assignments });
                 ensureDailyAssignments(st);
@@ -1967,6 +2005,43 @@
             };
             $('contactViewSeatBtn').onclick = () => { contactViewMode = 'seat'; renderContactTab(records, gradingRecords, st); };
             $('contactViewGroupBtn').onclick = () => { contactViewMode = 'group'; renderContactTab(records, gradingRecords, st); };
+            $('archiveContactBtn').onclick = async () => {
+                const dailyAsg = st.assignments.find(a => a.name === '聯絡簿每日任務');
+                if(!dailyAsg){ window.showAlert('目前沒有「聯絡簿每日任務」這項作業'); return; }
+                const dateLabel = await window.askInput('這筆聯絡簿封存要標記的日期（方便日後查看，可修改）', todayStr());
+                if(dateLabel === null) return;
+                const ok2 = await window.askConfirm('把今天的聯絡簿狀態存成歷史封存紀錄，並換成新的一輪（今天這份會從聯絡簿分頁移除，資料不會被刪除，之後在「已封存作業的訂正紀錄」還能繼續補交/補訂正），確定要繼續嗎？');
+                if(!ok2) return;
+                const dSubj = st.subjects.find(x=>x.id===dailyAsg.subjectId);
+                const students2 = sortBySeat(st.students);
+                const snapshotRecords = students2.map(s => {
+                    const rec = records.find(r=>r.studentId===s.id && r.assignmentId===dailyAsg.id);
+                    const g = gradingRecords.find(x=>x.studentId===s.id && x.assignmentId===dailyAsg.id);
+                    return {
+                        studentId: s.id, studentName: s.name,
+                        assignmentId: dailyAsg.id, assignmentName: dailyAsg.name,
+                        status: rec?rec.status:'未繳',
+                        signStatus: rec?rec.signStatus:'未簽名',
+                        correctness: g?g.correctness:'',
+                        corrected: g?g.corrected:false,
+                        pulledOut: isPulledOut(s, dSubj?dSubj.name:'')
+                    };
+                });
+                await addDoc(archivesColl, {
+                    timestamp: Date.now(),
+                    dateLabel: dateLabel || todayStr(),
+                    assignments: [{ id: dailyAsg.id, name: dailyAsg.name, subjectName: dSubj?dSubj.name:'' }],
+                    records: snapshotRecords,
+                    studentCount: st.students.length,
+                    assignmentCount: 1
+                }).catch(e=>console.warn(e));
+                // 不刪除任何資料——只是強制換成新的一輪（新 ID），今天這份從「目前」移除，
+                // 明天（或下次打開）看到的聯絡簿是全新一份，跟一般作業封存後的行為一致。
+                st.assignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務');
+                st.assignments.push({ id: `daily-聯絡簿每日任務-${crypto.randomUUID()}`, name: '聯絡簿每日任務', subjectId: dailyAsg.subjectId, needsSign: true });
+                saveSettings({ assignments: st.assignments });
+                window.showAlert('已封存今天的聯絡簿紀錄，換成新的一輪');
+            };
 
             renderGroups();
             renderRecordsTab(records, settings);
