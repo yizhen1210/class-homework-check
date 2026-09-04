@@ -95,6 +95,14 @@
         .status-choices input:checked + span { color: var(--accent); font-weight: bold; }
         .status-choices label:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 10px 2px var(--focus-glow); }
         .student-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+        .daily-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+        .daily-row:last-child { border-bottom: none; }
+        .daily-row .student-name { min-width: 70px; flex-shrink: 0; }
+        .toggle-pill { padding: 6px 16px; border-radius: 20px; border: none; font-family: inherit; font-size: 0.9em; cursor: pointer; color: #fff; transition: filter .15s; }
+        .toggle-pill:hover { filter: brightness(0.9); }
+        .toggle-pill.submitted { background: var(--accent); }
+        .toggle-pill.missing { background: var(--danger); }
+        .toggle-pill.unsigned { background: #b8860c; }
         .student-row:last-child { border-bottom: none; }
         .student-name { flex: 1; font-size: 1em; }
         .mini-status-group { display: flex; gap: 6px; flex-shrink: 0; }
@@ -148,8 +156,10 @@
         .cell-status-btn.missing { background: var(--danger); }
         .cell-status-btn.unsigned { background: #b8860c; }
         .cell-stack { display: flex; flex-direction: column; gap: 4px; align-items: center; }
-        #matrixThead th, #matrixTbody td { text-align: center; }
+        #matrixThead th, #matrixTbody td { text-align: center; min-width: 82px; }
+        #gradeThead th, #gradeTbody td { text-align: center; min-width: 82px; }
         #matrixTbody td:first-child, #matrixThead th:first-child { text-align: left; white-space: nowrap; }
+        #gradeTbody td:first-child, #gradeThead th:first-child { text-align: left; white-space: nowrap; }
         .sign-tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); font-size: 0.75em; vertical-align: middle; }
         .sign-placeholder { font-size: 0.75em; color: var(--muted); }
         .grade-missing { display: inline-block; padding: 4px 10px; border-radius: 8px; border: 2px solid var(--danger); box-shadow: 0 0 0 3px rgba(196,103,79,0.25); color: var(--danger); font-size: 0.85em; font-weight: bold; }
@@ -272,6 +282,18 @@
         </div>
     </div>
 
+    <!-- ====== 按鈕式選取彈窗（例如換組別） ====== -->
+    <div id="choiceModal" class="modal-overlay">
+        <div class="modal-content">
+            <p class="modal-title" id="choiceMsg"></p>
+            <div id="choiceButtons" style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:22px"></div>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="choiceCancel">取消</button>
+                <button class="btn-ok" id="choiceOk">確定</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ====== 今日未繳作業名單（小老師用，方便抄到黑板上） ====== -->
     <div id="missingListModal" class="modal-overlay">
         <div class="modal-content" style="max-width:560px; text-align:left">
@@ -345,13 +367,36 @@
         /* ---------- 通用資料層（流水帳型：collection 多筆，僅老師可用） ---------- */
         function addRecord(obj){ if(!isAdmin) return; return addDoc(coll, { ...obj, [ORDER_FIELD]: Date.now() }).catch(e=>console.warn(e)); }
         function deleteRecord(id){ if(!isAdmin) return; return deleteDoc(doc(db, COLL_PATH, id)).catch(e=>console.warn(e)); }
-        async function clearAll(){
+        async function clearAll(excludeAssignmentIds){
             if(!isAdmin) return;
+            const exclude = new Set(excludeAssignmentIds || []);
             const snap = await getDocs(coll);
+            const ids = snap.docs.filter(d => !exclude.has(d.data().assignmentId)).map(d=>d.id);
+            for(let i=0;i<ids.length;i+=500){
+                const batch = writeBatch(db);
+                ids.slice(i,i+500).forEach(id=>batch.delete(doc(db, COLL_PATH, id)));
+                await batch.commit();
+            }
+        }
+        // 只清空「單一作業」的紀錄，不影響其他作業（聯絡簿封存專用，不能用 clearAll 整包清）
+        async function clearRecordsForAssignment(assignmentId){
+            if(!isAdmin) return;
+            const snap = await getDocs(query(coll, where('assignmentId','==',assignmentId)));
             const ids = snap.docs.map(d=>d.id);
             for(let i=0;i<ids.length;i+=500){
                 const batch = writeBatch(db);
                 ids.slice(i,i+500).forEach(id=>batch.delete(doc(db, COLL_PATH, id)));
+                await batch.commit();
+            }
+        }
+        // 同上，但清的是 gradingRecords（訂正/批改紀錄）
+        async function clearGradingForAssignment(assignmentId){
+            if(!isAdmin) return;
+            const snap = await getDocs(query(gradingColl, where('assignmentId','==',assignmentId)));
+            const ids = snap.docs.map(d=>d.id);
+            for(let i=0;i<ids.length;i+=500){
+                const batch = writeBatch(db);
+                ids.slice(i,i+500).forEach(id=>batch.delete(doc(gradingColl, id)));
                 await batch.commit();
             }
         }
@@ -370,6 +415,7 @@
                 recordsErrored = false; refreshLoadError();
                 renderRecordsTab(records, settings);
                 renderGradingTab(gradingRecords, records, settings);
+                renderContactTab(records, gradingRecords, settings);
             }, err => {
                 console.warn(err);
                 recordsArrived = true; recordsErrored = true; refreshLoadError();
@@ -386,6 +432,7 @@
             stopGradingListener = onSnapshot(gradingColl, snap => {
                 gradingRecords = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 renderGradingTab(gradingRecords, records, settings);
+                renderContactTab(records, gradingRecords, settings);
             }, err => console.warn(err));
         }
         function stopGradingListenerIfAny(){
@@ -399,6 +446,7 @@
             $('appTitle').textContent = `${(settings && settings.className) || '608'} 作業登記`;
             renderPublic(records, settings, { error: false });
             renderGradingTab(gradingRecords, records, settings);
+            renderContactTab(records, gradingRecords, settings);
             maybeLoadEditor(); gateCheck();
         }, err => { console.warn(err); gateSettingsFailed = true; settingsErrored = true; refreshLoadError(); renderPublic(records, settings, { error: true }); gateCheck(); });
 
@@ -452,7 +500,7 @@
                 return;
             }
             const students = sortBySeat(settings.students || []);
-            $('missingListBody').innerHTML = settings.assignments.map(a => {
+            $('missingListBody').innerHTML = (settings.assignments || []).filter(a => a.name !== '聯絡簿每日任務').map(a => {
                 const subj = (settings.subjects || []).find(x=>x.id===a.subjectId);
                 const subjName = subj ? subj.name : '';
                 const applicable = students.filter(s => !isPulledOut(s, subjName));
@@ -491,6 +539,22 @@
             const done = v => { m.style.display = 'none'; inp.style.display = ''; ok.onclick = null; no.onclick = null; res(v); };
             ok.onclick = () => done(true);
             no.onclick = () => done(false);
+        });
+        // 按鈕式單選（例如選組別），回傳選到的值，取消回傳 null
+        window.askChoice = (msg, options) => new Promise(res => {
+            const m = $('choiceModal'), box = $('choiceButtons'), ok = $('choiceOk'), no = $('choiceCancel');
+            $('choiceMsg').textContent = msg;
+            let selected = null;
+            box.innerHTML = options.map(o => `<button type="button" class="btn small outline" data-choice-val="${o}">${o}</button>`).join('');
+            box.querySelectorAll('[data-choice-val]').forEach(b => b.onclick = () => {
+                selected = b.getAttribute('data-choice-val');
+                box.querySelectorAll('[data-choice-val]').forEach(x => x.className = 'btn small outline');
+                b.className = 'btn small';
+            });
+            m.style.display = 'flex';
+            const done = v => { m.style.display = 'none'; ok.onclick = null; no.onclick = null; res(v); };
+            ok.onclick = () => done(selected);
+            no.onclick = () => done(null);
         });
 
         /* ---------- 登入 / 登出 ---------- */
@@ -717,7 +781,7 @@
                 }
                 function refreshAssignments(){
                     aSel.innerHTML = '';
-                    const list = st.assignments.filter(a => a.subjectId === subSel.value);
+                    const list = st.assignments.filter(a => a.subjectId === subSel.value && a.name !== '聯絡簿每日任務');
                     list.forEach(a => aSel.add(new Option(a.name + (a.needsSign ? '（需簽名）' : ''), a.id)));
                     $('noAssignmentHint').style.display = list.length ? 'none' : 'block';
                     updateGroupVisibility();
@@ -765,7 +829,7 @@
             if(!panel) return; // 尚未登入建立過後台畫面
             recs = recs || []; st = st || { groups:[], students:[], subjects:[], assignments:[] };
             const students = sortBySeat(st.students);
-            const assignments = st.assignments;
+            const assignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務');
 
             const statusOf = (studentId, assignmentId) => {
                 const r = recs.find(x=>x.studentId===studentId && x.assignmentId===assignmentId);
@@ -989,11 +1053,162 @@
             });
         }
 
+        /* ---- 老師後台：聯絡簿分頁（獨立於訂正頁）。繳交/簽名改成單一切換按鈕：
+               點「已繳」變成只顯示已繳（不會同時看到未繳），再點一次恢復未繳；簽名同理。 ---- */
+        let contactViewMode = 'seat'; // 'seat' 依座號扁平顯示 | 'group' 依小組顯示
+        function renderContactRow(s, dailyAsg, dSubj, recs, gradingRecs){
+            if(isPulledOut(s, dSubj?dSubj.name:'')) return `<div class="daily-row"><span class="student-name">${s.name}</span><span class="sign-placeholder">抽離</span></div>`;
+            const rec = recs.find(r=>r.studentId===s.id && r.assignmentId===dailyAsg.id);
+            const dStatus = rec ? rec.status : '未繳';
+            const dSign = (rec && rec.signStatus) ? rec.signStatus : '未簽名';
+            const g = gradingRecs.find(x=>x.studentId===s.id && x.assignmentId===dailyAsg.id);
+            const dGrade = g ? g.correctness : '';
+            const submitted = dStatus === '已繳';
+            return `<div class="daily-row" data-daily-student="${s.id}">
+                <span class="student-name">${s.name}</span>
+                <button type="button" class="toggle-pill ${dStatus==='已繳'?'submitted':'missing'}" data-daily-status-toggle>${dStatus}</button>
+                ${submitted ? `<button type="button" class="toggle-pill ${dSign==='已簽名'?'submitted':'unsigned'}" data-daily-sign-toggle>${dSign}</button>` : ''}
+                <div class="mini-status-group" style="${submitted?'':'display:none'}">
+                    <button type="button" class="grade-btn ${dGrade==='全對'?'active g-ok':''}" data-daily-grade="全對" title="全對">✓</button>
+                    <button type="button" class="grade-btn ${dGrade==='有錯'?'active g-err':''}" data-daily-grade="有錯" title="有錯">▲</button>
+                    <button type="button" class="grade-btn ${dGrade==='沒寫任務'?'active g-lost':''}" data-daily-grade="沒寫任務" title="沒寫任務">－</button>
+                </div>
+                ${submitted && dGrade==='有錯' ? `<button type="button" class="btn small ${g&&g.corrected?'':'outline'}" data-daily-corrected="1">${g&&g.corrected?'✓已訂正':'訂正完成'}</button>` : ''}
+            </div>`;
+        }
+        function renderContactTab(recs, gradingRecs, st){
+            const panel = $('tabContact');
+            if(!panel) return;
+            recs = recs || []; gradingRecs = gradingRecs || []; st = st || { groups:[], students:[], subjects:[], assignments:[] };
+            const dailyAsg = st.assignments.find(a => a.name === '聯絡簿每日任務');
+            const dailyBox = $('dailyQuickGradeList');
+            $('contactViewSeatBtn').className = 'btn small' + (contactViewMode==='seat' ? '' : ' outline');
+            $('contactViewGroupBtn').className = 'btn small' + (contactViewMode==='group' ? '' : ' outline');
+
+            // ---- 數字牌：未繳／未簽名／沒寫任務 ----
+            const allStudents = sortBySeat(st.students).filter(s => !isPulledOut(s, dailyAsg ? (st.subjects.find(x=>x.id===dailyAsg.subjectId)?.name||'') : ''));
+            const missingList = [], unsignedList = [], notWrittenList = [];
+            if(dailyAsg){
+                allStudents.forEach(s => {
+                    const rec = recs.find(r=>r.studentId===s.id && r.assignmentId===dailyAsg.id);
+                    const dStatus = rec ? rec.status : '未繳';
+                    if(dStatus !== '已繳'){ missingList.push(s.name); return; }
+                    if(!rec || rec.signStatus !== '已簽名') unsignedList.push(s.name);
+                    const g = gradingRecs.find(x=>x.studentId===s.id && x.assignmentId===dailyAsg.id);
+                    if(g && g.correctness === '沒寫任務') notWrittenList.push(s.name);
+                });
+            }
+            const contactStatDefs = [
+                { label:'未繳', val: missingList.length, list: missingList },
+                { label:'未簽名', val: unsignedList.length, list: unsignedList },
+                { label:'沒寫任務', val: notWrittenList.length, list: notWrittenList }
+            ];
+            $('contactStatCards').innerHTML = contactStatDefs.map(d => `<div class="stat-card clickable" data-contact-stat="${d.label}"><div class="stat-num">${d.val}</div><div class="stat-label">${d.label}</div></div>`).join('');
+            $('contactStatCards').querySelectorAll('[data-contact-stat]').forEach(el => {
+                el.onclick = () => {
+                    const label = el.getAttribute('data-contact-stat');
+                    const d = contactStatDefs.find(x=>x.label===label);
+                    $('missingListTitle').textContent = `聯絡簿${label}詳情`;
+                    $('missingListBody').innerHTML = `<p>${d.list.length ? d.list.join('、') : '無'}</p>`;
+                    $('missingListModal').style.display = 'flex';
+                };
+            });
+            $('exportContactListBtn').onclick = async () => {
+                const text = `聯絡簿每日任務\n未繳：${missingList.length?missingList.join('、'):'無'}\n未簽名：${unsignedList.length?unsignedList.join('、'):'無'}\n沒寫任務：${notWrittenList.length?notWrittenList.join('、'):'無'}`;
+                try { await navigator.clipboard.writeText(text); window.showAlert('已複製名單'); }
+                catch(e){ window.showAlert('複製失敗，請手動選取文字'); }
+            };
+
+            if(!dailyAsg){
+                dailyBox.innerHTML = '<p class="empty-hint">目前沒有「聯絡簿每日任務」這項作業</p>';
+            } else {
+                const dSubj = st.subjects.find(x=>x.id===dailyAsg.subjectId);
+                if(contactViewMode === 'group'){
+                    dailyBox.innerHTML = st.groups.map(g => {
+                        const gStudents = sortBySeat(st.students.filter(s=>s.groupId===g.id));
+                        return `<div class="group-block">
+                            <div class="group-block-head"><strong>${g.name}</strong></div>
+                            ${gStudents.length ? gStudents.map(s=>renderContactRow(s, dailyAsg, dSubj, recs, gradingRecs)).join('') : '<p class="empty-hint">此組別尚無學生</p>'}
+                        </div>`;
+                    }).join('') || '<p class="empty-hint">尚未新增組別</p>';
+                } else {
+                    const students = sortBySeat(st.students);
+                    dailyBox.innerHTML = students.map(s=>renderContactRow(s, dailyAsg, dSubj, recs, gradingRecs)).join('') || '<p class="empty-hint">尚未新增學生</p>';
+                }
+
+                dailyBox.querySelectorAll('[data-daily-status-toggle]').forEach(btn => btn.onclick = async () => {
+                    const row = btn.closest('.daily-row');
+                    const sid = row.getAttribute('data-daily-student');
+                    const stu = st.students.find(x=>x.id===sid);
+                    const grp = st.groups.find(x=>x.id===stu?.groupId);
+                    const cur = recs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
+                    const nv = (cur && cur.status === '已繳') ? '未繳' : '已繳';
+                    const payload = {
+                        groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                        studentId: sid, studentName: stu?stu.name:'',
+                        subjectId: dailyAsg.subjectId||'', subjectName: dSubj?dSubj.name:'',
+                        assignmentId: dailyAsg.id, assignmentName: dailyAsg.name,
+                        status: nv
+                    };
+                    if(nv !== '已繳') payload.signStatus = '未簽名';
+                    await adminSetStatus(payload);
+                    let r = recs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
+                    if(r) Object.assign(r, payload); else recs.push(payload);
+                    renderContactTab(recs, gradingRecs, st);
+                });
+                dailyBox.querySelectorAll('[data-daily-sign-toggle]').forEach(btn => btn.onclick = async () => {
+                    const row = btn.closest('.daily-row');
+                    const sid = row.getAttribute('data-daily-student');
+                    const stu = st.students.find(x=>x.id===sid);
+                    const grp = st.groups.find(x=>x.id===stu?.groupId);
+                    const cur = recs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
+                    const nv = (cur && cur.signStatus === '已簽名') ? '未簽名' : '已簽名';
+                    await adminSetStatus({
+                        groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                        studentId: sid, studentName: stu?stu.name:'',
+                        subjectId: dailyAsg.subjectId||'', subjectName: dSubj?dSubj.name:'',
+                        assignmentId: dailyAsg.id, assignmentName: dailyAsg.name,
+                        signStatus: nv
+                    });
+                    let r = recs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
+                    if(r) r.signStatus = nv;
+                    renderContactTab(recs, gradingRecs, st);
+                });
+                dailyBox.querySelectorAll('[data-daily-grade]').forEach(btn => btn.onclick = async () => {
+                    const row = btn.closest('.daily-row');
+                    const sid = row.getAttribute('data-daily-student');
+                    const stu = st.students.find(x=>x.id===sid);
+                    const val = btn.getAttribute('data-daily-grade');
+                    const g = gradingRecs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
+                    const nextVal = (g && g.correctness === val) ? '' : val;
+                    await adminSetGrading({
+                        studentId: sid, studentName: stu?stu.name:'',
+                        assignmentId: dailyAsg.id, assignmentName: dailyAsg.name,
+                        correctness: nextVal,
+                        corrected: nextVal === '有錯' ? (g?g.corrected:false) : false
+                    });
+                });
+                dailyBox.querySelectorAll('[data-daily-corrected]').forEach(btn => btn.onclick = async () => {
+                    const row = btn.closest('.daily-row');
+                    const sid = row.getAttribute('data-daily-student');
+                    const stu = st.students.find(x=>x.id===sid);
+                    const g = gradingRecs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
+                    await adminSetGrading({
+                        studentId: sid, studentName: stu?stu.name:'',
+                        assignmentId: dailyAsg.id, assignmentName: dailyAsg.name,
+                        correctness: '有錯',
+                        corrected: !(g && g.corrected)
+                    });
+                });
+            }
+        }
+
         /* ---- 老師後台：訂正與加點頁。gradingRecs 是獨立的 gradingRecords collection，
                不會被「結束並封存」清掉，點數才能長期累積直到老師手動加點。
                recs 是 records（用來判斷是否已繳，未繳=缺交，無法評對錯）。 ---- */
         function pointsOf(g){
             if(!g) return 0;
+            if(g.assignmentName === '聯絡簿每日任務') return 0; // 固定每日任務不計點
             if(g.correctness === '全對') return 10;
             if(g.correctness === '有錯' && g.corrected) return 5;
             return 0;
@@ -1003,10 +1218,165 @@
             if(!panel) return; // 尚未登入建立過後台畫面
             gradingRecs = gradingRecs || []; recs = recs || []; st = st || { groups:[], students:[], subjects:[], assignments:[] };
             const students = sortBySeat(st.students);
-            const assignments = st.assignments;
+            const assignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務');
             const subjNameOf = a => { const s = st.subjects.find(x=>x.id===a.subjectId); return s ? s.name : ''; };
             const statusOf = (sid, aid) => { const r = recs.find(x=>x.studentId===sid && x.assignmentId===aid); return r ? r.status : '未繳'; };
             const gradeOf = (sid, aid) => gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
+
+            // ---- 已封存作業的訂正紀錄：讓老師可以「事後」繼續批改已經被封存清空的作業，
+            //      不限於已經有評過分的（避免完全沒碰過的封存作業無法開始批改）。
+            const archivedBox = $('pastAssignmentSelect');
+            if(archivedBox){
+                const currentIds = new Set(st.assignments.map(a=>a.id));
+                // 先從 gradingRecords 裡找出「作業已不在目前清單」但評過分的，湊出可選清單（不用額外抓資料）。
+                // 這裡沒有封存日期資訊，日期要靠下面「載入更多歷史作業」從 archives 補上。
+                const knownPast = {};
+                gradingRecs.forEach(g => {
+                    if(!currentIds.has(g.assignmentId) && g.assignmentName && !knownPast[g.assignmentId]) knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: '', subjectName: '未分類' };
+                });
+                Object.assign(knownPast, window.__extraPastAssignments || {});
+                const pastOptions = Object.entries(knownPast); // [id, {name,dateLabel,subjectName}][]
+
+                const selSubj = $('pastSubjectSelect');
+                const selPast = $('pastAssignmentSelect');
+                const bySubject = {};
+                pastOptions.forEach(([id,info]) => { (bySubject[info.subjectName||'未分類'] = bySubject[info.subjectName||'未分類'] || []).push([id,info]); });
+
+                function refreshPastAssignmentOptions(){
+                    const curPastSel = selPast.value;
+                    const subjName = selSubj.value;
+                    const opts = subjName ? (bySubject[subjName] || []) : [];
+                    selPast.innerHTML = '<option value="">請選擇作業</option>' + opts.map(([id,info])=>`<option value="${id}">${info.dateLabel ? info.dateLabel+' ' : ''}${info.name}</option>`).join('');
+                    selPast.value = opts.some(([id])=>id===curPastSel) ? curPastSel : '';
+                }
+                if(selSubj){
+                    const curSubjSel = selSubj.value;
+                    selSubj.innerHTML = '<option value="">請先選擇科目</option>' + Object.keys(bySubject).map(subjName=>`<option value="${subjName}">${subjName}</option>`).join('');
+                    selSubj.value = Object.keys(bySubject).includes(curSubjSel) ? curSubjSel : '';
+                    selSubj.onchange = () => { refreshPastAssignmentOptions(); renderPastAssignmentGrader(); };
+                    refreshPastAssignmentOptions();
+                }
+
+                function renderPastAssignmentGrader(){
+                    const aid = selPast.value;
+                    const box = $('pastAssignmentGradeList');
+                    if(!aid){ box.innerHTML = ''; return; }
+                    const aName = knownPast[aid] ? knownPast[aid].name : '';
+                    const isPastDaily = aName === '聯絡簿每日任務';
+                    const gradeOfPast = sid => gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
+                    const dSubj = isPastDaily ? st.subjects.find(x=>x.id===(st.assignments.find(a=>a.name==='聯絡簿每日任務')||{}).subjectId) : null;
+                    box.innerHTML = sortBySeat(st.students).map(s => {
+                        const g = gradeOfPast(s.id);
+                        const cur = g ? g.correctness : '';
+                        const thirdVal = isPastDaily ? '沒寫任務' : '遺失';
+                        const thirdIcon = isPastDaily ? '－' : '✗';
+                        let subRow = '';
+                        if(isPastDaily){
+                            const rec = records.find(r=>r.studentId===s.id && r.assignmentId===aid);
+                            const dStatus = rec ? rec.status : '未繳';
+                            const dSign = (rec && rec.signStatus) ? rec.signStatus : '未簽名';
+                            subRow = `
+                                <button type="button" class="toggle-pill ${dStatus==='已繳'?'submitted':'missing'}" data-past-status-toggle>${dStatus}</button>
+                                ${dStatus==='已繳' ? `<button type="button" class="toggle-pill ${dSign==='已簽名'?'submitted':'unsigned'}" data-past-sign-toggle>${dSign}</button>` : ''}
+                            `;
+                        }
+                        return `<div class="daily-row" data-past-student="${s.id}">
+                            <span class="student-name">${s.name}</span>
+                            ${subRow}
+                            <div class="mini-status-group">
+                                <button type="button" class="grade-btn ${cur==='全對'?'active g-ok':''}" data-past-grade="全對" title="全對">✓</button>
+                                <button type="button" class="grade-btn ${cur==='有錯'?'active g-err':''}" data-past-grade="有錯" title="有錯">▲</button>
+                                <button type="button" class="grade-btn ${cur===thirdVal?'active g-lost':''}" data-past-grade="${thirdVal}" title="${thirdVal}">${thirdIcon}</button>
+                            </div>
+                            ${cur==='有錯' ? `<button type="button" class="btn small ${g&&g.corrected?'':'outline'}" data-past-corrected="1">${g&&g.corrected?'✓已訂正':'訂正完成'}</button>` : ''}
+                            ${pointsOf(g)>0 ? `<span class="empty-hint" style="padding:0">${g.pointsGiven?'已加點':'尚未加點'}</span>` : ''}
+                        </div>`;
+                    }).join('');
+                    if(isPastDaily){
+                        box.querySelectorAll('[data-past-status-toggle]').forEach(btn => btn.onclick = async () => {
+                            const row = btn.closest('.daily-row');
+                            const sid = row.getAttribute('data-past-student');
+                            const stu = st.students.find(x=>x.id===sid);
+                            const grp = st.groups.find(x=>x.id===stu?.groupId);
+                            const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                            const nv = (cur2 && cur2.status === '已繳') ? '未繳' : '已繳';
+                            const payload = {
+                                groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                                studentId: sid, studentName: stu?stu.name:'',
+                                subjectId: dSubj?dSubj.id:'', subjectName: dSubj?dSubj.name:'',
+                                assignmentId: aid, assignmentName: aName,
+                                status: nv
+                            };
+                            if(nv !== '已繳') payload.signStatus = '未簽名';
+                            await adminSetStatus(payload);
+                            let r = records.find(x=>x.studentId===sid && x.assignmentId===aid);
+                            if(r) Object.assign(r, payload); else records.push(payload);
+                            renderPastAssignmentGrader();
+                        });
+                        box.querySelectorAll('[data-past-sign-toggle]').forEach(btn => btn.onclick = async () => {
+                            const row = btn.closest('.daily-row');
+                            const sid = row.getAttribute('data-past-student');
+                            const stu = st.students.find(x=>x.id===sid);
+                            const grp = st.groups.find(x=>x.id===stu?.groupId);
+                            const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                            const nv = (cur2 && cur2.signStatus === '已簽名') ? '未簽名' : '已簽名';
+                            await adminSetStatus({
+                                groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                                studentId: sid, studentName: stu?stu.name:'',
+                                subjectId: dSubj?dSubj.id:'', subjectName: dSubj?dSubj.name:'',
+                                assignmentId: aid, assignmentName: aName,
+                                signStatus: nv
+                            });
+                            let r = records.find(x=>x.studentId===sid && x.assignmentId===aid);
+                            if(r) r.signStatus = nv;
+                            renderPastAssignmentGrader();
+                        });
+                    }
+                    box.querySelectorAll('[data-past-grade]').forEach(btn => btn.onclick = async () => {
+                        const row = btn.closest('.daily-row');
+                        const sid = row.getAttribute('data-past-student');
+                        const stu = st.students.find(x=>x.id===sid);
+                        const val = btn.getAttribute('data-past-grade');
+                        const g = gradeOfPast(sid);
+                        const nextVal = (g && g.correctness === val) ? '' : val;
+                        await adminSetGrading({
+                            studentId: sid, studentName: stu?stu.name:'',
+                            assignmentId: aid, assignmentName: aName,
+                            correctness: nextVal,
+                            corrected: nextVal === '有錯' ? (g?g.corrected:false) : false
+                        });
+                    });
+                    box.querySelectorAll('[data-past-corrected]').forEach(btn => btn.onclick = async () => {
+                        const row = btn.closest('.daily-row');
+                        const sid = row.getAttribute('data-past-student');
+                        const stu = st.students.find(x=>x.id===sid);
+                        const g = gradeOfPast(sid);
+                        await adminSetGrading({
+                            studentId: sid, studentName: stu?stu.name:'',
+                            assignmentId: aid, assignmentName: aName,
+                            correctness: '有錯',
+                            corrected: !(g && g.corrected)
+                        });
+                    });
+                }
+                if(selPast){ selPast.onchange = renderPastAssignmentGrader; renderPastAssignmentGrader(); }
+
+                $('loadPastArchivesBtn').onclick = async () => {
+                    try {
+                        const snap = await getDocs(query(archivesColl, orderBy('timestamp','desc')));
+                        window.__extraPastAssignments = window.__extraPastAssignments || {};
+                        snap.docs.forEach(d => {
+                            const data = d.data();
+                            const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
+                            (data.assignments||[]).forEach(a => {
+                                if(!currentIds.has(a.id) && !window.__extraPastAssignments[a.id]) window.__extraPastAssignments[a.id] = { name: a.name, dateLabel, subjectName: a.subjectName || '未分類' };
+                            });
+                        });
+                        renderGradingTab(gradingRecs, recs, st);
+                        window.showAlert('已載入歷史封存的作業清單，請在上方下拉選單選擇');
+                    } catch(e){ console.warn(e); window.showAlert('載入失敗，請檢查網路後重試'); }
+                };
+            }
 
             const thead = $('gradeThead');
             thead.innerHTML = '<tr><th>學生</th>' + assignments.map(a=>`<th>${a.name}</th>`).join('') + '</tr>';
@@ -1014,14 +1384,25 @@
             tbody.innerHTML = students.length ? students.map(s => {
                 const cells = assignments.map(a => {
                     if(isPulledOut(s, subjNameOf(a))) return `<td><span class="sign-placeholder">抽離</span></td>`;
-                    if(statusOf(s.id, a.id) !== '已繳') return `<td><span class="grade-missing">缺交</span></td>`;
                     const g = gradeOf(s.id, a.id);
                     const cur = g ? g.correctness : '';
+                    const isDaily = a.name === '聯絡簿每日任務';
+                    if(statusOf(s.id, a.id) !== '已繳'){
+                        // 缺交狀態下，遺失可以直接標記（東西不見了不需要先勾已繳），聯絡簿沒有遺失概念故不提供
+                        if(isDaily) return `<td><span class="grade-missing">缺交</span></td>`;
+                        if(cur === '遺失'){
+                            return `<td><div class="cell-stack"><span class="grade-missing">缺交</span><button type="button" class="grade-btn active g-lost" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="遺失" title="取消遺失標記">✗</button></div></td>`;
+                        }
+                        return `<td><div class="cell-stack"><span class="grade-missing">缺交</span><button type="button" class="btn small outline" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="遺失">標記遺失</button></div></td>`;
+                    }
+                    const thirdBtn = isDaily
+                        ? `<button type="button" class="grade-btn ${cur==='沒寫任務'?'active g-lost':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="沒寫任務" title="沒寫任務">－</button>`
+                        : `<button type="button" class="grade-btn ${cur==='遺失'?'active g-lost':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="遺失" title="遺失">✗</button>`;
                     const btns = `
                         <div class="mini-status-group">
                             <button type="button" class="grade-btn ${cur==='全對'?'active g-ok':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="全對" title="全對">✓</button>
                             <button type="button" class="grade-btn ${cur==='有錯'?'active g-err':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="有錯" title="有錯">▲</button>
-                            <button type="button" class="grade-btn ${cur==='遺失'?'active g-lost':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="遺失" title="遺失">✗</button>
+                            ${thirdBtn}
                         </div>`;
                     const correctedBtn = cur === '有錯' ? `<button type="button" class="btn small ${g&&g.corrected?'':'outline'}" data-corrected-student="${s.id}" data-corrected-assignment="${a.id}">${g&&g.corrected?'✓已訂正':'訂正完成'}</button>` : '';
                     return `<td><div class="cell-stack">${btns}${correctedBtn}</div></td>`;
@@ -1031,7 +1412,7 @@
             $('gradeEmpty').style.display = students.length && assignments.length ? 'none' : 'block';
             $('gradeEmpty').textContent = !students.length ? '尚未新增學生' : (!assignments.length ? '目前沒有作業' : '');
 
-            tbody.querySelectorAll('.grade-btn').forEach(btn => btn.onclick = async () => {
+            tbody.querySelectorAll('[data-grade-value]').forEach(btn => btn.onclick = async () => {
                 const sid = btn.getAttribute('data-grade-student'), aid = btn.getAttribute('data-grade-assignment');
                 const val = btn.getAttribute('data-grade-value');
                 const stu = st.students.find(x=>x.id===sid);
@@ -1069,10 +1450,11 @@
                 if(!sid){ window.showAlert('請先選擇學生'); return; }
                 const stu = st.students.find(x=>x.id===sid);
                 if(!stu) return;
+                const currentIds = new Set(st.assignments.map(a=>a.id));
 
                 // 檢查目前作業裡，這位學生還有哪些缺交或有錯未訂正（提醒用，不影響已經可以加的點）
                 const incomplete = [];
-                st.assignments.forEach(a => {
+                st.assignments.filter(a => a.name !== '聯絡簿每日任務').forEach(a => {
                     if(isPulledOut(stu, subjNameOf(a))) return;
                     if(statusOf(sid, a.id) !== '已繳'){ incomplete.push(`${a.name}（缺交）`); return; }
                     const g = gradeOf(sid, a.id);
@@ -1082,8 +1464,14 @@
                     window.showAlert(`「${stu.name}」還有未完成項目，這些不會計點：${incomplete.join('、')}`);
                 }
 
-                // 累積但還沒加過點的項目：掃全部 gradingRecords（不限於目前作業，之前封存過的也算）
-                const eligible = gradingRecs.filter(g => g.studentId === sid && !g.pointsGiven && pointsOf(g) > 0);
+                // 累積但還沒加過點的項目：掃全部 gradingRecords（不限於目前作業，之前封存過的也算）。
+                // 若作業還在目前清單裡，要額外用最新的 records 確認目前真的是「已繳」，
+                // 避免評過分後又被改回未繳，卻還被算進點數裡。已封存（不在目前清單）的沒有即時狀態可查，沿用當初的評分。
+                const eligible = gradingRecs.filter(g => {
+                    if(g.studentId !== sid || g.pointsGiven || pointsOf(g) <= 0) return false;
+                    if(currentIds.has(g.assignmentId) && statusOf(sid, g.assignmentId) !== '已繳') return false;
+                    return true;
+                });
                 if(!eligible.length){
                     $('pointsResult').innerHTML = `<p class="empty-hint">「${stu.name}」目前沒有可加點的項目${incomplete.length?'（見上方提醒）':''}</p>`;
                     return;
@@ -1094,8 +1482,7 @@
                     points: pointsOf(g)
                 }));
                 const total = items.reduce((sum,i)=>sum+i.points, 0);
-                const detail = items.map(i=>`${i.assignmentName} ${i.type}+${i.points}`).join('、');
-                const ok = await window.askConfirm(`要幫「${stu.name}」加 ${total} 點嗎？（${detail}）`);
+                const ok = await window.askConfirm(`要幫「${stu.name}」加 ${total} 點嗎？`);
                 if(!ok) return;
 
                 const batch = writeBatch(db);
@@ -1106,7 +1493,7 @@
                     timestamp: Date.now(), dateLabel: todayStr(),
                     totalPoints: total, items
                 }).catch(e=>console.warn(e));
-                $('pointsResult').innerHTML = `<p>已幫「${stu.name}」加 <strong>${total}</strong> 點（${detail}）</p>`;
+                $('pointsResult').innerHTML = `<p>已幫「${stu.name}」加 <strong>${total}</strong> 點</p>`;
             };
 
             // ---- 加點紀錄載入／匯出 ----
@@ -1118,7 +1505,20 @@
                     $('pointLogsList').innerHTML = list.length ? list.map(l => `
                         <div class="assignment-row">
                             <span class="assignment-name">${l.dateLabel||''}　${l.studentName}　+${l.totalPoints}點</span>
+                            <button class="btn small outline danger" data-undo-log="${l.id}">撤銷</button>
                         </div>`).join('') : '<p class="empty-hint">尚無加點紀錄</p>';
+                    $('pointLogsList').querySelectorAll('[data-undo-log]').forEach(btn => btn.onclick = async () => {
+                        const logId = btn.getAttribute('data-undo-log');
+                        const item = list.find(x=>x.id===logId);
+                        if(!item) return;
+                        const ok2 = await window.askConfirm(`撤銷「${item.studentName} +${item.totalPoints}點」這筆加點紀錄嗎？相關項目會恢復成「尚未加點」，可以重新加。`);
+                        if(!ok2) return;
+                        const undoBatch = writeBatch(db);
+                        (item.items||[]).forEach(i => undoBatch.set(doc(gradingColl, recordDocId(item.studentId, i.assignmentId)), { pointsGiven: false }, { merge: true }));
+                        undoBatch.delete(doc(db, 'pointLogs', logId));
+                        await undoBatch.commit().catch(e=>console.warn(e));
+                        $('loadPointLogsBtn').click();
+                    });
                 } catch(e){ console.warn(e); $('pointLogsList').innerHTML = '<p class="empty-hint">載入失敗</p>'; }
             };
             $('exportTodayPointsBtn').onclick = async () => {
@@ -1136,16 +1536,24 @@
 
         /* ---- 老師後台：三分頁骨架（首次登入建立一次），科目/學生管理清單
                皆用區域刷新，不動到輸入框，避免打字打到一半被清掉）。 ---- */
-        // 綁定為「每天一定有」的固定作業：只要目前作業清單裡沒有同名的，就自動補上。
-        // 用在：老師登入時，以及每次「結束並封存」把作業歸零之後。
+        // 綁定為「每天一定有」的固定作業：聯絡簿用「日期」當 ID（不是隨機 ID），
+        // 這樣每天寫入的都是不同的文件，昨天的資料不會被今天覆蓋，也不需要手動封存——
+        // 過了一天，昨天那份就自動變成「已封存作業」，可以直接在「已封存作業的訂正紀錄」picker 找到繼續批改。
+        function todayISODate(){
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
         const DAILY_FIXED_ASSIGNMENTS = [
             { name: '聯絡簿每日任務', needsSign: true }
         ];
         function ensureDailyAssignments(st){
             let changed = false;
             DAILY_FIXED_ASSIGNMENTS.forEach(fixed => {
-                if(!st.assignments.some(a => a.name === fixed.name)){
-                    st.assignments.push({ id: crypto.randomUUID(), name: fixed.name, subjectId: '', needsSign: fixed.needsSign });
+                const todayId = `daily-${fixed.name}-${todayISODate()}`;
+                const existing = st.assignments.find(a => a.name === fixed.name);
+                if(!existing || existing.id !== todayId){
+                    st.assignments = st.assignments.filter(a => a.name !== fixed.name); // 把昨天那份從「目前清單」移除，資料本身留在 Firestore 不會刪
+                    st.assignments.push({ id: todayId, name: fixed.name, subjectId: existing ? existing.subjectId : '', needsSign: fixed.needsSign });
                     changed = true;
                 }
             });
@@ -1173,6 +1581,7 @@
             $('adminArea').innerHTML = `
                 <div class="admin-tabs">
                     <button class="tab-btn active" data-tab="tabRecords">查看繳交紀錄</button>
+                    <button class="tab-btn" data-tab="tabContact">聯絡簿</button>
                     <button class="tab-btn" data-tab="tabGrading">訂正與加點</button>
                     <button class="tab-btn" data-tab="tabStudents">學生管理</button>
                 </div>
@@ -1229,6 +1638,21 @@
                         <div id="archivesList" style="margin-top:14px"></div>
                     </div>
                 </div>
+                <div id="tabContact" class="tab-panel" style="display:none">
+                    <div class="card">
+                        <div id="contactStatCards" class="stat-cards" style="grid-template-columns:repeat(3,1fr)"></div>
+                    </div>
+                    <div class="card">
+                        <h2>聯絡簿每日批改</h2>
+                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">一位學生一排，繳交／簽名／批改一次點完，不用切頁面。簽名跟批改要先標記已繳才會出現；再點一次已繳（或已簽名）會恢復成未繳（未簽名）。</p>
+                        <div class="row" style="margin-bottom:14px">
+                            <button class="btn small" id="contactViewSeatBtn">依座號</button>
+                            <button class="btn small outline" id="contactViewGroupBtn">依小組</button>
+                            <button class="btn outline" id="exportContactListBtn">匯出未繳/未簽名/沒寫任務名單</button>
+                        </div>
+                        <div id="dailyQuickGradeList"></div>
+                    </div>
+                </div>
                 <div id="tabGrading" class="tab-panel" style="display:none">
                     <div class="card">
                         <h2>作業對錯與訂正（依座號排序）</h2>
@@ -1240,6 +1664,18 @@
                             </table>
                         </div>
                         <p id="gradeEmpty" class="empty-hint" style="display:none"></p>
+                    </div>
+                    <div class="card">
+                        <h2>已封存作業的訂正紀錄 <button class="btn small outline" id="toggleArchivedGradingBtn" style="margin-left:8px;font-weight:normal">展開</button></h2>
+                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">作業被「結束並封存」清空後，矩陣表格看不到欄位，但資料還在。這裡可以選一份過去的作業繼續批改（就算完全還沒批改過也可以，不限於已經評過分的）。</p>
+                        <div id="archivedGradingBody" style="display:none">
+                            <div class="row" style="margin-bottom:10px">
+                                <select id="pastSubjectSelect" style="flex:1"></select>
+                                <select id="pastAssignmentSelect" style="flex:1"></select>
+                                <button class="btn outline" id="loadPastArchivesBtn">載入更多歷史作業</button>
+                            </div>
+                            <div id="pastAssignmentGradeList"></div>
+                        </div>
                     </div>
                     <div class="card">
                         <h2>加點</h2>
@@ -1290,7 +1726,7 @@
             };
             $('copyMissingBtn').onclick = async () => {
                 const students = sortBySeat(st.students);
-                const lines = st.assignments.map(a => {
+                const lines = st.assignments.filter(a => a.name !== '聯絡簿每日任務').map(a => {
                     const subj = st.subjects.find(x=>x.id===a.subjectId);
                     const applicable = students.filter(s => !isPulledOut(s, subj?subj.name:''));
                     const missing = applicable.filter(s => {
@@ -1316,30 +1752,34 @@
                 if(dateLabel === null) return;
                 const ok2 = await window.askConfirm('結束並封存會把目前作業與繳交狀態存成歷史紀錄，並清空目前作業，確定要繼續嗎？');
                 if(!ok2) return;
+                const archivableAssignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務'); // 聯絡簿獨立管理，不跟著這裡封存/清空
                 const students2 = sortBySeat(st.students);
-                const snapshotRecords = students2.flatMap(s => st.assignments.map(a => {
+                const snapshotRecords = students2.flatMap(s => archivableAssignments.map(a => {
                     const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
-                    return { studentId: s.id, studentName: s.name, assignmentId: a.id, assignmentName: a.name, status: rec?rec.status:'未繳' };
+                    const subj = st.subjects.find(x=>x.id===a.subjectId);
+                    return { studentId: s.id, studentName: s.name, assignmentId: a.id, assignmentName: a.name, status: rec?rec.status:'未繳', pulledOut: isPulledOut(s, subj?subj.name:'') };
                 }));
                 await addDoc(archivesColl, {
                     timestamp: Date.now(),
                     dateLabel: dateLabel || todayStr(),
-                    assignments: st.assignments.map(a=>({id:a.id,name:a.name})),
+                    assignments: archivableAssignments.map(a=>{ const s=st.subjects.find(x=>x.id===a.subjectId); return { id:a.id, name:a.name, subjectName: s?s.name:'' }; }),
                     records: snapshotRecords,
                     studentCount: st.students.length,
-                    assignmentCount: st.assignments.length
+                    assignmentCount: archivableAssignments.length
                 }).catch(e=>console.warn(e));
-                await clearAll();
-                st.assignments = [];
-                saveSettings({ assignments: [] });
+                const dailyAsg = st.assignments.find(a => a.name === '聯絡簿每日任務');
+                await clearAll(dailyAsg ? [dailyAsg.id] : []);
+                st.assignments = dailyAsg ? [dailyAsg] : [];
+                saveSettings({ assignments: st.assignments });
                 ensureDailyAssignments(st);
             };
             $('deleteNoArchiveBtn').onclick = async () => {
                 const ok2 = await window.askConfirm('確定當天已全部完成、不需要保留歷史紀錄嗎？這會直接刪除今日作業與繳交紀錄。');
                 if(!ok2) return;
-                await clearAll();
-                st.assignments = [];
-                saveSettings({ assignments: [] });
+                const dailyAsg2 = st.assignments.find(a => a.name === '聯絡簿每日任務');
+                await clearAll(dailyAsg2 ? [dailyAsg2.id] : []);
+                st.assignments = dailyAsg2 ? [dailyAsg2] : [];
+                saveSettings({ assignments: st.assignments });
                 ensureDailyAssignments(st);
             };
             $('loadArchivesBtn').onclick = async () => {
@@ -1362,18 +1802,47 @@
 
                     function renderArchiveDetail(item){
                         const box = $('archivesList').querySelector(`[data-detail="${item.id}"]`);
-                        box.innerHTML = `<table><thead><tr><th>學生</th><th>作業</th><th>狀態</th><th>備註</th><th></th></tr></thead><tbody>${
+                        const hasGrading = (item.records||[]).some(r => r.correctness !== undefined);
+                        box.innerHTML = `<table><thead><tr><th>學生</th><th>作業</th><th>狀態</th>${hasGrading?'<th>訂正</th>':''}<th>備註</th><th></th></tr></thead><tbody>${
                             (item.records||[]).map((r,i)=>`<tr>
                                 <td>${r.studentName}</td><td>${r.assignmentName}</td>
-                                <td><span class="badge ${badgeClass(r.status)}">${r.status}</span></td>
+                                <td>${r.pulledOut ? '<span class="sign-placeholder">抽離</span>' : `<span class="badge ${badgeClass(r.status)}">${r.status}</span>`}</td>
+                                ${hasGrading ? `<td>
+                                    ${r.pulledOut || r.status!=='已繳' ? '' : `
+                                        <div class="mini-status-group">
+                                            <button type="button" class="grade-btn ${r.correctness==='全對'?'active g-ok':''}" data-arch-grade="${i}" data-arch-grade-value="全對" title="全對">✓</button>
+                                            <button type="button" class="grade-btn ${r.correctness==='有錯'?'active g-err':''}" data-arch-grade="${i}" data-arch-grade-value="有錯" title="有錯">▲</button>
+                                            <button type="button" class="grade-btn ${r.correctness==='沒寫任務'?'active g-lost':''}" data-arch-grade="${i}" data-arch-grade-value="沒寫任務" title="沒寫任務">－</button>
+                                        </div>
+                                        ${r.correctness==='有錯' ? `<button type="button" class="btn small ${r.corrected?'':'outline'}" data-arch-corrected="${i}">${r.corrected?'✓已訂正':'訂正完成'}</button>` : ''}
+                                    `}
+                                </td>` : ''}
                                 <td>${r.remark||''}</td>
-                                <td>${r.status!=='已繳' && !r.remark ? `<button class="btn small outline" data-makeup="${i}">新增補交</button>` : ''}</td>
+                                <td>${(!r.pulledOut && r.status!=='已繳' && !r.remark) ? `<button class="btn small outline" data-makeup="${i}">新增補交</button>` : ''}</td>
                             </tr>`).join('')
                         }</tbody></table>`;
                         box.querySelectorAll('[data-makeup]').forEach(btn => btn.onclick = async () => {
                             const idx = Number(btn.getAttribute('data-makeup'));
                             const remarkText = `已補交（${new Date().toLocaleString('zh-TW')}）`;
                             const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, remark: remarkText } : r);
+                            item.records = updatedRecords;
+                            await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
+                            renderArchiveDetail(item);
+                        });
+                        box.querySelectorAll('[data-arch-grade]').forEach(btn => btn.onclick = async () => {
+                            const idx = Number(btn.getAttribute('data-arch-grade'));
+                            const val = btn.getAttribute('data-arch-grade-value');
+                            const cur = item.records[idx];
+                            const nextVal = cur.correctness === val ? '' : val;
+                            const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, correctness: nextVal, corrected: nextVal==='有錯' ? r.corrected : false } : r);
+                            item.records = updatedRecords;
+                            await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
+                            renderArchiveDetail(item);
+                        });
+                        box.querySelectorAll('[data-arch-corrected]').forEach(btn => btn.onclick = async () => {
+                            const idx = Number(btn.getAttribute('data-arch-corrected'));
+                            const cur = item.records[idx];
+                            const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, corrected: !r.corrected } : r);
                             item.records = updatedRecords;
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
                             renderArchiveDetail(item);
@@ -1392,9 +1861,17 @@
                         const aid = b.getAttribute('data-del-archive');
                         const item = list.find(x=>x.id===aid);
                         const label = item ? (item.dateLabel || new Date(item.timestamp).toLocaleDateString('zh-TW')) : '';
-                        const ok2 = await window.askConfirm(`刪除「${label}」這筆封存紀錄無法復原，確定要刪除嗎？`);
+                        const ok2 = await window.askConfirm(`刪除「${label}」這筆封存紀錄無法復原，裡面的訂正資料也會一併刪除，確定要刪除嗎？`);
                         if(!ok2) return;
                         await deleteDoc(doc(db, 'archives', aid)).catch(e=>{ console.warn(e); window.showAlert('刪除失敗，請檢查網路或權限後重試'); });
+                        // 這份封存包含的作業，順便把對應的訂正紀錄也清掉，
+                        // 不然「已封存作業的訂正紀錄」選單還是會撈到已經刪除封存的作業，越積越多垃圾資料。
+                        const idsToClean = (item && item.assignments) ? item.assignments.map(a=>a.id) : [];
+                        for(const gid of idsToClean){
+                            await clearGradingForAssignment(gid);
+                            await clearRecordsForAssignment(gid);
+                            if(window.__extraPastAssignments) delete window.__extraPastAssignments[gid];
+                        }
                         $('loadArchivesBtn').click();
                     });
                 } catch(e){ console.warn(e); $('archivesList').innerHTML = '<p class="empty-hint">載入失敗</p>'; }
@@ -1437,11 +1914,12 @@
                     const stu = st.students.find(x=>x.id===sid);
                     if(!stu) return;
                     const curGroup = st.groups.find(g=>g.id===stu.groupId);
-                    const otherNames = st.groups.filter(g=>g.id!==stu.groupId).map(g=>g.name).join('、');
-                    const target = await window.askInput(`「${stu.name}」目前在「${curGroup?curGroup.name:'（無組別）'}」，要搬到哪一組？（可選：${otherNames || '尚無其他組別'}）`, '');
-                    if(!target || !target.trim()) return;
-                    const targetGroup = st.groups.find(g => g.name === target.trim());
-                    if(!targetGroup){ window.showAlert('找不到這個組別名稱，請輸入完全一致的組別名稱'); return; }
+                    const otherGroups = st.groups.filter(g=>g.id!==stu.groupId);
+                    if(!otherGroups.length){ window.showAlert('目前沒有其他組別可以搬'); return; }
+                    const targetName = await window.askChoice(`「${stu.name}」目前在「${curGroup?curGroup.name:'（無組別）'}」，要搬到哪一組？`, otherGroups.map(g=>g.name));
+                    if(!targetName) return;
+                    const targetGroup = st.groups.find(g => g.name === targetName);
+                    if(!targetGroup) return;
                     resyncFromGlobal();
                     const freshStu = st.students.find(x=>x.id===sid);
                     if(freshStu) freshStu.groupId = targetGroup.id;
@@ -1481,9 +1959,19 @@
                 renderGroups();
             };
 
+            $('toggleArchivedGradingBtn').onclick = () => {
+                const body = $('archivedGradingBody');
+                const show = body.style.display === 'none';
+                body.style.display = show ? 'block' : 'none';
+                $('toggleArchivedGradingBtn').textContent = show ? '收合' : '展開';
+            };
+            $('contactViewSeatBtn').onclick = () => { contactViewMode = 'seat'; renderContactTab(records, gradingRecords, st); };
+            $('contactViewGroupBtn').onclick = () => { contactViewMode = 'group'; renderContactTab(records, gradingRecords, st); };
+
             renderGroups();
             renderRecordsTab(records, settings);
             renderGradingTab(gradingRecords, records, settings);
+            renderContactTab(records, gradingRecords, st);
             editorReady = true;
         }
         /* 可用 API：addRecord(obj) / deleteRecord(id) / clearAll() / saveSettings(obj) / submitGroupRecords(items) / adminSetStatus(item) / adminSetGrading(item) */
