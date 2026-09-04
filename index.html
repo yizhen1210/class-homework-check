@@ -152,6 +152,12 @@
         #matrixTbody td:first-child, #matrixThead th:first-child { text-align: left; white-space: nowrap; }
         .sign-tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); font-size: 0.75em; vertical-align: middle; }
         .sign-placeholder { font-size: 0.75em; color: var(--muted); }
+        .grade-missing { display: inline-block; padding: 4px 10px; border-radius: 8px; border: 2px solid var(--danger); box-shadow: 0 0 0 3px rgba(196,103,79,0.25); color: var(--danger); font-size: 0.85em; font-weight: bold; }
+        .grade-btn { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); color: var(--muted); font-size: 0.95em; cursor: pointer; font-family: inherit; line-height: 1; transition: background .15s, border-color .15s, color .15s; }
+        .grade-btn:hover { border-color: var(--accent); }
+        .grade-btn.active.g-ok { background: #2f6fb0; border-color: #2f6fb0; color: #fff; }
+        .grade-btn.active.g-err { background: var(--danger); border-color: var(--danger); color: #fff; }
+        .grade-btn.active.g-lost { background: #7a3b3b; border-color: #7a3b3b; color: #fff; }
         .tab-btn { flex: 1; min-width: 110px; padding: 10px 12px; border: 2px solid var(--line); background: var(--surface); color: var(--text); border-radius: 12px; font-family: inherit; font-size: 0.95em; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
         .tab-btn:hover { border-color: var(--accent); }
         .tab-btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
@@ -317,6 +323,8 @@
         const coll = collection(db, COLL_PATH);
         const settingsRef = doc(db, ...SETTINGS_PATH);
         const archivesColl = collection(db, "archives"); // 「結束並封存」的歷史紀錄
+        const gradingColl = collection(db, "gradingRecords"); // 對錯/訂正紀錄，獨立於 records，不會被封存清空
+        const pointLogsColl = collection(db, "pointLogs"); // 加點紀錄（給匯出用）
 
         let isAdmin = false, editorReady = false, settingsArrived = false, recordsArrived = true, gateSettingsFailed = false;
         let settingsErrored = false, recordsErrored = false;
@@ -361,6 +369,7 @@
                 recordsArrived = true;
                 recordsErrored = false; refreshLoadError();
                 renderRecordsTab(records, settings);
+                renderGradingTab(gradingRecords, records, settings);
             }, err => {
                 console.warn(err);
                 recordsArrived = true; recordsErrored = true; refreshLoadError();
@@ -370,12 +379,26 @@
             if(stopRecordsListener){ stopRecordsListener(); stopRecordsListener = null; }
             records = []; recordsArrived = true;
         }
+        let gradingRecords = [];
+        let stopGradingListener = null;
+        function startGradingListener(){
+            if(stopGradingListener) return;
+            stopGradingListener = onSnapshot(gradingColl, snap => {
+                gradingRecords = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderGradingTab(gradingRecords, records, settings);
+            }, err => console.warn(err));
+        }
+        function stopGradingListenerIfAny(){
+            if(stopGradingListener){ stopGradingListener(); stopGradingListener = null; }
+            gradingRecords = [];
+        }
         onSnapshot(settingsRef, snap => {
             settings = snap.exists() ? snap.data() : null;
             settingsArrived = true;
             settingsErrored = false; refreshLoadError();
             $('appTitle').textContent = `${(settings && settings.className) || '608'} 作業登記`;
             renderPublic(records, settings, { error: false });
+            renderGradingTab(gradingRecords, records, settings);
             maybeLoadEditor(); gateCheck();
         }, err => { console.warn(err); gateSettingsFailed = true; settingsErrored = true; refreshLoadError(); renderPublic(records, settings, { error: true }); gateCheck(); });
 
@@ -397,7 +420,7 @@
             document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin));
             $('loginBtn').style.display = isAdmin ? 'none' : '';
             $('content').style.display = isAdmin ? 'none' : '';
-            if(isAdmin) startRecordsListener(); else stopRecordsListenerIfAny();
+            if(isAdmin){ startRecordsListener(); startGradingListener(); } else { stopRecordsListenerIfAny(); stopGradingListenerIfAny(); }
             maybeLoadEditor();
         });
 
@@ -518,6 +541,11 @@
         function adminSetStatus(item){
             const ref = doc(coll, recordDocId(item.studentId, item.assignmentId));
             return setDoc(ref, { ...item, [ORDER_FIELD]: Date.now() }, { merge: true }).catch(e=>{ console.warn(e); window.showAlert('操作失敗，請檢查網路後重試'); });
+        }
+        // 對錯/訂正紀錄：存在獨立的 gradingRecords，不會被「結束並封存」清空，點數才能長期累積。
+        function adminSetGrading(item){
+            const ref = doc(gradingColl, recordDocId(item.studentId, item.assignmentId));
+            return setDoc(ref, { ...item, updatedAt: Date.now() }, { merge: true }).catch(e=>{ console.warn(e); window.showAlert('操作失敗，請檢查網路後重試'); });
         }
 
         const STATUS_LIST = ['已繳','未繳'];
@@ -727,6 +755,10 @@
                （這裡沒有使用者正在輸入的欄位，重繪不會有干擾問題）。
                若後台尚未建立（未登入過），直接跳過。 ---- */
         function nextStatus(cur){ const i = STATUS_LIST.indexOf(cur); return STATUS_LIST[(i+1) % STATUS_LIST.length]; }
+        function todayStr(){
+            const d = new Date();
+            return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+        }
 
         function renderRecordsTab(recs, st){
             const panel = $('tabRecords');
@@ -957,6 +989,151 @@
             });
         }
 
+        /* ---- 老師後台：訂正與加點頁。gradingRecs 是獨立的 gradingRecords collection，
+               不會被「結束並封存」清掉，點數才能長期累積直到老師手動加點。
+               recs 是 records（用來判斷是否已繳，未繳=缺交，無法評對錯）。 ---- */
+        function pointsOf(g){
+            if(!g) return 0;
+            if(g.correctness === '全對') return 10;
+            if(g.correctness === '有錯' && g.corrected) return 5;
+            return 0;
+        }
+        function renderGradingTab(gradingRecs, recs, st){
+            const panel = $('tabGrading');
+            if(!panel) return; // 尚未登入建立過後台畫面
+            gradingRecs = gradingRecs || []; recs = recs || []; st = st || { groups:[], students:[], subjects:[], assignments:[] };
+            const students = sortBySeat(st.students);
+            const assignments = st.assignments;
+            const subjNameOf = a => { const s = st.subjects.find(x=>x.id===a.subjectId); return s ? s.name : ''; };
+            const statusOf = (sid, aid) => { const r = recs.find(x=>x.studentId===sid && x.assignmentId===aid); return r ? r.status : '未繳'; };
+            const gradeOf = (sid, aid) => gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
+
+            const thead = $('gradeThead');
+            thead.innerHTML = '<tr><th>學生</th>' + assignments.map(a=>`<th>${a.name}</th>`).join('') + '</tr>';
+            const tbody = $('gradeTbody');
+            tbody.innerHTML = students.length ? students.map(s => {
+                const cells = assignments.map(a => {
+                    if(isPulledOut(s, subjNameOf(a))) return `<td><span class="sign-placeholder">抽離</span></td>`;
+                    if(statusOf(s.id, a.id) !== '已繳') return `<td><span class="grade-missing">缺交</span></td>`;
+                    const g = gradeOf(s.id, a.id);
+                    const cur = g ? g.correctness : '';
+                    const btns = `
+                        <div class="mini-status-group">
+                            <button type="button" class="grade-btn ${cur==='全對'?'active g-ok':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="全對" title="全對">✓</button>
+                            <button type="button" class="grade-btn ${cur==='有錯'?'active g-err':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="有錯" title="有錯">▲</button>
+                            <button type="button" class="grade-btn ${cur==='遺失'?'active g-lost':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="遺失" title="遺失">✗</button>
+                        </div>`;
+                    const correctedBtn = cur === '有錯' ? `<button type="button" class="btn small ${g&&g.corrected?'':'outline'}" data-corrected-student="${s.id}" data-corrected-assignment="${a.id}">${g&&g.corrected?'✓已訂正':'訂正完成'}</button>` : '';
+                    return `<td><div class="cell-stack">${btns}${correctedBtn}</div></td>`;
+                }).join('');
+                return `<tr><td>${s.name}</td>${cells}</tr>`;
+            }).join('') : '';
+            $('gradeEmpty').style.display = students.length && assignments.length ? 'none' : 'block';
+            $('gradeEmpty').textContent = !students.length ? '尚未新增學生' : (!assignments.length ? '目前沒有作業' : '');
+
+            tbody.querySelectorAll('.grade-btn').forEach(btn => btn.onclick = async () => {
+                const sid = btn.getAttribute('data-grade-student'), aid = btn.getAttribute('data-grade-assignment');
+                const val = btn.getAttribute('data-grade-value');
+                const stu = st.students.find(x=>x.id===sid);
+                const a = st.assignments.find(x=>x.id===aid);
+                const g = gradeOf(sid, aid);
+                const nextVal = (g && g.correctness === val) ? '' : val; // 再點一次同一個＝重設回未評分
+                await adminSetGrading({
+                    studentId: sid, studentName: stu?stu.name:'',
+                    assignmentId: aid, assignmentName: a?a.name:'',
+                    correctness: nextVal,
+                    corrected: nextVal === '有錯' ? (g?g.corrected:false) : false
+                });
+            });
+            tbody.querySelectorAll('[data-corrected-student]').forEach(btn => btn.onclick = async () => {
+                const sid = btn.getAttribute('data-corrected-student'), aid = btn.getAttribute('data-corrected-assignment');
+                const stu = st.students.find(x=>x.id===sid);
+                const a = st.assignments.find(x=>x.id===aid);
+                const g = gradeOf(sid, aid);
+                await adminSetGrading({
+                    studentId: sid, studentName: stu?stu.name:'',
+                    assignmentId: aid, assignmentName: a?a.name:'',
+                    correctness: '有錯',
+                    corrected: !(g && g.corrected)
+                });
+            });
+
+            // ---- 加點 ----
+            const sel = $('pointsStudentSelect');
+            const curSel = sel.value;
+            sel.innerHTML = '<option value="">請選擇學生</option>' + students.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+            sel.value = [...sel.options].some(o=>o.value===curSel) ? curSel : '';
+
+            $('calcPointsBtn').onclick = async () => {
+                const sid = sel.value;
+                if(!sid){ window.showAlert('請先選擇學生'); return; }
+                const stu = st.students.find(x=>x.id===sid);
+                if(!stu) return;
+
+                // 檢查目前作業裡，這位學生還有哪些缺交或有錯未訂正（提醒用，不影響已經可以加的點）
+                const incomplete = [];
+                st.assignments.forEach(a => {
+                    if(isPulledOut(stu, subjNameOf(a))) return;
+                    if(statusOf(sid, a.id) !== '已繳'){ incomplete.push(`${a.name}（缺交）`); return; }
+                    const g = gradeOf(sid, a.id);
+                    if(g && g.correctness === '有錯' && !g.corrected) incomplete.push(`${a.name}（有錯未訂正）`);
+                });
+                if(incomplete.length){
+                    window.showAlert(`「${stu.name}」還有未完成項目，這些不會計點：${incomplete.join('、')}`);
+                }
+
+                // 累積但還沒加過點的項目：掃全部 gradingRecords（不限於目前作業，之前封存過的也算）
+                const eligible = gradingRecs.filter(g => g.studentId === sid && !g.pointsGiven && pointsOf(g) > 0);
+                if(!eligible.length){
+                    $('pointsResult').innerHTML = `<p class="empty-hint">「${stu.name}」目前沒有可加點的項目${incomplete.length?'（見上方提醒）':''}</p>`;
+                    return;
+                }
+                const items = eligible.map(g => ({
+                    assignmentId: g.assignmentId, assignmentName: g.assignmentName,
+                    type: g.correctness === '全對' ? '全對' : '訂正完成',
+                    points: pointsOf(g)
+                }));
+                const total = items.reduce((sum,i)=>sum+i.points, 0);
+                const detail = items.map(i=>`${i.assignmentName} ${i.type}+${i.points}`).join('、');
+                const ok = await window.askConfirm(`要幫「${stu.name}」加 ${total} 點嗎？（${detail}）`);
+                if(!ok) return;
+
+                const batch = writeBatch(db);
+                eligible.forEach(g => batch.set(doc(gradingColl, recordDocId(sid, g.assignmentId)), { pointsGiven: true }, { merge: true }));
+                await batch.commit().catch(e=>console.warn(e));
+                await addDoc(pointLogsColl, {
+                    studentId: sid, studentName: stu.name,
+                    timestamp: Date.now(), dateLabel: todayStr(),
+                    totalPoints: total, items
+                }).catch(e=>console.warn(e));
+                $('pointsResult').innerHTML = `<p>已幫「${stu.name}」加 <strong>${total}</strong> 點（${detail}）</p>`;
+            };
+
+            // ---- 加點紀錄載入／匯出 ----
+            $('loadPointLogsBtn').onclick = async () => {
+                $('pointLogsList').innerHTML = '<p class="empty-hint">載入中…</p>';
+                try {
+                    const snap = await getDocs(query(pointLogsColl, orderBy('timestamp','desc')));
+                    const list = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+                    $('pointLogsList').innerHTML = list.length ? list.map(l => `
+                        <div class="assignment-row">
+                            <span class="assignment-name">${l.dateLabel||''}　${l.studentName}　+${l.totalPoints}點</span>
+                        </div>`).join('') : '<p class="empty-hint">尚無加點紀錄</p>';
+                } catch(e){ console.warn(e); $('pointLogsList').innerHTML = '<p class="empty-hint">載入失敗</p>'; }
+            };
+            $('exportTodayPointsBtn').onclick = async () => {
+                try {
+                    const today = todayStr();
+                    const snap = await getDocs(query(pointLogsColl, orderBy('timestamp','desc')));
+                    const list = snap.docs.map(d=>d.data()).filter(l => l.dateLabel === today);
+                    if(!list.length){ window.showAlert('今天還沒有任何加點紀錄'); return; }
+                    const text = list.map(l => `${l.studentName} +${l.totalPoints}點（${(l.items||[]).map(i=>`${i.assignmentName}${i.type}+${i.points}`).join('、')}）`).join('\n');
+                    await navigator.clipboard.writeText(`${today} 加點紀錄\n${text}`);
+                    window.showAlert('今天的加點紀錄已複製');
+                } catch(e){ console.warn(e); window.showAlert('匯出失敗，請檢查網路後重試'); }
+            };
+        }
+
         /* ---- 老師後台：三分頁骨架（首次登入建立一次），科目/學生管理清單
                皆用區域刷新，不動到輸入框，避免打字打到一半被清掉）。 ---- */
         // 綁定為「每天一定有」的固定作業：只要目前作業清單裡沒有同名的，就自動補上。
@@ -996,6 +1173,7 @@
             $('adminArea').innerHTML = `
                 <div class="admin-tabs">
                     <button class="tab-btn active" data-tab="tabRecords">查看繳交紀錄</button>
+                    <button class="tab-btn" data-tab="tabGrading">訂正與加點</button>
                     <button class="tab-btn" data-tab="tabStudents">學生管理</button>
                 </div>
                 <div id="tabRecords" class="tab-panel">
@@ -1051,6 +1229,36 @@
                         <div id="archivesList" style="margin-top:14px"></div>
                     </div>
                 </div>
+                <div id="tabGrading" class="tab-panel" style="display:none">
+                    <div class="card">
+                        <h2>作業對錯與訂正（依座號排序）</h2>
+                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">紅框＝缺交（還沒繳交，無法評對錯）。已繳的作業可以點選：✓全對／▲有錯／✗遺失；選「有錯」後會多一顆「訂正完成」按鈕。全對 +10 點，訂正完成 +5 點，可以隨時修改重選。</p>
+                        <div class="table-scroll">
+                            <table>
+                                <thead id="gradeThead"></thead>
+                                <tbody id="gradeTbody"></tbody>
+                            </table>
+                        </div>
+                        <p id="gradeEmpty" class="empty-hint" style="display:none"></p>
+                    </div>
+                    <div class="card">
+                        <h2>加點</h2>
+                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">選學生後按「計算並加點」：會把目前累積、還沒加過點的全對／訂正完成項目一次加給他（會自動排除已經加過的，不會重複加）。如果該生還有作業缺交或有錯未訂正，會另外提醒你。</p>
+                        <div class="row">
+                            <select id="pointsStudentSelect" style="flex:1"></select>
+                            <button class="btn" id="calcPointsBtn">計算並加點</button>
+                        </div>
+                        <div id="pointsResult" style="margin-top:14px"></div>
+                    </div>
+                    <div class="card">
+                        <h2>加點紀錄匯出</h2>
+                        <div class="row">
+                            <button class="btn outline" id="loadPointLogsBtn">載入加點紀錄</button>
+                            <button class="btn outline" id="exportTodayPointsBtn">匯出今天的加點紀錄</button>
+                        </div>
+                        <div id="pointLogsList" style="margin-top:14px"></div>
+                    </div>
+                </div>
                 <div id="tabStudents" class="tab-panel" style="display:none">
                     <div class="card">
                         <h2>學生管理</h2>
@@ -1103,10 +1311,6 @@
                 try { await navigator.clipboard.writeText(text); window.showAlert('未繳名單已複製'); }
                 catch(e){ window.showAlert('複製失敗，請手動選取文字'); }
             };
-            function todayStr(){
-                const d = new Date();
-                return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
-            }
             $('archiveBtn').onclick = async () => {
                 const dateLabel = await window.askInput('這批作業要標記的日期（方便日後查看，可修改）', todayStr());
                 if(dateLabel === null) return;
@@ -1279,9 +1483,10 @@
 
             renderGroups();
             renderRecordsTab(records, settings);
+            renderGradingTab(gradingRecords, records, settings);
             editorReady = true;
         }
-        /* 可用 API：addRecord(obj) / deleteRecord(id) / clearAll() / saveSettings(obj) / submitGroupRecords(items) / adminSetStatus(item) */
+        /* 可用 API：addRecord(obj) / deleteRecord(id) / clearAll() / saveSettings(obj) / submitGroupRecords(items) / adminSetStatus(item) / adminSetGrading(item) */
         /* ================================================== */
     </script>
 </body>
