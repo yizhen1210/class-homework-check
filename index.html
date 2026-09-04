@@ -1562,6 +1562,18 @@
         const DAILY_FIXED_ASSIGNMENTS = [
             { name: '聯絡簿每日任務', needsSign: true }
         ];
+        // 判斷某一天是不是「上課日」：跳過週六日、學期起訖日之外、以及自訂的假日
+        function isSchoolDay(dateStr, st){
+            const sem = st.semester || {};
+            if(sem.skipWeekends !== false){
+                const day = new Date(dateStr + 'T00:00:00').getDay(); // 0=週日, 6=週六
+                if(day === 0 || day === 6) return false;
+            }
+            if(sem.startDate && dateStr < sem.startDate) return false;
+            if(sem.endDate && dateStr > sem.endDate) return false;
+            if(sem.holidays && sem.holidays.includes(dateStr)) return false;
+            return true;
+        }
         function ensureDailyAssignments(st){
             let changed = false;
             // 自動建立一個獨立的「聯絡簿」科目（如果還沒有），聯絡簿每日任務固定歸在這個科目下，
@@ -1572,11 +1584,20 @@
                 st.subjects = [...st.subjects, contactSubj];
                 changed = true;
             }
+            const today = todayISODate();
+            const schoolDay = isSchoolDay(today, st);
             DAILY_FIXED_ASSIGNMENTS.forEach(fixed => {
-                const todayId = `daily-${fixed.name}-${todayISODate()}`;
                 const existing = st.assignments.find(a => a.name === fixed.name);
-                if(!existing || existing.id !== todayId){
-                    st.assignments = st.assignments.filter(a => a.name !== fixed.name); // 把昨天那份從「目前清單」移除，資料本身留在 Firestore 不會刪
+                if(!existing){
+                    // 完全還沒有過，不管今天是不是上課日都先建一份，避免整個功能無法使用
+                    st.assignments.push({ id: `daily-${fixed.name}-${today}`, name: fixed.name, subjectId: contactSubj.id, needsSign: fixed.needsSign });
+                    changed = true;
+                    return;
+                }
+                if(!schoolDay) return; // 非上課日：維持原本那份不動，不會多出假日的紀錄
+                const todayId = `daily-${fixed.name}-${today}`;
+                if(existing.id !== todayId){
+                    st.assignments = st.assignments.filter(a => a.name !== fixed.name); // 把之前那份從「目前清單」移除，資料本身留在 Firestore 不會刪
                     st.assignments.push({ id: todayId, name: fixed.name, subjectId: contactSubj.id, needsSign: fixed.needsSign });
                     changed = true;
                 }
@@ -1727,6 +1748,22 @@
                 </div>
                 <div id="tabStudents" class="tab-panel" style="display:none">
                     <div class="card">
+                        <h2>學期設定</h2>
+                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">聯絡簿只有在「上課日」才會換成新的一天，非上課日（假日/寒暑假）不會多出空白紀錄。一般作業不受這個設定影響。</p>
+                        <div class="row">
+                            <div class="field" style="flex:1"><label>開學日</label><input type="date" id="semStartDate" class="txt-input"></div>
+                            <div class="field" style="flex:1"><label>結業日</label><input type="date" id="semEndDate" class="txt-input"></div>
+                        </div>
+                        <label style="display:flex;align-items:center;gap:6px;margin-bottom:14px">
+                            <input type="checkbox" id="skipWeekendsChk" style="width:auto" checked>週六、週日不算上課日
+                        </label>
+                        <div class="row inline-add-row">
+                            <input type="date" id="newHolidayDate" class="txt-input">
+                            <button class="btn" id="addHolidayBtn">新增假日</button>
+                        </div>
+                        <div id="holidayList" class="chip-list"></div>
+                    </div>
+                    <div class="card">
                         <h2>學生管理</h2>
                         <div class="row inline-add-row">
                             <input id="newGroupName" class="txt-input" placeholder="新增組別名稱，例如：第一組">
@@ -1735,6 +1772,43 @@
                         <div id="groupsList"></div>
                     </div>
                 </div>`;
+
+            $('semStartDate').value = (st.semester && st.semester.startDate) || '';
+            $('semEndDate').value = (st.semester && st.semester.endDate) || '';
+            $('skipWeekendsChk').checked = !st.semester || st.semester.skipWeekends !== false;
+            function saveSemester(patch){
+                resyncFromGlobal();
+                st.semester = { ...(st.semester||{ skipWeekends:true, holidays:[] }), ...patch };
+                saveSettings({ semester: st.semester });
+            }
+            $('semStartDate').onchange = () => saveSemester({ startDate: $('semStartDate').value || '' });
+            $('semEndDate').onchange = () => saveSemester({ endDate: $('semEndDate').value || '' });
+            $('skipWeekendsChk').onchange = () => saveSemester({ skipWeekends: $('skipWeekendsChk').checked });
+            function renderHolidayList(){
+                const holidays = (st.semester && st.semester.holidays) || [];
+                $('holidayList').innerHTML = holidays.length
+                    ? holidays.slice().sort().map(d=>`<span class="chip">${d}<button data-del-holiday="${d}">✕</button></span>`).join('')
+                    : '<span style="color:var(--muted)">尚未新增假日</span>';
+                $('holidayList').querySelectorAll('[data-del-holiday]').forEach(b => b.onclick = () => {
+                    resyncFromGlobal();
+                    const d = b.getAttribute('data-del-holiday');
+                    st.semester = { ...(st.semester||{}), holidays: ((st.semester&&st.semester.holidays)||[]).filter(x=>x!==d) };
+                    saveSettings({ semester: st.semester });
+                    renderHolidayList();
+                });
+            }
+            $('addHolidayBtn').onclick = () => {
+                const d = $('newHolidayDate').value;
+                if(!d) return;
+                resyncFromGlobal();
+                const holidays = (st.semester && st.semester.holidays) || [];
+                if(!holidays.includes(d)) holidays.push(d);
+                st.semester = { ...(st.semester||{}), holidays };
+                saveSettings({ semester: st.semester });
+                $('newHolidayDate').value = '';
+                renderHolidayList();
+            };
+            renderHolidayList();
 
             $('adminArea').querySelectorAll('.tab-btn').forEach(btn => btn.onclick = () => {
                 $('adminArea').querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b===btn));
