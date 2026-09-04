@@ -868,24 +868,25 @@
             function formatAssignmentLabel(name){
                 if(!compactCols) return name;
                 if(name === '聯絡簿每日任務') return '聯絡簿<br>每日任務';
-                // 國語課文編號：L1、L2...
-                const lMatch = name.match(/^([Ll]\d+)(.*)$/);
+                // 國語課文編號：L1、L2...（數字含半形0-9與全形０-９）
+                const lMatch = name.match(/^([Ll][0-9０-９]+)(.*)$/);
                 if(lMatch && lMatch[2]) return `${lMatch[1]}<br>${lMatch[2]}`;
                 // 數學：結尾若是「P.幾到幾」頁碼，名稱放第一行、頁碼放第二行
-                const pageMatch = name.match(/^(.*?)\s*([Pp]\.?\s*\d+\s*[-~至到]\s*\d+)\s*$/);
+                const pageMatch = name.match(/^(.*?)\s*([Pp]\.?\s*[0-9０-９]+\s*[-~～至到]\s*[0-9０-９]+)\s*$/);
                 if(pageMatch && pageMatch[1]) return `${pageMatch[1]}<br>${pageMatch[2]}`;
                 // 數學：結尾若是純數字的「幾-幾」範圍（沒有 P. 前綴），名稱放第一行、範圍放第二行
-                const rangeMatch = name.match(/^(.*?)\s*(\d+\s*[-~至到]\s*\d+)\s*$/);
+                const rangeMatch = name.match(/^(.*?)\s*([0-9０-９]+\s*[-~～至到]\s*[0-9０-９]+)\s*$/);
                 if(rangeMatch && rangeMatch[1]) return `${rangeMatch[1]}<br>${rangeMatch[2]}`;
                 // 數學：結尾若是「單元幾」，名稱放第一行、單元放第二行
-                const unitMatch = name.match(/^(.*?)\s*(第?\d+\s*單元)\s*$/);
+                const unitMatch = name.match(/^(.*?)\s*(第?[0-9０-９]+\s*單元)\s*$/);
                 if(unitMatch && unitMatch[1]) return `${unitMatch[1]}<br>${unitMatch[2]}`;
                 return name;
             }
             function formatStudentCell(name){
                 if(!compactCols) return name;
-                // 座號直接打在姓名前面（例如「23施姵岑」），偵測開頭數字拆成第一行，姓名放第二行
-                const m = (name||'').match(/^(\d+)\s*(.*)$/);
+                // 座號直接打在姓名前面（例如「23施姵岑」或全形「２３施姵岑」），
+                // 偵測開頭數字（半形0-9或全形０-９）拆成第一行，姓名放第二行
+                const m = (name||'').match(/^([0-9０-９]+)\s*(.*)$/);
                 if(m && m[2]) return `${m[1]}<br>${m[2]}`;
                 return name;
             }
