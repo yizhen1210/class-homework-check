@@ -149,7 +149,7 @@
         .cell-status-btn.unsigned { background: #b8860c; }
         .cell-stack { display: flex; flex-direction: column; gap: 4px; align-items: center; }
         #matrixThead th, #matrixTbody td { text-align: center; }
-        #matrixTbody td:first-child, #matrixThead th:first-child { text-align: left; }
+        #matrixTbody td:first-child, #matrixThead th:first-child { text-align: left; white-space: nowrap; }
         .sign-tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); font-size: 0.75em; vertical-align: middle; }
         .sign-placeholder { font-size: 0.75em; color: var(--muted); }
         .tab-btn { flex: 1; min-width: 110px; padding: 10px 12px; border: 2px solid var(--line); background: var(--surface); color: var(--text); border-radius: 12px; font-family: inherit; font-size: 0.95em; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
@@ -179,6 +179,7 @@
             .filters select { width: 100%; }
             table { font-size: 0.85em; }
             th, td { padding: 7px 5px; }
+            .cell-status-btn { padding: 4px 9px; font-size: 0.78em; }
             .group-block-head { flex-wrap: wrap; gap: 8px; }
             .chip { font-size: 0.85em; padding: 4px 4px 4px 10px; }
             .foot-actions { justify-content: stretch; }
@@ -885,8 +886,9 @@
             function formatStudentCell(name){
                 if(!compactCols) return name;
                 // 座號直接打在姓名前面（例如「23施姵岑」或全形「２３施姵岑」），
-                // 偵測開頭數字（半形0-9或全形０-９）拆成第一行，姓名放第二行
-                const m = (name||'').match(/^([0-9０-９]+)\s*(.*)$/);
+                // 偵測開頭數字（半形0-9或全形０-９，前面允許空白）拆成第一行，姓名放第二行
+                const trimmed = (name||'').trim();
+                const m = trimmed.match(/^\s*([0-9０-９]+)\s*(.*)$/);
                 if(m && m[2]) return `${m[1]}<br>${m[2]}`;
                 return name;
             }
