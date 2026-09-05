@@ -89,16 +89,20 @@
         .field label { display: block; margin-bottom: 6px; font-size: 0.9em; color: var(--muted); }
         select, .txt-input { width: 100%; padding: 10px 14px; border: 2px solid var(--line); border-radius: 12px; font-family: inherit; font-size: 1em; background: var(--surface); color: var(--text); outline: none; }
         select:focus, .txt-input:focus { border-color: var(--accent); box-shadow: 0 0 12px 3px var(--focus-glow); }
-        .status-choices { display: flex; gap: 10px; flex-wrap: wrap; }
-        .status-choices label { flex: 1; min-width: 84px; text-align: center; padding: 10px 6px; border: 2px solid var(--line); border-radius: 12px; cursor: pointer; font-size: 0.95em; }
-        .status-choices input { display: none; }
-        .status-choices input:checked + span { color: var(--accent); font-weight: bold; }
-        .status-choices label:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 10px 2px var(--focus-glow); }
         .student-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
         .daily-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
         .daily-row:last-child { border-bottom: none; }
         .daily-row .student-name { min-width: 70px; flex-shrink: 0; }
+        .row-slot-pill { display: inline-flex; justify-content: center; min-width: 86px; }
+        .row-slot-icon { display: inline-flex; justify-content: center; min-width: 36px; }
+        .row-slot-corrected { display: inline-flex; justify-content: center; min-width: 92px; }
+        .corrected-btn { padding: 6px 14px; border-radius: 20px; border: 2px solid #7b5ea7; background: transparent; color: #7b5ea7; font-family: inherit; font-size: 0.85em; cursor: pointer; transition: background .15s, color .15s; }
+        .corrected-btn:hover { background: rgba(123,94,167,0.12); }
+        .corrected-btn.active { background: #7b5ea7; color: #fff; }
         .toggle-pill { padding: 6px 16px; border-radius: 20px; border: none; font-family: inherit; font-size: 0.9em; cursor: pointer; color: #fff; transition: filter .15s; }
+        .pulled-out-pill { display: inline-block; padding: 6px 16px; font-size: 0.9em; color: var(--muted); }
+        .cell-pulled-out { display: inline-block; padding: 6px 14px; font-size: 0.85em; color: var(--muted); }
+        .badge-pulled-out { display: inline-block; padding: 2px 10px; font-size: 0.85em; color: var(--muted); }
         .toggle-pill:hover { filter: brightness(0.9); }
         .toggle-pill.submitted { background: var(--accent); }
         .toggle-pill.missing { background: var(--danger); }
@@ -110,7 +114,6 @@
         .mini-status-btn { padding: 7px 12px; border-radius: 20px; border: 2px solid var(--line); background: var(--surface); color: var(--text); font-family: inherit; font-size: 0.85em; cursor: pointer; transition: background .15s, border-color .15s; }
         .mini-status-btn:hover { border-color: var(--accent); }
         .mini-status-btn.active.submitted { background: var(--accent); border-color: var(--accent); color: #fff; }
-        .mini-status-btn.active.late { background: #c98a2c; border-color: #c98a2c; color: #fff; }
         .mini-status-btn.active.missing { background: var(--danger); border-color: var(--danger); color: #fff; }
         .mini-status-btn.active.unsigned { background: #b8860c; border-color: #b8860c; color: #fff; }
         .row { display: flex; gap: 10px; margin-bottom: 14px; }
@@ -122,16 +125,12 @@
         .chip { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 20px; padding: 5px 6px 5px 12px; font-size: 0.9em; }
         .chip button { border: none; background: transparent; color: var(--danger); cursor: pointer; font-size: 1em; line-height: 1; padding: 2px 6px; border-radius: 50%; transition: background .15s; font-family: inherit; }
         .chip button:hover { background: rgba(196,103,79,0.15); }
-        .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-        .filters select { flex: 1; min-width: 120px; }
         table { width: 100%; border-collapse: collapse; font-size: 0.92em; }
         th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
         .badge { padding: 2px 10px; border-radius: 20px; font-size: 0.85em; color: #fff; display: inline-block; }
         .badge.submitted { background: var(--accent); }
-        .badge.late { background: #c98a2c; }
         .badge.missing { background: var(--danger); }
         .empty-hint { color: var(--muted); text-align: center; padding: 30px 10px; }
-        .missing-box { background: var(--bg); border: 1px dashed var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; font-size: 0.92em; }
         .admin-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
         .side-by-side { display: flex; gap: 20px; align-items: stretch; }
         .subject-select-group { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
@@ -152,7 +151,6 @@
         .cell-status-btn:hover { filter: brightness(0.9); }
         .cell-status-btn:active { transform: scale(0.95); }
         .cell-status-btn.submitted { background: var(--accent); }
-        .cell-status-btn.late { background: #c98a2c; }
         .cell-status-btn.missing { background: var(--danger); }
         .cell-status-btn.unsigned { background: #b8860c; }
         .cell-stack { display: flex; flex-direction: column; gap: 4px; align-items: center; }
@@ -172,7 +170,6 @@
         .tab-btn:hover { border-color: var(--accent); }
         .tab-btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
         .tab-btn.active:hover { background: var(--accent-dark); }
-        .foot-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
         #fMsg { min-height: 1.4em; text-align: center; font-size: 0.9em; color: var(--accent); }
 
         /* ---- 響應式：小螢幕（手機）調整 ---- */
@@ -196,10 +193,9 @@
             table { font-size: 0.85em; }
             th, td { padding: 7px 5px; }
             .cell-status-btn { padding: 4px 9px; font-size: 0.78em; }
+            .cell-pulled-out { padding: 4px 9px; font-size: 0.78em; }
             .group-block-head { flex-wrap: wrap; gap: 8px; }
             .chip { font-size: 0.85em; padding: 4px 4px 4px 10px; }
-            .foot-actions { justify-content: stretch; }
-            .foot-actions .btn { width: 100%; }
             .student-row { flex-wrap: wrap; }
             .mini-status-btn { padding: 6px 9px; font-size: 0.8em; }
             .admin-tabs { flex-direction: row; }
@@ -365,8 +361,6 @@
         function maybeLoadEditor(){ if(isAdmin && settingsArrived && !editorReady) loadEditor(settings); }
 
         /* ---------- 通用資料層（流水帳型：collection 多筆，僅老師可用） ---------- */
-        function addRecord(obj){ if(!isAdmin) return; return addDoc(coll, { ...obj, [ORDER_FIELD]: Date.now() }).catch(e=>console.warn(e)); }
-        function deleteRecord(id){ if(!isAdmin) return; return deleteDoc(doc(db, COLL_PATH, id)).catch(e=>console.warn(e)); }
         async function clearAll(excludeAssignmentIds){
             if(!isAdmin) return;
             const exclude = new Set(excludeAssignmentIds || []);
@@ -693,7 +687,7 @@
                     </div>`;
                 $('showMissingListBtn').onclick = window.showMissingListForToday;
                 const subSel = $('fSubject'), aSel = $('fAssignment'), gSel = $('fGroup');
-                st.subjects.forEach(s => subSel.add(new Option(s.name, s.id)));
+                st.subjects.filter(s=>!s.isSystem).forEach(s => subSel.add(new Option(s.name, s.id)));
                 st.groups.forEach(g => gSel.add(new Option(g.name, g.id)));
 
                 function setRowStatus(row, st2){
@@ -994,7 +988,7 @@
             tbody.innerHTML = students.length ? students.map(s => {
                 const cells = assignments.map(a => {
                     if(isPulledOut(s, subjNameOf(a))){
-                        return `<td><span class="sign-placeholder">抽離</span></td>`;
+                        return `<td><span class="cell-pulled-out">抽離</span></td>`;
                     }
                     const v = statusOf(s.id, a.id);
                     const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(v)}" data-student="${s.id}" data-assignment="${a.id}">${v}</button>`;
@@ -1057,7 +1051,15 @@
                點「已繳」變成只顯示已繳（不會同時看到未繳），再點一次恢復未繳；簽名同理。 ---- */
         let contactViewMode = 'seat'; // 'seat' 依座號扁平顯示 | 'group' 依小組顯示
         function renderContactRow(s, dailyAsg, dSubj, recs, gradingRecs){
-            if(isPulledOut(s, dSubj?dSubj.name:'')) return `<div class="daily-row"><span class="student-name">${s.name}</span><span class="sign-placeholder">抽離</span></div>`;
+            if(isPulledOut(s, dSubj?dSubj.name:'')) return `<div class="daily-row">
+                <span class="student-name">${s.name}</span>
+                <span class="row-slot-pill"><span class="pulled-out-pill">抽離</span></span>
+                <span class="row-slot-pill"></span>
+                <span class="row-slot-icon"></span>
+                <span class="row-slot-icon"></span>
+                <span class="row-slot-corrected"></span>
+                <span class="row-slot-icon"></span>
+            </div>`;
             const rec = recs.find(r=>r.studentId===s.id && r.assignmentId===dailyAsg.id);
             const dStatus = rec ? rec.status : '未繳';
             const dSign = (rec && rec.signStatus) ? rec.signStatus : '未簽名';
@@ -1066,14 +1068,12 @@
             const submitted = dStatus === '已繳';
             return `<div class="daily-row" data-daily-student="${s.id}">
                 <span class="student-name">${s.name}</span>
-                <button type="button" class="toggle-pill ${dStatus==='已繳'?'submitted':'missing'}" data-daily-status-toggle>${dStatus}</button>
-                ${submitted ? `<button type="button" class="toggle-pill ${dSign==='已簽名'?'submitted':'unsigned'}" data-daily-sign-toggle>${dSign}</button>` : ''}
-                <div class="mini-status-group" style="${submitted?'':'display:none'}">
-                    <button type="button" class="grade-btn ${dGrade==='全對'?'active g-ok':''}" data-daily-grade="全對" title="全對">✓</button>
-                    <button type="button" class="grade-btn ${dGrade==='有錯'?'active g-err':''}" data-daily-grade="有錯" title="有錯">▲</button>
-                    <button type="button" class="grade-btn ${dGrade==='沒寫任務'?'active g-lost':''}" data-daily-grade="沒寫任務" title="沒寫任務">－</button>
-                </div>
-                ${submitted && dGrade==='有錯' ? `<button type="button" class="btn small ${g&&g.corrected?'':'outline'}" data-daily-corrected="1">${g&&g.corrected?'✓已訂正':'訂正完成'}</button>` : ''}
+                <span class="row-slot-pill"><button type="button" class="toggle-pill ${dStatus==='已繳'?'submitted':'missing'}" data-daily-status-toggle>${dStatus}</button></span>
+                <span class="row-slot-pill">${submitted ? `<button type="button" class="toggle-pill ${dSign==='已簽名'?'submitted':'unsigned'}" data-daily-sign-toggle>${dSign}</button>` : ''}</span>
+                <span class="row-slot-icon">${submitted ? `<button type="button" class="grade-btn ${dGrade==='全對'?'active g-ok':''}" data-daily-grade="全對" title="全對">✓</button>` : ''}</span>
+                <span class="row-slot-icon">${submitted ? `<button type="button" class="grade-btn ${dGrade==='有錯'?'active g-err':''}" data-daily-grade="有錯" title="有錯">▲</button>` : ''}</span>
+                <span class="row-slot-corrected">${(submitted && dGrade==='有錯') ? `<button type="button" class="corrected-btn ${g&&g.corrected?'active':''}" data-daily-corrected="1">${g&&g.corrected?'✓已訂正':'訂正完成'}</button>` : ''}</span>
+                <span class="row-slot-icon">${submitted ? `<button type="button" class="grade-btn ${dGrade==='沒寫任務'?'active g-lost':''}" data-daily-grade="沒寫任務" title="沒寫任務">－</button>` : ''}</span>
             </div>`;
         }
         function renderContactTab(recs, gradingRecs, st){
@@ -1274,7 +1274,22 @@
                     const gradeOfPast = sid => gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
                     const pastSubjName = knownPast[aid] ? (knownPast[aid].subjectName||'') : '';
                     const dSubj = isPastDaily ? st.subjects.find(x=>x.id===(st.assignments.find(a=>a.name==='聯絡簿每日任務')||{}).subjectId) : st.subjects.find(x=>x.name===pastSubjName);
+                    // 這份作業已經不在目前作業清單了，沒有 needsSign 欄位可以查，
+                    // 用「這個作業的紀錄裡有沒有人寫過 signStatus」來判斷它當初是不是需要簽名的作業。
+                    const pastInfo = knownPast[aid];
+                    const pastNeedsSign = pastInfo && pastInfo.needsSign !== undefined
+                        ? pastInfo.needsSign
+                        : (isPastDaily || records.some(r => r.assignmentId === aid && r.signStatus !== undefined));
                     box.innerHTML = sortBySeat(st.students).map(s => {
+                        if(isPulledOut(s, pastSubjName)) return `<div class="daily-row">
+                            <span class="student-name">${s.name}</span>
+                            <span class="row-slot-pill"><span class="pulled-out-pill">抽離</span></span>
+                            ${pastNeedsSign ? `<span class="row-slot-pill"></span>` : ''}
+                            <span class="row-slot-icon"></span>
+                            <span class="row-slot-icon"></span>
+                            <span class="row-slot-corrected"></span>
+                            <span class="row-slot-icon"></span>
+                        </div>`;
                         const g = gradeOfPast(s.id);
                         const cur = g ? g.correctness : '';
                         const thirdVal = isPastDaily ? '沒寫任務' : '遺失';
@@ -1282,19 +1297,15 @@
                         const rec = records.find(r=>r.studentId===s.id && r.assignmentId===aid);
                         const dStatus = rec ? rec.status : '未繳';
                         const dSign = (rec && rec.signStatus) ? rec.signStatus : '未簽名';
-                        const subRow = `
-                            <button type="button" class="toggle-pill ${dStatus==='已繳'?'submitted':'missing'}" data-past-status-toggle>${dStatus}</button>
-                            ${dStatus==='已繳' ? `<button type="button" class="toggle-pill ${dSign==='已簽名'?'submitted':'unsigned'}" data-past-sign-toggle>${dSign}</button>` : ''}
-                        `;
+                        const showCorrected = cur==='有錯';
                         return `<div class="daily-row" data-past-student="${s.id}">
                             <span class="student-name">${s.name}</span>
-                            ${subRow}
-                            <div class="mini-status-group">
-                                <button type="button" class="grade-btn ${cur==='全對'?'active g-ok':''}" data-past-grade="全對" title="全對">✓</button>
-                                <button type="button" class="grade-btn ${cur==='有錯'?'active g-err':''}" data-past-grade="有錯" title="有錯">▲</button>
-                                <button type="button" class="grade-btn ${cur===thirdVal?'active g-lost':''}" data-past-grade="${thirdVal}" title="${thirdVal}">${thirdIcon}</button>
-                            </div>
-                            ${cur==='有錯' ? `<button type="button" class="btn small ${g&&g.corrected?'':'outline'}" data-past-corrected="1">${g&&g.corrected?'✓已訂正':'訂正完成'}</button>` : ''}
+                            <span class="row-slot-pill"><button type="button" class="toggle-pill ${dStatus==='已繳'?'submitted':'missing'}" data-past-status-toggle>${dStatus}</button></span>
+                            ${pastNeedsSign ? `<span class="row-slot-pill">${dStatus==='已繳' ? `<button type="button" class="toggle-pill ${dSign==='已簽名'?'submitted':'unsigned'}" data-past-sign-toggle>${dSign}</button>` : ''}</span>` : ''}
+                            <span class="row-slot-icon"><button type="button" class="grade-btn ${cur==='全對'?'active g-ok':''}" data-past-grade="全對" title="全對">✓</button></span>
+                            <span class="row-slot-icon"><button type="button" class="grade-btn ${cur==='有錯'?'active g-err':''}" data-past-grade="有錯" title="有錯">▲</button></span>
+                            <span class="row-slot-corrected">${showCorrected ? `<button type="button" class="corrected-btn ${g&&g.corrected?'active':''}" data-past-corrected="1">${g&&g.corrected?'✓已訂正':'訂正完成'}</button>` : ''}</span>
+                            <span class="row-slot-icon"><button type="button" class="grade-btn ${cur===thirdVal?'active g-lost':''}" data-past-grade="${thirdVal}" title="${thirdVal}">${thirdIcon}</button></span>
                             ${pointsOf(g)>0 ? `<span class="empty-hint" style="padding:0">${g.pointsGiven?'已加點':'尚未加點'}</span>` : ''}
                         </div>`;
                     }).join('');
@@ -1373,24 +1384,24 @@
                             const data = d.data();
                             const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
                             (data.assignments||[]).forEach(a => {
-                                if(!currentIds.has(a.id) && !window.__extraPastAssignments[a.id]) window.__extraPastAssignments[a.id] = { name: a.name, dateLabel, subjectName: a.subjectName || '未分類' };
+                                if(!currentIds.has(a.id) && !window.__extraPastAssignments[a.id]) window.__extraPastAssignments[a.id] = { name: a.name, dateLabel, subjectName: a.subjectName || '未分類', needsSign: !!a.needsSign };
                             });
                         });
                         renderGradingTab(gradingRecs, recs, st);
                         window.showAlert('已載入歷史封存的作業清單，請在上方下拉選單選擇');
                     } catch(e){ console.warn(e); window.showAlert('載入失敗，請檢查網路後重試'); }
                 };
-                $('cleanupUnfiledBtn').onclick = async () => {
-                    const unfiledIds = pastOptions.filter(([id,info]) => (info.subjectName||'未分類') === '未分類').map(([id])=>id);
-                    if(!unfiledIds.length){ window.showAlert('目前沒有未分類的舊紀錄'); return; }
-                    const ok2 = await window.askConfirm(`確定要清空「未分類」裡的 ${unfiledIds.length} 項舊紀錄嗎？這會刪除這些作業的訂正與繳交資料，無法復原。`);
+                $('deleteSelectedPastBtn').onclick = async () => {
+                    const aid = selPast.value;
+                    if(!aid){ window.showAlert('請先在上面選一筆要刪除的作業'); return; }
+                    const info = knownPast[aid];
+                    const label = info ? `${info.dateLabel ? info.dateLabel+' ' : ''}${info.name}` : aid;
+                    const ok2 = await window.askConfirm(`確定要刪除「${label}」這筆紀錄嗎？裡面的訂正與繳交資料都會刪除，無法復原。`);
                     if(!ok2) return;
-                    for(const gid of unfiledIds){
-                        await clearGradingForAssignment(gid);
-                        await clearRecordsForAssignment(gid);
-                        if(window.__extraPastAssignments) delete window.__extraPastAssignments[gid];
-                    }
-                    window.showAlert('已清空未分類的舊紀錄');
+                    await clearGradingForAssignment(aid);
+                    await clearRecordsForAssignment(aid);
+                    if(window.__extraPastAssignments) delete window.__extraPastAssignments[aid];
+                    window.showAlert(`已刪除「${label}」`);
                 };
             }
 
@@ -1399,7 +1410,7 @@
             const tbody = $('gradeTbody');
             tbody.innerHTML = students.length ? students.map(s => {
                 const cells = assignments.map(a => {
-                    if(isPulledOut(s, subjNameOf(a))) return `<td><span class="sign-placeholder">抽離</span></td>`;
+                    if(isPulledOut(s, subjNameOf(a))) return `<td><span class="cell-pulled-out">抽離</span></td>`;
                     const g = gradeOf(s.id, a.id);
                     const cur = g ? g.correctness : '';
                     const isDaily = a.name === '聯絡簿每日任務';
@@ -1723,7 +1734,7 @@
                                 <select id="pastSubjectSelect" style="flex:1"></select>
                                 <select id="pastAssignmentSelect" style="flex:1"></select>
                                 <button class="btn outline" id="loadPastArchivesBtn">載入更多歷史作業</button>
-                                <button class="btn outline danger" id="cleanupUnfiledBtn">清空未分類的舊紀錄</button>
+                                <button class="btn outline danger" id="deleteSelectedPastBtn">刪除選取的這筆</button>
                             </div>
                             <div id="pastAssignmentGradeList"></div>
                         </div>
@@ -1862,18 +1873,20 @@
                     const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
                     const g = gradingRecords.find(x=>x.studentId===s.id && x.assignmentId===a.id);
                     const subj = st.subjects.find(x=>x.id===a.subjectId);
-                    return {
+                    const entry = {
                         studentId: s.id, studentName: s.name, assignmentId: a.id, assignmentName: a.name,
                         status: rec?rec.status:'未繳',
                         correctness: g?g.correctness:'',
                         corrected: g?g.corrected:false,
                         pulledOut: isPulledOut(s, subj?subj.name:'')
                     };
+                    if(rec && rec.signStatus) entry.signStatus = rec.signStatus; // Firestore 不接受 undefined，沒有簽名資料就不加這個欄位
+                    return entry;
                 }));
                 await addDoc(archivesColl, {
                     timestamp: Date.now(),
                     dateLabel: dateLabel || todayStr(),
-                    assignments: archivableAssignments.map(a=>{ const s=st.subjects.find(x=>x.id===a.subjectId); return { id:a.id, name:a.name, subjectName: s?s.name:'' }; }),
+                    assignments: archivableAssignments.map(a=>{ const s=st.subjects.find(x=>x.id===a.subjectId); return { id:a.id, name:a.name, subjectName: s?s.name:'', needsSign: !!a.needsSign }; }),
                     records: snapshotRecords,
                     studentCount: st.students.length,
                     assignmentCount: archivableAssignments.length
@@ -1905,6 +1918,7 @@
                                 <strong>${a.dateLabel || new Date(a.timestamp).toLocaleDateString('zh-TW')}</strong>
                                 <div class="archive-actions">
                                     <button class="btn small outline" data-view-archive="${a.id}">查看內容</button>
+                                    <button class="btn small outline" data-restore-archive="${a.id}">還原成可編輯</button>
                                     <button class="btn small outline danger" data-del-archive="${a.id}">刪除</button>
                                 </div>
                             </div>
@@ -1918,7 +1932,7 @@
                         box.innerHTML = `<table><thead><tr><th>學生</th><th>作業</th><th>狀態</th>${hasGrading?'<th>訂正</th>':''}<th>備註</th><th></th></tr></thead><tbody>${
                             (item.records||[]).map((r,i)=>`<tr>
                                 <td>${r.studentName}</td><td>${r.assignmentName}</td>
-                                <td>${r.pulledOut ? '<span class="sign-placeholder">抽離</span>' : `<span class="badge ${badgeClass(r.status)}">${r.status}</span>`}</td>
+                                <td>${r.pulledOut ? '<span class="badge-pulled-out">抽離</span>' : `<span class="badge ${badgeClass(r.status)}">${r.status}</span>`}</td>
                                 ${hasGrading ? `<td>
                                     ${r.pulledOut || r.status!=='已繳' ? '' : `
                                         <div class="mini-status-group">
@@ -1968,6 +1982,42 @@
                         if(box.style.display === 'block'){ box.style.display = 'none'; return; }
                         renderArchiveDetail(item);
                         box.style.display = 'block';
+                    });
+                    $('archivesList').querySelectorAll('[data-restore-archive]').forEach(b => b.onclick = async () => {
+                        const aid = b.getAttribute('data-restore-archive');
+                        const item = list.find(x=>x.id===aid);
+                        if(!item) return;
+                        const label = item.dateLabel || new Date(item.timestamp).toLocaleDateString('zh-TW');
+                        const ok2 = await window.askConfirm(`把「${label}」這筆封存快照的繳交/訂正狀態寫回活資料嗎？之後就能在「訂正與加點→已封存作業的訂正紀錄」繼續補交/補訂正。已經抽離的學生不會被還原。`);
+                        if(!ok2) return;
+                        const recBatch = writeBatch(db);
+                        const gradeBatch = writeBatch(db);
+                        (item.records||[]).forEach(r => {
+                            if(r.pulledOut) return;
+                            const ref = doc(coll, recordDocId(r.studentId, r.assignmentId));
+                            const payload = {
+                                groupId: '', groupName: '',
+                                studentId: r.studentId, studentName: r.studentName,
+                                subjectId: '', subjectName: '',
+                                assignmentId: r.assignmentId, assignmentName: r.assignmentName,
+                                status: r.status || '未繳',
+                                [ORDER_FIELD]: Date.now()
+                            };
+                            if(r.signStatus) payload.signStatus = r.signStatus; // 只有原本就有簽名資料才還原這個欄位，避免沒簽名概念的作業被誤判成需要簽名
+                            recBatch.set(ref, payload, { merge: true });
+                            if(r.correctness !== undefined){
+                                const gref = doc(gradingColl, recordDocId(r.studentId, r.assignmentId));
+                                gradeBatch.set(gref, {
+                                    studentId: r.studentId, studentName: r.studentName,
+                                    assignmentId: r.assignmentId, assignmentName: r.assignmentName,
+                                    correctness: r.correctness || '', corrected: !!r.corrected,
+                                    updatedAt: Date.now()
+                                }, { merge: true });
+                            }
+                        });
+                        await recBatch.commit().catch(e=>console.warn(e));
+                        await gradeBatch.commit().catch(e=>console.warn(e));
+                        window.showAlert(`已還原「${label}」，可以去「訂正與加點→已封存作業的訂正紀錄」繼續操作了`);
                     });
                     $('archivesList').querySelectorAll('[data-del-archive]').forEach(b => b.onclick = async () => {
                         const aid = b.getAttribute('data-del-archive');
@@ -2104,7 +2154,7 @@
                 await addDoc(archivesColl, {
                     timestamp: Date.now(),
                     dateLabel: dateLabel || todayStr(),
-                    assignments: [{ id: dailyAsg.id, name: dailyAsg.name, subjectName: dSubj?dSubj.name:'' }],
+                    assignments: [{ id: dailyAsg.id, name: dailyAsg.name, subjectName: dSubj?dSubj.name:'', needsSign: true }],
                     records: snapshotRecords,
                     studentCount: st.students.length,
                     assignmentCount: 1
@@ -2123,7 +2173,7 @@
             renderContactTab(records, gradingRecords, st);
             editorReady = true;
         }
-        /* 可用 API：addRecord(obj) / deleteRecord(id) / clearAll() / saveSettings(obj) / submitGroupRecords(items) / adminSetStatus(item) / adminSetGrading(item) */
+        /* 可用 API：clearAll(excludeIds) / saveSettings(obj) / submitGroupRecords(items) / adminSetStatus(item) / adminSetGrading(item) */
         /* ================================================== */
     </script>
 </body>
