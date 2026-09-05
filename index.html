@@ -1719,15 +1719,17 @@
                 </div>
                 <div id="tabGrading" class="tab-panel" style="display:none">
                     <div class="card">
-                        <h2>作業對錯與訂正（依座號排序）</h2>
-                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">紅框＝缺交（還沒繳交，無法評對錯）。已繳的作業可以點選：✓全對／▲有錯／✗遺失；選「有錯」後會多一顆「訂正完成」按鈕。全對 +10 點，訂正完成 +5 點，可以隨時修改重選。</p>
-                        <div class="table-scroll">
-                            <table>
-                                <thead id="gradeThead"></thead>
-                                <tbody id="gradeTbody"></tbody>
-                            </table>
+                        <h2>作業對錯與訂正（依座號排序） <button class="btn small outline" id="toggleGradeMatrixBtn" style="margin-left:8px;font-weight:normal">收合</button></h2>
+                        <div id="gradeMatrixBody">
+                            <p class="empty-hint" style="text-align:left;padding:0 0 10px">紅框＝缺交（還沒繳交，無法評對錯）。已繳的作業可以點選：✓全對／▲有錯／✗遺失；選「有錯」後會多一顆「訂正完成」按鈕。全對 +10 點，訂正完成 +5 點，可以隨時修改重選。</p>
+                            <div class="table-scroll">
+                                <table>
+                                    <thead id="gradeThead"></thead>
+                                    <tbody id="gradeTbody"></tbody>
+                                </table>
+                            </div>
+                            <p id="gradeEmpty" class="empty-hint" style="display:none"></p>
                         </div>
-                        <p id="gradeEmpty" class="empty-hint" style="display:none"></p>
                     </div>
                     <div class="card">
                         <h2>已封存作業的訂正紀錄 <button class="btn small outline" id="toggleArchivedGradingBtn" style="margin-left:8px;font-weight:normal">展開</button></h2>
@@ -2124,6 +2126,12 @@
                 renderGroups();
             };
 
+            $('toggleGradeMatrixBtn').onclick = () => {
+                const body = $('gradeMatrixBody');
+                const show = body.style.display === 'none';
+                body.style.display = show ? 'block' : 'none';
+                $('toggleGradeMatrixBtn').textContent = show ? '收合' : '展開';
+            };
             $('toggleArchivedGradingBtn').onclick = () => {
                 const body = $('archivedGradingBody');
                 const show = body.style.display === 'none';
