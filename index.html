@@ -1115,11 +1115,6 @@
                     $('missingListModal').style.display = 'flex';
                 };
             });
-            $('exportContactListBtn').onclick = async () => {
-                const text = `聯絡簿每日任務\n未繳：${missingList.length?missingList.join('、'):'無'}\n未簽名：${unsignedList.length?unsignedList.join('、'):'無'}\n沒寫任務：${notWrittenList.length?notWrittenList.join('、'):'無'}`;
-                try { await navigator.clipboard.writeText(text); window.showAlert('已複製名單'); }
-                catch(e){ window.showAlert('複製失敗，請手動選取文字'); }
-            };
 
             if(!dailyAsg){
                 dailyBox.innerHTML = '<p class="empty-hint">目前沒有「聯絡簿每日任務」這項作業</p>';
@@ -1405,6 +1400,58 @@
                     await clearRecordsForAssignment(aid);
                     if(window.__extraPastAssignments) delete window.__extraPastAssignments[aid];
                     window.showAlert(`已刪除「${label}」`);
+                };
+                $('showPastMissingBtn').onclick = () => {
+                    $('missingListTitle').textContent = '過去作業：未繳與未訂正清單';
+                    if(!pastOptions.length){
+                        $('missingListBody').innerHTML = '<p>目前沒有已封存的作業紀錄（可以先按「載入更多歷史作業」）</p>';
+                    } else {
+                        const blocks = pastOptions.map(([id, info]) => {
+                            const label = `${info.dateLabel ? info.dateLabel+' ' : ''}${info.name}`;
+                            const isPastDailyItem = info.name === '聯絡簿每日任務';
+                            const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName||''));
+                            const missing = applicable.filter(s => {
+                                const g = gradingRecs.find(x=>x.studentId===s.id && x.assignmentId===id);
+                                if(g && g.correctness === '遺失') return false; // 已標記遺失的不重複算進未繳，歸類在遺失清單即可
+                                const rec = records.find(r=>r.studentId===s.id && r.assignmentId===id);
+                                return !rec || rec.status !== '已繳';
+                            });
+                            const uncorrected = applicable.filter(s => {
+                                const g = gradingRecs.find(x=>x.studentId===s.id && x.assignmentId===id);
+                                return g && g.correctness === '有錯' && !g.corrected;
+                            });
+                            const notWritten = isPastDailyItem ? applicable.filter(s => {
+                                const g = gradingRecs.find(x=>x.studentId===s.id && x.assignmentId===id);
+                                return g && g.correctness === '沒寫任務';
+                            }) : [];
+                            if(!missing.length && !uncorrected.length && !notWritten.length) return ''; // 全部都沒人，整項作業跳過
+                            const missingLine = missing.length ? `<p style="margin:0 0 4px;color:var(--muted)">未繳：${missing.map(s=>s.name).join('、')}</p>` : '';
+                            const uncorrectedLine = uncorrected.length ? `<p style="margin:0 0 4px;color:var(--muted)">未訂正：${uncorrected.map(s=>s.name).join('、')}</p>` : '';
+                            const notWrittenLine = notWritten.length ? `<p style="margin:0 0 14px;color:var(--muted)">沒寫任務：${notWritten.map(s=>s.name).join('、')}</p>` : '';
+                            return `<p style="margin-bottom:4px"><strong>${label}</strong></p>${missingLine}${uncorrectedLine}${notWrittenLine}`;
+                        }).filter(html => html);
+                        $('missingListBody').innerHTML = blocks.length ? blocks.join('') : '<p class="empty-hint">目前沒有任何未繳或未訂正的項目</p>';
+                    }
+                    $('missingListModal').style.display = 'flex';
+                };
+                $('showPastLostBtn').onclick = () => {
+                    $('missingListTitle').textContent = '過去作業：遺失清單';
+                    const countByStudent = {}; // studentId -> count
+                    let totalCount = 0;
+                    pastOptions.forEach(([id]) => {
+                        gradingRecs.filter(g => g.assignmentId === id && g.correctness === '遺失').forEach(g => {
+                            totalCount++;
+                            countByStudent[g.studentId] = (countByStudent[g.studentId] || 0) + 1;
+                        });
+                    });
+                    const studentsWithLost = Object.keys(countByStudent).map(id => st.students.find(x=>x.id===id)).filter(Boolean);
+                    const list = sortBySeat(studentsWithLost);
+                    let html = `<p style="margin-bottom:14px"><strong>共 ${totalCount} 項遺失作業</strong></p>`;
+                    html += list.length
+                        ? list.map(s => `<p style="margin:0 0 6px">${s.seat!=null && s.seat!=='' ? s.seat+'號 ' : ''}${s.name}：${countByStudent[s.id]}項</p>`).join('')
+                        : '<p class="empty-hint">目前沒有標記遺失的作業</p>';
+                    $('missingListBody').innerHTML = html;
+                    $('missingListModal').style.display = 'flex';
                 };
             }
 
@@ -1707,7 +1754,6 @@
                         <div class="row" style="margin-bottom:14px">
                             <button class="btn small" id="contactViewSeatBtn">依座號</button>
                             <button class="btn small outline" id="contactViewGroupBtn">依小組</button>
-                            <button class="btn outline" id="exportContactListBtn">匯出未繳/未簽名/沒寫任務名單</button>
                         </div>
                         <div id="dailyQuickGradeList"></div>
                     </div>
@@ -1740,6 +1786,10 @@
                                 <select id="pastAssignmentSelect" style="flex:1"></select>
                                 <button class="btn outline" id="loadPastArchivesBtn">載入更多歷史作業</button>
                                 <button class="btn outline danger" id="deleteSelectedPastBtn">刪除選取的這筆</button>
+                            </div>
+                            <div class="row" style="margin-bottom:10px">
+                                <button class="btn outline" id="showPastMissingBtn">未繳與未訂正清單</button>
+                                <button class="btn outline" id="showPastLostBtn">作業遺失清單</button>
                             </div>
                             <div id="pastAssignmentGradeList"></div>
                         </div>
