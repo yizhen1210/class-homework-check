@@ -90,13 +90,14 @@
         select, .txt-input { width: 100%; padding: 10px 14px; border: 2px solid var(--line); border-radius: 12px; font-family: inherit; font-size: 1em; background: var(--surface); color: var(--text); outline: none; }
         select:focus, .txt-input:focus { border-color: var(--accent); box-shadow: 0 0 12px 3px var(--focus-glow); }
         .student-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
-        .daily-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+        .daily-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: nowrap; }
         .daily-row:last-child { border-bottom: none; }
         .daily-row .student-name { min-width: 70px; flex-shrink: 0; }
-        .row-slot-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 86px; min-height: 30px; }
-        .row-slot-icon { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 30px; }
-        .row-slot-corrected { display: inline-flex; align-items: center; justify-content: center; min-width: 92px; min-height: 30px; }
-        .corrected-btn { padding: 6px 14px; border-radius: 20px; border: 2px solid #7b5ea7; background: transparent; color: #7b5ea7; font-family: inherit; font-size: 0.85em; cursor: pointer; transition: background .15s, color .15s; }
+        #dailyQuickGradeList, #pastAssignmentGradeList { overflow-x: auto; }
+        .row-slot-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 86px; min-height: 30px; flex-shrink: 0; }
+        .row-slot-icon { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 30px; flex-shrink: 0; }
+        .row-slot-corrected { display: inline-flex; align-items: center; justify-content: center; min-width: 56px; min-height: 30px; flex-shrink: 0; }
+        .corrected-btn { padding: 5px 8px; border-radius: 16px; border: 2px solid #7b5ea7; background: transparent; color: #7b5ea7; font-family: inherit; font-size: 0.75em; cursor: pointer; transition: background .15s, color .15s; white-space: nowrap; }
         .corrected-btn:hover { background: rgba(123,94,167,0.12); }
         .corrected-btn.active { background: #7b5ea7; color: #fff; }
         .toggle-pill { padding: 6px 16px; border-radius: 20px; border: none; font-family: inherit; font-size: 0.9em; cursor: pointer; color: #fff; transition: filter .15s; }
@@ -154,8 +155,9 @@
         .cell-status-btn.missing { background: var(--danger); }
         .cell-status-btn.unsigned { background: #b8860c; }
         .cell-stack { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+        .corrected-slot { min-height: 36px; display: flex; align-items: center; justify-content: center; }
         #matrixThead th, #matrixTbody td { text-align: center; min-width: 82px; }
-        #gradeThead th, #gradeTbody td { text-align: center; min-width: 82px; }
+        #gradeThead th, #gradeTbody td { text-align: center; min-width: 82px; vertical-align: top; }
         #matrixTbody td:first-child, #matrixThead th:first-child { text-align: left; white-space: nowrap; }
         #gradeTbody td:first-child, #gradeThead th:first-child { text-align: left; white-space: nowrap; }
         .sign-tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); font-size: 0.75em; vertical-align: middle; }
@@ -1051,7 +1053,7 @@
                點「已繳」變成只顯示已繳（不會同時看到未繳），再點一次恢復未繳；簽名同理。 ---- */
         let contactViewMode = 'seat'; // 'seat' 依座號扁平顯示 | 'group' 依小組顯示
         function renderContactRow(s, dailyAsg, dSubj, recs, gradingRecs){
-            if(isPulledOut(s, dSubj?dSubj.name:'')) return `<div class="daily-row">
+            if(isPulledOut(s, dSubj?dSubj.name:'')) return `<div class="daily-row with-sign">
                 <span class="student-name">${s.name}</span>
                 <span class="row-slot-pill"><span class="pulled-out-pill">抽離</span></span>
                 <span class="row-slot-pill"></span>
@@ -1066,13 +1068,13 @@
             const g = gradingRecs.find(x=>x.studentId===s.id && x.assignmentId===dailyAsg.id);
             const dGrade = g ? g.correctness : '';
             const submitted = dStatus === '已繳';
-            return `<div class="daily-row" data-daily-student="${s.id}">
+            return `<div class="daily-row with-sign" data-daily-student="${s.id}">
                 <span class="student-name">${s.name}</span>
                 <span class="row-slot-pill"><button type="button" class="toggle-pill ${dStatus==='已繳'?'submitted':'missing'}" data-daily-status-toggle>${dStatus}</button></span>
                 <span class="row-slot-pill">${submitted ? `<button type="button" class="toggle-pill ${dSign==='已簽名'?'submitted':'unsigned'}" data-daily-sign-toggle>${dSign}</button>` : ''}</span>
                 <span class="row-slot-icon">${submitted ? `<button type="button" class="grade-btn ${dGrade==='全對'?'active g-ok':''}" data-daily-grade="全對" title="全對">✓</button>` : ''}</span>
                 <span class="row-slot-icon">${submitted ? `<button type="button" class="grade-btn ${dGrade==='有錯'?'active g-err':''}" data-daily-grade="有錯" title="有錯">▲</button>` : ''}</span>
-                <span class="row-slot-corrected">${(submitted && dGrade==='有錯') ? `<button type="button" class="corrected-btn ${g&&g.corrected?'active':''}" data-daily-corrected="1">${g&&g.corrected?'✓已訂正':'訂正完成'}</button>` : ''}</span>
+                <span class="row-slot-corrected">${(submitted && dGrade==='有錯') ? `<button type="button" class="corrected-btn ${g&&g.corrected?'active':''}" data-daily-corrected="1">${g&&g.corrected?'✓訂正':'訂正'}</button>` : ''}</span>
                 <span class="row-slot-icon">${submitted ? `<button type="button" class="grade-btn ${dGrade==='沒寫任務'?'active g-lost':''}" data-daily-grade="沒寫任務" title="沒寫任務">－</button>` : ''}</span>
             </div>`;
         }
@@ -1281,7 +1283,8 @@
                         ? pastInfo.needsSign
                         : (isPastDaily || records.some(r => r.assignmentId === aid && r.signStatus !== undefined));
                     box.innerHTML = sortBySeat(st.students).map(s => {
-                        if(isPulledOut(s, pastSubjName)) return `<div class="daily-row">
+                        const rowClass = 'daily-row' + (pastNeedsSign ? ' with-sign' : '');
+                        if(isPulledOut(s, pastSubjName)) return `<div class="${rowClass}">
                             <span class="student-name">${s.name}</span>
                             <span class="row-slot-pill"><span class="pulled-out-pill">抽離</span></span>
                             ${pastNeedsSign ? `<span class="row-slot-pill"></span>` : ''}
@@ -1298,13 +1301,13 @@
                         const dStatus = rec ? rec.status : '未繳';
                         const dSign = (rec && rec.signStatus) ? rec.signStatus : '未簽名';
                         const showCorrected = cur==='有錯';
-                        return `<div class="daily-row" data-past-student="${s.id}">
+                        return `<div class="${rowClass}" data-past-student="${s.id}">
                             <span class="student-name">${s.name}</span>
                             <span class="row-slot-pill"><button type="button" class="toggle-pill ${dStatus==='已繳'?'submitted':'missing'}" data-past-status-toggle>${dStatus}</button></span>
                             ${pastNeedsSign ? `<span class="row-slot-pill">${dStatus==='已繳' ? `<button type="button" class="toggle-pill ${dSign==='已簽名'?'submitted':'unsigned'}" data-past-sign-toggle>${dSign}</button>` : ''}</span>` : ''}
                             <span class="row-slot-icon"><button type="button" class="grade-btn ${cur==='全對'?'active g-ok':''}" data-past-grade="全對" title="全對">✓</button></span>
                             <span class="row-slot-icon"><button type="button" class="grade-btn ${cur==='有錯'?'active g-err':''}" data-past-grade="有錯" title="有錯">▲</button></span>
-                            <span class="row-slot-corrected">${showCorrected ? `<button type="button" class="corrected-btn ${g&&g.corrected?'active':''}" data-past-corrected="1">${g&&g.corrected?'✓已訂正':'訂正完成'}</button>` : ''}</span>
+                            <span class="row-slot-corrected">${showCorrected ? `<button type="button" class="corrected-btn ${g&&g.corrected?'active':''}" data-past-corrected="1">${g&&g.corrected?'✓訂正':'訂正'}</button>` : ''}</span>
                             <span class="row-slot-icon"><button type="button" class="grade-btn ${cur===thirdVal?'active g-lost':''}" data-past-grade="${thirdVal}" title="${thirdVal}">${thirdIcon}</button></span>
                             ${pointsOf(g)>0 ? `<span class="empty-hint" style="padding:0">${g.pointsGiven?'已加點':'尚未加點'}</span>` : ''}
                         </div>`;
@@ -1431,8 +1434,8 @@
                             <button type="button" class="grade-btn ${cur==='有錯'?'active g-err':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="有錯" title="有錯">▲</button>
                             ${thirdBtn}
                         </div>`;
-                    const correctedBtn = cur === '有錯' ? `<button type="button" class="btn small ${g&&g.corrected?'':'outline'}" data-corrected-student="${s.id}" data-corrected-assignment="${a.id}">${g&&g.corrected?'✓已訂正':'訂正完成'}</button>` : '';
-                    return `<td><div class="cell-stack">${btns}${correctedBtn}</div></td>`;
+                    const correctedBtn = cur === '有錯' ? `<button type="button" class="corrected-btn ${g&&g.corrected?'active':''}" data-corrected-student="${s.id}" data-corrected-assignment="${a.id}">${g&&g.corrected?'✓訂正':'訂正'}</button>` : '';
+                    return `<td><div class="cell-stack">${btns}<div class="corrected-slot">${correctedBtn}</div></div></td>`;
                 }).join('');
                 return `<tr><td>${s.name}</td>${cells}</tr>`;
             }).join('') : '';
@@ -1940,7 +1943,7 @@
                                             <button type="button" class="grade-btn ${r.correctness==='有錯'?'active g-err':''}" data-arch-grade="${i}" data-arch-grade-value="有錯" title="有錯">▲</button>
                                             <button type="button" class="grade-btn ${r.correctness==='沒寫任務'?'active g-lost':''}" data-arch-grade="${i}" data-arch-grade-value="沒寫任務" title="沒寫任務">－</button>
                                         </div>
-                                        ${r.correctness==='有錯' ? `<button type="button" class="btn small ${r.corrected?'':'outline'}" data-arch-corrected="${i}">${r.corrected?'✓已訂正':'訂正完成'}</button>` : ''}
+                                        ${r.correctness==='有錯' ? `<button type="button" class="corrected-btn ${r.corrected?'active':''}" data-arch-corrected="${i}">${r.corrected?'✓訂正':'訂正'}</button>` : ''}
                                     `}
                                 </td>` : ''}
                                 <td>${r.remark||''}</td>
