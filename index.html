@@ -1818,10 +1818,9 @@
                     <div class="card">
                         <h2>學期設定</h2>
                         <p class="empty-hint" style="text-align:left;padding:0 0 10px">聯絡簿只有在「上課日」才會換成新的一天，非上課日（假日/寒暑假）不會多出空白紀錄。一般作業不受這個設定影響。</p>
-                        <div class="row" style="flex-wrap:nowrap">
-                            <div class="field semester-date-field" style="width:calc(50% - 5px);overflow:hidden"><label>開學日</label><input type="date" id="semStartDate" class="txt-input" style="width:100%;box-sizing:border-box"></div>
-                            <div style="width:10px;flex-shrink:0"></div>
-                            <div class="field semester-date-field" style="width:calc(50% - 5px);overflow:hidden"><label>結業日</label><input type="date" id="semEndDate" class="txt-input" style="width:100%;box-sizing:border-box"></div>
+                        <div class="row" style="flex-wrap:wrap">
+                            <div class="field semester-date-field" style="flex:1 1 200px"><label>開學日</label><input type="date" id="semStartDate" class="txt-input"></div>
+                            <div class="field semester-date-field" style="flex:1 1 200px"><label>結業日</label><input type="date" id="semEndDate" class="txt-input"></div>
                         </div>
                         <label style="display:flex;align-items:center;gap:6px;margin-bottom:14px">
                             <input type="checkbox" id="skipWeekendsChk" style="width:auto" checked>週六、週日不算上課日
