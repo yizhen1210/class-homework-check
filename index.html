@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>作業登記</title>
 
-    <!-- PWA / 桌面圖示：三張 PNG 與此檔同目錄一起上傳，檔名須與 manifest 一致 -->
+    <!-- PWA / 桌面圖示 -->
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-180.png">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -16,18 +16,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Iansui&display=swap" rel="stylesheet">
 
     <style>
-        /* ---- 全站設計變數：顏色一律用變數，勿寫死 ---- */
+        /* ---- 全站設計變數 ---- */
         :root {
-            --bg: #e8e8e2;          /* 頁面底色 */
-            --surface: #ffffff;     /* 卡片/輸入框底 */
-            --text: #2e3a35;        /* 主文字 */
-            --muted: #9aa39d;       /* 次要/placeholder */
-            --accent-rgb: 143,166,169;             /* 主色 RGB（改這裡即可，其餘自動跟隨） #8FA6A9 */
-            --accent: rgb(var(--accent-rgb));     /* 主色（按鈕、邊框、focus） */
-            --focus-glow: color-mix(in srgb, var(--accent) 50%, transparent); /* focus 光暈：自動＝主色 */
-            --accent-dark: color-mix(in srgb, var(--accent) 82%, #000); /* 主色 hover：自動加深 */
-            --line: #b4bab2;        /* 分隔線/淺邊框 */
-            --danger: #c4674f;      /* 刪除/警示 */
+            --bg: #e8e8e2;          
+            --surface: #ffffff;     
+            --text: #2e3a35;        
+            --muted: #9aa39d;       
+            --accent-rgb: 143,166,169;             
+            --accent: rgb(var(--accent-rgb));     
+            --focus-glow: color-mix(in srgb, var(--accent) 50%, transparent); 
+            --accent-dark: color-mix(in srgb, var(--accent) 82%, #000); 
+            --line: #b4bab2;        
+            --danger: #c4674f;      
         }
         * { box-sizing: border-box; }
         body {
@@ -38,19 +38,22 @@
             -webkit-font-smoothing: antialiased;
         }
 
-        /* ---- 載入 gate：首次資料到齊前隱藏會變動的內容，避免預設值閃現 ---- */
         body:not(.ready) [data-gated] { visibility: hidden; }
 
-        /* ---- 彈窗 base（所有 app 共用這組命名，勿改名） ---- */
+        /* ---- 彈窗 base ---- */
         .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); align-items: center; justify-content: center; z-index: 1000; }
         .modal-content { background: var(--surface); border: 3px solid var(--line); padding: 36px 44px; border-radius: 20px; text-align: center; box-shadow: 0 20px 55px rgba(0,0,0,0.4); width: min(520px, 90vw); }
         .modal-title { font-size: 1.4em; margin: 0 0 22px; }
-        .modal-content input { display: block; width: 100%; margin: 0 0 24px; padding: 12px 18px; border: 2px solid var(--line); border-radius: 14px; font-family: inherit; font-size: 1.1em; outline: none; text-align: center; background: var(--surface); color: var(--text); }
-        .modal-content input::placeholder { color: var(--muted); }
-        .modal-input { display: block; width: 100%; margin: 0 0 24px; padding: 12px 18px; border: 2px solid var(--line); border-radius: 14px; font-family: inherit; font-size: 1.1em; outline: none; text-align: center; background: var(--surface); color: var(--text); }
-        .modal-input::placeholder { color: var(--muted); }
-        .modal-input:focus { border-color: var(--accent); box-shadow: 0 0 12px 3px var(--focus-glow); }
-        .modal-content input:focus { border-color: var(--accent); box-shadow: 0 0 12px 3px var(--focus-glow); }
+        
+        /* 合併重複的 input 樣式以保持整潔 */
+        .modal-content input, .modal-input { 
+            display: block; width: 100%; margin: 0 0 24px; padding: 12px 18px; 
+            border: 2px solid var(--line); border-radius: 14px; font-family: inherit; 
+            font-size: 1.1em; outline: none; text-align: center; background: var(--surface); color: var(--text); 
+        }
+        .modal-content input::placeholder, .modal-input::placeholder { color: var(--muted); }
+        .modal-content input:focus, .modal-input:focus { border-color: var(--accent); box-shadow: 0 0 12px 3px var(--focus-glow); }
+
         .modal-hint { display: none; margin: -14px 0 18px; font-size: 0.9em; color: var(--danger); }
         .modal-actions { display: flex; justify-content: center; gap: 18px; }
         .modal-actions button { padding: 11px 38px; border-radius: 50px; cursor: pointer; font-family: inherit; font-size: 1.15em; border: 2px solid var(--accent); }
@@ -77,11 +80,9 @@
 
         .admin-only.hidden { display: none !important; }
 
-        /* ---- 登入鈕自訂設定 ---- */
-        #loginBtn {
+        /* ---- 登入/登出鈕 ---- */
+        #loginBtn, #logoutBtn {
             background: transparent;
-            color: var(--accent);
-            border: 2px solid var(--accent);
             padding: 9px 22px;
             border-radius: 50px;
             font-family: inherit;
@@ -90,37 +91,15 @@
             transition: all .2s;
             cursor: pointer;
         }
-        #loginBtn:hover {
-            background: var(--accent);
-            color: #fff;
-        }
-        #loginBtn:active {
-            transform: scale(0.97);
-        }
+        #loginBtn { color: var(--accent); border: 2px solid var(--accent); }
+        #loginBtn:hover { background: var(--accent); color: #fff; }
+        #loginBtn:active { transform: scale(0.97); }
 
-        /* ---- 登出鈕自訂設定 ---- */
-        #logoutBtn {
-            background: transparent;
-            color: var(--danger);
-            border: 2px solid var(--danger);
-            padding: 9px 22px;
-            border-radius: 50px;
-            font-family: inherit;
-            font-size: 1.05em;
-            white-space: nowrap;
-            transition: all .2s;
-            cursor: pointer;
-        }
-        #logoutBtn:hover {
-            background: var(--danger);
-            color: #fff;
-        }
-        #logoutBtn:active {
-            transform: scale(0.97);
-        }
+        #logoutBtn { color: var(--danger); border: 2px solid var(--danger); }
+        #logoutBtn:hover { background: var(--danger); color: #fff; }
+        #logoutBtn:active { transform: scale(0.97); }
 
         /* ---- 本 app 專用樣式 ---- */
-        /* 修改版面標題區高度，並加上底部主色分隔線 */
         header { 
             display: grid; 
             grid-template-columns: 1fr auto 1fr; 
@@ -130,7 +109,6 @@
             margin-bottom: 24px;
         }
         
-        /* 讓文字與鉛筆按鈕使用 Flex 橫向排版，自動夾帶間距 */
         header h1 { 
             font-size: 2em; 
             margin: 0; 
@@ -142,38 +120,28 @@
             gap: 12px; 
         } 
 
-        /* 獨立設定的編輯鉛筆按鈕 */
         .title-edit-btn {
-            background: #fff;                 /* 白底 */
-            border: 2px solid var(--accent);  /* 藍綠色外框 */
-            border-radius: 50%;               /* 圓形 */
-            width: 46px;                      /* 桌機版寬度 */
-            height: 46px;                     /* 桌機版高度 */
-            font-size: 24px;                  /* 框內 emoji 大小約為框寬的 52% */
-            padding: 0;                       /* 取消內距 */
+            background: #fff;                 
+            border: 2px solid var(--accent);  
+            border-radius: 50%;               
+            width: 46px;                      
+            height: 46px;                     
+            font-size: 24px;                  
+            padding: 0;                       
             display: inline-flex;
-            align-items: center;              /* 內容垂直置中 */
-            justify-content: center;          /* 內容水平置中 */
+            align-items: center;              
+            justify-content: center;          
             cursor: pointer;
             transition: background .15s;
             margin: 0; 
             outline: none;
             transform: translateY(-2px);
         }
-        .title-edit-btn:hover {
-            background: var(--accent);        /* hover 時填滿藍綠色 */
-        }
+        .title-edit-btn:hover { background: var(--accent); }
         
         @media (max-width: 640px) {
-            .title-edit-btn {
-                width: 33px;                  /* 手機版寬度 */
-                height: 33px;                 /* 手機版高度 */
-                font-size: 17px;              /* 手機版字級 */
-            }
-            #loginBtn, #logoutBtn {
-                padding: 6px 13px;
-                font-size: 0.84em;
-            }
+            .title-edit-btn { width: 33px; height: 33px; font-size: 17px; }
+            #loginBtn, #logoutBtn { padding: 6px 13px; font-size: 0.84em; }
         }
 
         .icon-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: background .15s, transform .1s; }
@@ -190,14 +158,7 @@
         select, .txt-input { width: 100%; padding: 10px 14px; border: 2px solid var(--line); border-radius: 12px; font-family: inherit; font-size: 1em; background: var(--surface); color: var(--text); outline: none; }
         select:focus, .txt-input:focus { border-color: var(--accent); box-shadow: 0 0 12px 3px var(--focus-glow); }
         
-        input[type="date"].txt-input { 
-            box-sizing: border-box;
-            -webkit-appearance: none;
-            -moz-appearance: textfield;
-            min-height: 1.2em;
-            display: block; 
-            width: 100%; 
-        }
+        input[type="date"].txt-input { box-sizing: border-box; -webkit-appearance: none; -moz-appearance: textfield; min-height: 1.2em; display: block; width: 100%; }
 
         .student-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
         .daily-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: nowrap; }
@@ -210,14 +171,9 @@
         .corrected-btn { padding: 5px 8px; border-radius: 16px; border: 2px solid #7b5ea7; background: transparent; color: #7b5ea7; font-family: inherit; font-size: 0.75em; cursor: pointer; transition: background .15s, color .15s; white-space: nowrap; }
         .corrected-btn:hover { background: rgba(123,94,167,0.12); }
         .corrected-btn.active { background: #7b5ea7; color: #fff; }
-        .toggle-pill { padding: 6px 16px; border-radius: 20px; border: none; font-family: inherit; font-size: 0.9em; cursor: pointer; color: #fff; transition: filter .15s; }
         .pulled-out-pill { display: inline-block; padding: 6px 16px; font-size: 0.9em; color: var(--muted); }
         .cell-pulled-out { display: inline-block; padding: 6px 14px; font-size: 0.85em; color: var(--muted); }
         .badge-pulled-out { display: inline-block; padding: 2px 10px; font-size: 0.85em; color: var(--muted); }
-        .toggle-pill:hover { filter: brightness(0.9); }
-        .toggle-pill.submitted { background: var(--accent); }
-        .toggle-pill.missing { background: var(--danger); }
-        .toggle-pill.unsigned { background: #b8860c; }
         .student-row:last-child { border-bottom: none; }
         .student-name { flex: 1; font-size: 1em; }
         .mini-status-group { display: flex; gap: 6px; flex-shrink: 0; }
@@ -230,7 +186,6 @@
         .row { display: flex; gap: 10px; margin-bottom: 14px; }
         .row .txt-input { flex: 1; }
         
-        /* 併排日期容器的 RWD Flex 排版，加入 min-width:0 防溢出 */
         .date-range-row { display: flex; flex-direction: row; gap: 10px; margin-bottom: 14px; width: 100%; }
         .date-range-row .field { flex: 1; min-width: 0; margin-bottom: 0; overflow: hidden; }
 
@@ -289,16 +244,11 @@
         .tab-btn.active:hover { background: var(--accent-dark); }
         #fMsg { min-height: 1.4em; text-align: center; font-size: 0.9em; color: var(--accent); }
 
-        /* ---- 響應式：小螢幕（手機）調整 ---- */
+        /* ---- 響應式調整 ---- */
         .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         @media (max-width: 680px) {
             body { font-size: 17px; }
-            header { 
-                grid-template-columns: 1fr; 
-                row-gap: 12px; 
-                padding: 20px 14px; 
-                margin-bottom: 18px; 
-            }
+            header { grid-template-columns: 1fr; row-gap: 12px; padding: 20px 14px; margin-bottom: 18px; }
             header h1 { font-size: 1.5em; grid-column: 1; }
             header .header-actions { grid-column: 1; justify-self: center; }
             main, #adminArea { padding: 0 10px 40px; }
@@ -306,23 +256,13 @@
             .card h2 { font-size: 1.05em; }
             .row { flex-direction: column; gap: 8px; }
             .row .txt-input { width: 100%; }
-            .status-choices { gap: 8px; }
-            .status-choices label { min-width: 72px; padding: 9px 4px; font-size: 0.88em; }
-            .filters { flex-direction: column; }
-            .filters select { width: 100%; }
             table { font-size: 0.85em; }
             th, td { padding: 7px 5px; }
             .cell-status-btn { padding: 4px 9px; font-size: 0.78em; }
-            .cell-pulled-out { padding: 4px 9px; font-size: 0.78em; }
             .group-block-head { flex-wrap: wrap; gap: 8px; }
             .chip { font-size: 0.85em; padding: 4px 4px 4px 10px; }
             .student-row { flex-wrap: wrap; }
             .mini-status-btn { padding: 6px 9px; font-size: 0.8em; }
-            .admin-tabs { flex-direction: row; }
-            .tab-btn { width: auto; }
-            .inline-add-row { flex-direction: row; }
-            .inline-add-row .txt-input { width: auto; flex: 1; min-width: 0; }
-            .inline-add-row .btn { flex-shrink: 0; padding: 8px 14px; font-size: 0.85em; white-space: nowrap; }
             .stat-cards { grid-template-columns: repeat(3, 1fr); }
             .assignment-row { flex-direction: column; align-items: stretch; }
             .assignment-actions { justify-content: stretch; }
@@ -333,21 +273,16 @@
         @media (max-width: 420px) {
             header button:not(.icon-btn):not(.title-edit-btn) { padding: 8px 14px; font-size: 0.9em; }
             .btn { padding: 8px 16px; font-size: 0.95em; }
-            
-            /* 強制手機版左右併排，並縮小內距與字體以防撐破 */
             .date-range-row { flex-direction: row; gap: 6px; }
             .date-range-row .txt-input { padding: 8px 4px; font-size: 0.85em; text-align: center; }
         }
     </style>
 </head>
 <body>
-    <!-- ====== 版面骨架 ====== -->
     <header>
         <h1 data-gated>
             <span id="classNameSpan">608</span>
-            <button id="editClassNameBtn" class="title-edit-btn admin-only hidden" title="更改班級名稱" aria-label="更改班級名稱">
-                ✏️
-            </button>
+            <button id="editClassNameBtn" class="title-edit-btn admin-only hidden" title="更改班級名稱" aria-label="更改班級名稱">✏️</button>
             <span>作業登記</span>
         </h1>
         <div class="header-actions">
@@ -356,19 +291,15 @@
         </div>
     </header>
 
-    <main id="content" data-gated>
-        <!-- 小老師登記表單（公開，不需登入） -->
-    </main>
+    <main id="content" data-gated></main>
 
-    <section id="adminArea" class="admin-only hidden">
-        <!-- 老師登入後：班級/科目管理 + 查看區 -->
-    </section>
+    <section id="adminArea" class="admin-only hidden"></section>
 
     <footer style="text-align:center; padding:24px 16px; color:var(--muted); font-size:0.85em">
         Created by 怡臻老師
     </footer>
 
-    <!-- ====== 密碼彈窗（登入模式 A） ====== -->
+    <!-- 密碼彈窗 -->
     <div id="inputModal" class="modal-overlay">
         <div class="modal-content">
             <p class="modal-title">請輸入密碼</p>
@@ -381,7 +312,7 @@
         </div>
     </div>
 
-    <!-- ====== 通用提示框 ====== -->
+    <!-- 通用提示框 -->
     <div id="alertModal" class="modal-overlay">
         <div class="modal-content">
             <p class="modal-title" id="alertMsg"></p>
@@ -391,7 +322,7 @@
         </div>
     </div>
 
-    <!-- ====== 通用輸入框 ====== -->
+    <!-- 通用輸入框 -->
     <div id="promptModal" class="modal-overlay">
         <div class="modal-content">
             <p class="modal-title" id="promptMsg"></p>
@@ -403,7 +334,7 @@
         </div>
     </div>
 
-    <!-- ====== 按鈕式選取彈窗（例如換組別） ====== -->
+    <!-- 按鈕式選取彈窗 -->
     <div id="choiceModal" class="modal-overlay">
         <div class="modal-content">
             <p class="modal-title" id="choiceMsg"></p>
@@ -415,7 +346,7 @@
         </div>
     </div>
 
-    <!-- ====== 今日未繳作業名單（小老師用，方便抄到黑板上） ====== -->
+    <!-- 今日未繳作業名單 -->
     <div id="missingListModal" class="modal-overlay">
         <div class="modal-content" style="max-width:560px; text-align:left">
             <p class="modal-title" id="missingListTitle" style="text-align:center">今日未繳作業名單</p>
@@ -425,19 +356,12 @@
     </div>
 
     <script type="module">
-        /* =========================================================
-           通用骨架：Firebase + 三種登入模式 + 通用資料層 + 載入 gate
-           ========================================================= */
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signOut,
-                 signInWithEmailAndPassword,
-                 GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, query, orderBy, where, onSnapshot,
-                 addDoc, deleteDoc, setDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, query, orderBy, where, onSnapshot, addDoc, deleteDoc, setDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const $ = id => document.getElementById(id);
 
-        /* ========== 業務設定 ========== */
         const firebaseConfig = {
             apiKey: "AIzaSyACHWb3UBP-RGFw4mX9suOGL0M-2Zz-eAo",
             authDomain: "class-homework-check.firebaseapp.com",
@@ -446,18 +370,17 @@
             messagingSenderId: "426793456547",
             appId: "1:426793456547:web:e7b87de8e1b05ef4d48016"
         };
-        const COLL_PATH = "records";              // 流水帳集合名：每筆一次繳交登記
+        const COLL_PATH = "records";
         const ORDER_FIELD = "timestamp";
         const ORDER_DIR = "desc";
-        const SETTINGS_PATH = ["config", "settings"]; // 存班級/學生/科目/作業清單
+        const SETTINGS_PATH = ["config", "settings"];
 
-        const LOGIN_MODE = 'A';                    // 老師共用帳號、只輸密碼
-        const SHARED_EMAIL = "annychen1210@gmail.com";  // 老師登入帳號 email
+        const LOGIN_MODE = 'A';
+        const SHARED_EMAIL = "annychen1210@gmail.com";
         const ALLOWED_EMAILS = ["one@gmail.com", "two@gmail.com"];
-        /* ================================================ */
 
         if(!firebaseConfig.apiKey || !firebaseConfig.projectId){
-            document.body.innerHTML = '<div style="max-width:520px;margin:80px auto;padding:24px;font-family:\'Iansui\',system-ui,sans-serif;line-height:1.7;color:#2e3a35;text-align:center">尚未填入 Firebase 設定。<br>請在原始碼「業務設定」區的 <code>firebaseConfig</code> 填入你的專案設定後再開啟。</div>';
+            document.body.innerHTML = '<div style="max-width:520px;margin:80px auto;padding:24px;font-family:\'Iansui\',system-ui,sans-serif;line-height:1.7;color:#2e3a35;text-align:center">尚未填入 Firebase 設定。</div>';
             throw new Error('firebaseConfig 未設定');
         }
         const app = initializeApp(firebaseConfig);
@@ -465,9 +388,9 @@
         const db = getFirestore(app);
         const coll = collection(db, COLL_PATH);
         const settingsRef = doc(db, ...SETTINGS_PATH);
-        const archivesColl = collection(db, "archives"); // 「結束並封存」的歷史紀錄
-        const gradingColl = collection(db, "gradingRecords"); // 對錯/訂正紀錄，獨立於 records，不會被封存清空
-        const pointLogsColl = collection(db, "pointLogs"); // 加點紀錄（給匯出用）
+        const archivesColl = collection(db, "archives");
+        const gradingColl = collection(db, "gradingRecords");
+        const pointLogsColl = collection(db, "pointLogs");
 
         let isAdmin = false, editorReady = false, settingsArrived = false, recordsArrived = true, gateSettingsFailed = false;
         let settingsErrored = false, recordsErrored = false;
@@ -479,13 +402,11 @@
             if(!bad && el) el.remove();
         }
 
-        /* ---------- 載入 gate：公開首頁只需要 settings 到位，records 只有老師登入後才需要 ---------- */
         let readyTimer = setTimeout(markReady, 8000);
         function markReady(){ clearTimeout(readyTimer); document.body.classList.add("ready"); }
         function gateCheck(){ if(settingsArrived || gateSettingsFailed) markReady(); }
         function maybeLoadEditor(){ if(isAdmin && settingsArrived && !editorReady) loadEditor(settings); }
 
-        /* ---------- 通用資料層（流水帳型：collection 多筆，僅老師可用） ---------- */
         async function clearAll(excludeAssignmentIds){
             if(!isAdmin) return;
             const exclude = new Set(excludeAssignmentIds || []);
@@ -497,7 +418,6 @@
                 await batch.commit();
             }
         }
-        // 只清空「單一作業」的紀錄，不影響其他作業（聯絡簿封存專用，不能用 clearAll 整包清）
         async function clearRecordsForAssignment(assignmentId){
             if(!isAdmin) return;
             const snap = await getDocs(query(coll, where('assignmentId','==',assignmentId)));
@@ -508,7 +428,6 @@
                 await batch.commit();
             }
         }
-        // 同上，但清的是 gradingRecords（訂正/批改紀錄）
         async function clearGradingForAssignment(assignmentId){
             if(!isAdmin) return;
             const snap = await getDocs(query(gradingColl, where('assignmentId','==',assignmentId)));
@@ -522,11 +441,8 @@
         function saveSettings(obj){ if(!isAdmin) return; setDoc(settingsRef, obj, { merge: true }).catch(e=>console.warn(e)); }
 
         let records = [], settings = null;
-        // 注意：records 依 Firestore 規則設計為「只有登入的老師能讀」（見交付說明的安全規則）。
-        // 未登入的小老師本來就不該去讀這個集合，所以監聽只在 isAdmin 後才啟動，
-        // 避免匿名使用者觸發權限拒絕、把公開登記表單卡在錯誤畫面。
         function startRecordsListener(){
-            if(stopRecordsListener) return; // 已經在聽了
+            if(stopRecordsListener) return;
             recordsArrived = false;
             stopRecordsListener = onSnapshot(query(coll, orderBy(ORDER_FIELD, ORDER_DIR)), snap => {
                 records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -563,7 +479,6 @@
             settingsArrived = true;
             settingsErrored = false; refreshLoadError();
             
-            // 獨立更新班級名稱
             const cName = (settings && settings.className) || '608';
             if($('classNameSpan')) $('classNameSpan').textContent = cName;
             
@@ -578,7 +493,6 @@
             if(name && name.trim()) saveSettings({ className: name.trim() });
         };
 
-        /* ---------- 授權判斷（僅 gate 前端 UI，非安全邊界；見下方 Firestore 規則說明） ---------- */
         function isAuthorized(user){
             if(!user) return false;
             if(LOGIN_MODE === 'A') return user.email === SHARED_EMAIL;
@@ -595,8 +509,6 @@
             maybeLoadEditor();
         });
 
-        // 視窗大小改變（含手機轉向）時，重新判斷「繳交狀態一覽」要不要用精簡兩行顯示。
-        // debounce 一下，避免拖曳調整視窗大小時過度重繪。
         let resizeTimer = null;
         window.addEventListener('resize', () => {
             clearTimeout(resizeTimer);
@@ -654,7 +566,6 @@
             no.onclick = () => done(null);
             inp.onkeydown = e => { if(e.key === 'Enter') done(inp.value); else if(e.key === 'Escape') done(null); };
         });
-        // 純按鈕確認（不用打字），回傳 true/false
         window.askConfirm = (msg) => new Promise(res => {
             const m = $('promptModal'), inp = $('promptInput'), ok = $('promptOk'), no = $('promptNo');
             $('promptMsg').textContent = msg; inp.style.display = 'none';
@@ -663,7 +574,6 @@
             ok.onclick = () => done(true);
             no.onclick = () => done(false);
         });
-        // 按鈕式單選（例如選組別），回傳選到的值，取消回傳 null
         window.askChoice = (msg, options) => new Promise(res => {
             const m = $('choiceModal'), box = $('choiceButtons'), ok = $('choiceOk'), no = $('choiceCancel');
             $('choiceMsg').textContent = msg;
@@ -680,7 +590,6 @@
             no.onclick = () => done(null);
         });
 
-        /* ---------- 登入 / 登出 ---------- */
         $('loginBtn').onclick = () => {
             if(LOGIN_MODE === 'A'){ window.openLogin(); }
             else { signInWithPopup(auth, new GoogleAuthProvider()).catch(e=>window.showAlert("登入失敗")); }
@@ -699,37 +608,18 @@
         $('passInput').addEventListener('input', e => { if(!e.isComposing) checkIME(); });
         $('passInput').addEventListener('compositionend', checkIME);
 
-        /* =========================================================
-           業務邏輯
-           - 公開登記（小老師，不需登入）：submitGroupRecords() 直接寫入 records，
-             不經過上面的 addRecord()（addRecord 鎖 isAdmin，只給老師管理用，
-             例如刪除紀錄）。這是刻意新增的函式，未更動/更名既有骨架函式。
-           - 紀錄採「覆蓋式」：文件 ID 固定為 學生ID_作業ID，同一位學生同一個作業
-             不管登記幾次、或老師事後補按狀態，永遠只會有一筆紀錄被覆蓋更新，
-             不會產生重複紀錄。
-           - 老師登入後台分三頁：① 繳交紀錄查看（含補按狀態按鈕）② 科目與作業管理
-             ③ 學生管理（含組別）。
-           ========================================================= */
-
         function recordDocId(studentId, assignmentId){ return `${studentId}_${assignmentId}`; }
 
-        // 整組一次寫入（batch），仍不檢查 isAdmin —— 小老師登記本來就設計成公開可寫。
-        // 用固定 doc id 覆蓋，同學生同作業不會重複。用 merge，讓「繳交狀態」和
-        // 「簽名狀態」是兩個獨立欄位，更新其中一個不會清掉另一個。
-        // 真正的存取控制必須寫在 Firestore 規則（見檔案最後交付說明，注意規則需同時
-        // 開放 create 與 update，因為「覆蓋」對 Firestore 來說可能是 update）。
         function submitGroupRecords(items){
             const batch = writeBatch(db);
             const ts = Date.now();
             items.forEach(it => { const ref = doc(coll, recordDocId(it.studentId, it.assignmentId)); batch.set(ref, { ...it, [ORDER_FIELD]: ts }, { merge: true }); });
             return batch.commit().catch(e=>{ console.warn(e); window.showAlert('送出失敗，請檢查網路後重試'); });
         }
-        // 老師在查看區點狀態按鈕補登/修改：同樣是覆蓋式寫入（merge），只更新有帶到的欄位。
         function adminSetStatus(item){
             const ref = doc(coll, recordDocId(item.studentId, item.assignmentId));
             return setDoc(ref, { ...item, [ORDER_FIELD]: Date.now() }, { merge: true }).catch(e=>{ console.warn(e); window.showAlert('操作失敗，請檢查網路後重試'); });
         }
-        // 對錯/訂正紀錄：存在獨立的 gradingRecords，不會被「結束並封存」清空，點數才能長期累積。
         function adminSetGrading(item){
             const ref = doc(gradingColl, recordDocId(item.studentId, item.assignmentId));
             return setDoc(ref, { ...item, updatedAt: Date.now() }, { merge: true }).catch(e=>{ console.warn(e); window.showAlert('操作失敗，請檢查網路後重試'); });
@@ -739,7 +629,7 @@
         const badgeClass = s => s === '已繳' ? 'submitted' : 'missing';
         const SIGN_LIST = ['已簽名','未簽名'];
         const signClass = s => s === '已簽名' ? 'submitted' : 'unsigned';
-        // 依座號排序；沒填座號的排最後，其次用姓名排序
+        
         function sortBySeat(list){
             return [...list].sort((a,b) => {
                 const an = a.seat === '' || a.seat == null ? Infinity : Number(a.seat);
@@ -748,8 +638,6 @@
                 return (a.name||'').localeCompare(b.name||'', 'zh-Hant');
             });
         }
-        // 抽離上課：固定分「國語抽離」「數學抽離」兩類，用科目名稱是否恰為「國語」/「數學」判斷。
-        // 若老師的科目命名不是這兩個字，這個判斷不會生效。
         function isPulledOut(student, subjectName){
             if(!student || !student.pullout) return false;
             if(subjectName === '國語' && student.pullout.chinese) return true;
@@ -771,10 +659,6 @@
             return { chinese:false, math:false };
         }
 
-        /* ---- 公開登記表單：只依賴 settings，不依賴 records，避免每次有人送出
-               登記時（records 變動）就整個重畫、洗掉別人正在填的表單。
-               流程：先選科目→作業，選定後才出現組別；選定組別後才出現該組
-               學生列表，每位學生右側三顆狀態按鈕（預設「未繳」），整組一次送出。 ---- */
         let lastSettingsJSON = null;
         function renderPublic(recs, st, status){
             const content = $('content');
@@ -833,7 +717,7 @@
                             signGroup.style.display = 'flex';
                         } else {
                             signGroup.style.display = 'none';
-                            setRowSign(row, '未簽名'); // 未繳時簽名狀態沒有意義，重置避免不合邏輯的資料
+                            setRowSign(row, '未簽名');
                         }
                     }
                 }
@@ -881,11 +765,10 @@
                     buildStudentRows(list, !!(curAsg && curAsg.needsSign));
                     $('studentStep').style.display = list.length ? 'block' : 'none';
                     $('noStudentHint').style.display = list.length ? 'none' : 'block';
-                    // 回填這個作業已經送出過的狀態，避免使用者切走再切回來時被重置成未繳
                     if(curAsg && list.length){
                         const assignmentIdAtFetch = curAsg.id;
                         getDocs(query(coll, where('assignmentId','==', assignmentIdAtFetch))).then(snap => {
-                            if(aSel.value !== assignmentIdAtFetch) return; // 抓取期間已經切換，資料對不上就不套用
+                            if(aSel.value !== assignmentIdAtFetch) return;
                             const wrap = $('studentRows');
                             snap.docs.forEach(d => {
                                 const data = d.data();
@@ -937,10 +820,6 @@
             renderRecordsTab(recs, st);
         }
 
-        /* ---- 老師後台：三個分頁。登入後預設顯示「繳交紀錄查看」。
-               每次 records/settings 有變動都會呼叫 renderRecordsTab 全量重繪
-               （這裡沒有使用者正在輸入的欄位，重繪不會有干擾問題）。
-               若後台尚未建立（未登入過），直接跳過。 ---- */
         function nextStatus(cur){ const i = STATUS_LIST.indexOf(cur); return STATUS_LIST[(i+1) % STATUS_LIST.length]; }
         function todayStr(){
             const d = new Date();
@@ -949,7 +828,7 @@
 
         function renderRecordsTab(recs, st){
             const panel = $('tabRecords');
-            if(!panel) return; // 尚未登入建立過後台畫面
+            if(!panel) return;
             recs = recs || []; st = st || { groups:[], students:[], subjects:[], assignments:[] };
             const students = sortBySeat(st.students);
             const assignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務');
@@ -963,7 +842,6 @@
                 return (r && r.signStatus) ? r.signStatus : '未簽名';
             };
 
-            // ---- 快速新增作業的科目選單 ----
             const quickSubjSel = $('quickAssignmentSubject');
             const curQuickSubj = quickSubjSel.value;
             quickSubjSel.innerHTML = '<option value="">未分類</option>' + st.subjects.filter(s=>!s.isSystem).map(s=>`<option value="${s.id}">${s.name}</option>`).join('') + '<option value="__new__">＋ 新增科目...</option>';
@@ -1006,10 +884,9 @@
 
             const subjNameOf = a => { const s = st.subjects.find(x=>x.id===a.subjectId); return s ? s.name : ''; };
 
-            // ---- 數字清單 ----
             let doneCount=0, missingCount=0, unsignedCount=0;
             students.forEach(s => assignments.forEach(a => {
-                if(isPulledOut(s, subjNameOf(a))) return; // 抽離該科的學生，這門作業不列入計算
+                if(isPulledOut(s, subjNameOf(a))) return;
                 const v = statusOf(s.id, a.id);
                 if(v==='已繳') doneCount++; else missingCount++;
                 if(a.needsSign && v==='已繳' && signOf(s.id, a.id) !== '已簽名') unsignedCount++;
@@ -1045,7 +922,6 @@
                 };
             });
 
-            // ---- 今日作業管理 ----
             $('assignmentMgmtList').innerHTML = assignments.length ? assignments.map(a => `
                 <div class="assignment-row" data-assignment="${a.id}">
                     <span class="assignment-name">${a.name}${a.needsSign ? '<span class="sign-tag">需簽名</span>' : ''}</span>
@@ -1082,30 +958,22 @@
                 await batch.commit().catch(e=>console.warn(e));
             });
 
-            // ---- 扁平總表（依座號排序，不顯示組別/科目） ----
-            // 手機版且作業欄位較多時，標題與姓名改成精簡兩行顯示，避免欄位被擠壓
             const compactCols = window.innerWidth <= 680 && assignments.length > 3;
             function formatAssignmentLabel(name){
                 if(!compactCols) return name;
                 if(name === '聯絡簿每日任務') return '聯絡簿<br>每日任務';
-                // 國語課文編號：L1、L2...（數字含半形0-9與全形０-９）
                 const lMatch = name.match(/^([Ll][0-9０-９]+)(.*)$/);
                 if(lMatch && lMatch[2]) return `${lMatch[1]}<br>${lMatch[2]}`;
-                // 數學：結尾若是「P.幾到幾」頁碼，名稱放第一行、頁碼放第二行
                 const pageMatch = name.match(/^(.*?)\s*([Pp]\.?\s*[0-9０-９]+\s*[-~～至到]\s*[0-9０-９]+)\s*$/);
                 if(pageMatch && pageMatch[1]) return `${pageMatch[1]}<br>${pageMatch[2]}`;
-                // 數學：結尾若是純數字的「幾-幾」範圍（沒有 P. 前綴），名稱放第一行、範圍放第二行
                 const rangeMatch = name.match(/^(.*?)\s*([0-9０-９]+\s*[-~～至到]\s*[0-9０-９]+)\s*$/);
                 if(rangeMatch && rangeMatch[1]) return `${rangeMatch[1]}<br>${rangeMatch[2]}`;
-                // 數學：結尾若是「單元幾」，名稱放第一行、單元放第二行
                 const unitMatch = name.match(/^(.*?)\s*(第?[0-9０-９]+\s*單元)\s*$/);
                 if(unitMatch && unitMatch[1]) return `${unitMatch[1]}<br>${unitMatch[2]}`;
                 return name;
             }
             function formatStudentCell(name){
                 if(!compactCols) return name;
-                // 座號直接打在姓名前面（例如「23施姵岑」或全形「２３施姵岑」），
-                // 偵測開頭數字（半形0-9或全形０-９，前面允許空白）拆成第一行，姓名放第二行
                 const trimmed = (name||'').trim();
                 const m = trimmed.match(/^\s*([0-9０-９]+)\s*(.*)$/);
                 if(m && m[2]) return `${m[1]}<br>${m[2]}`;
@@ -1123,7 +991,6 @@
                     const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(v)}" data-student="${s.id}" data-assignment="${a.id}">${v}</button>`;
                     if(!a.needsSign) return `<td>${statusBtn}</td>`;
                     if(v !== '已繳'){
-                        // 還沒標記已繳，簽名沒有意義，先不能點——避免未繳卻顯示已簽名這種不合邏輯的狀態
                         return `<td><div class="cell-stack">${statusBtn}<span class="sign-placeholder">先標記已繳</span></div></td>`;
                     }
                     const sv = signOf(s.id, a.id);
@@ -1149,7 +1016,7 @@
                     assignmentId: aid, assignmentName: a?a.name:'',
                     status: nv
                 };
-                if(nv !== '已繳') payload.signStatus = '未簽名'; // 改回未繳時，簽名狀態一併重置，避免不合邏輯的資料殘留
+                if(nv !== '已繳') payload.signStatus = '未簽名';
                 await adminSetStatus(payload);
                 let rec = recs.find(r=>r.studentId===sid && r.assignmentId===aid);
                 if(rec) Object.assign(rec, payload); else recs.push(payload);
@@ -1176,9 +1043,7 @@
             });
         }
 
-        /* ---- 老師後台：聯絡簿分頁（獨立於訂正頁）。繳交/簽名改成單一切換按鈕：
-               點「已繳」變成只顯示已繳（不會同時看到未繳），再點一次恢復未繳；簽名同理。 ---- */
-        let contactViewMode = 'seat'; // 'seat' 依座號扁平顯示 | 'group' 依小組顯示
+        let contactViewMode = 'seat';
         function renderContactRow(s, dailyAsg, dSubj, recs, gradingRecs){
             if(isPulledOut(s, dSubj?dSubj.name:'')) return `<div class="daily-row with-sign">
                 <span class="student-name">${s.name}</span>
@@ -1214,7 +1079,6 @@
             $('contactViewSeatBtn').className = 'btn small' + (contactViewMode==='seat' ? '' : ' outline');
             $('contactViewGroupBtn').className = 'btn small' + (contactViewMode==='group' ? '' : ' outline');
 
-            // ---- 數字牌：未繳／未簽名／沒寫任務 ----
             const allStudents = sortBySeat(st.students).filter(s => !isPulledOut(s, dailyAsg ? (st.subjects.find(x=>x.id===dailyAsg.subjectId)?.name||'') : ''));
             const missingList = [], unsignedList = [], notWrittenList = [];
             if(dailyAsg){
@@ -1327,19 +1191,16 @@
             }
         }
 
-        /* ---- 老師後台：訂正與加點頁。gradingRecs 是獨立的 gradingRecords collection，
-               不會被「結束並封存」清掉，點數才能長期累積直到老師手動加點。
-               recs 是 records（用來判斷是否已繳，未繳=缺交，無法評對錯）。 ---- */
         function pointsOf(g){
             if(!g) return 0;
-            if(g.assignmentName === '聯絡簿每日任務') return 0; // 固定每日任務不計點
+            if(g.assignmentName === '聯絡簿每日任務') return 0;
             if(g.correctness === '全對') return 10;
             if(g.correctness === '有錯' && g.corrected) return 5;
             return 0;
         }
         function renderGradingTab(gradingRecs, recs, st){
             const panel = $('tabGrading');
-            if(!panel) return; // 尚未登入建立過後台畫面
+            if(!panel) return;
             gradingRecs = gradingRecs || []; recs = recs || []; st = st || { groups:[], students:[], subjects:[], assignments:[] };
             const students = sortBySeat(st.students);
             const assignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務');
@@ -1347,15 +1208,9 @@
             const statusOf = (sid, aid) => { const r = recs.find(x=>x.studentId===sid && x.assignmentId===aid); return r ? r.status : '未繳'; };
             const gradeOf = (sid, aid) => gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
 
-            // ---- 已封存作業的訂正紀錄：讓老師可以「事後」繼續批改已經被封存清空的作業，
-            //      不限於已經有評過分的（避免完全沒碰過的封存作業無法開始批改）。
             const archivedBox = $('pastAssignmentSelect');
             if(archivedBox){
                 const currentIds = new Set(st.assignments.map(a=>a.id));
-                // 先從 gradingRecords 裡找出「作業已不在目前清單」但評過分的，湊出可選清單（不用額外抓資料）。
-                // 聯絡簿的 ID 本身就帶日期（daily-作業名-YYYY-MM-DD），直接從 ID 解析出日期跟科目，
-                // 不用等「載入更多歷史作業」抓到封存快照才有日期。其他一般作業沒有這個規律，日期留空，
-                // 要看日期要按下面「載入更多歷史作業」從 archives 補上。
                 const knownPast = {};
                 gradingRecs.forEach(g => {
                     if(currentIds.has(g.assignmentId) || !g.assignmentName || knownPast[g.assignmentId]) return;
@@ -1367,7 +1222,7 @@
                     }
                 });
                 Object.assign(knownPast, window.__extraPastAssignments || {});
-                const pastOptions = Object.entries(knownPast); // [id, {name,dateLabel,subjectName}][]
+                const pastOptions = Object.entries(knownPast);
 
                 const selSubj = $('pastSubjectSelect');
                 const selPast = $('pastAssignmentSelect');
@@ -1398,8 +1253,6 @@
                     const gradeOfPast = sid => gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
                     const pastSubjName = knownPast[aid] ? (knownPast[aid].subjectName||'') : '';
                     const dSubj = isPastDaily ? st.subjects.find(x=>x.id===(st.assignments.find(a=>a.name==='聯絡簿每日任務')||{}).subjectId) : st.subjects.find(x=>x.name===pastSubjName);
-                    // 這份作業已經不在目前作業清單了，沒有 needsSign 欄位可以查，
-                    // 用「這個作業的紀錄裡有沒有人寫過 signStatus」來判斷它當初是不是需要簽名的作業。
                     const pastInfo = knownPast[aid];
                     const pastNeedsSign = pastInfo && pastInfo.needsSign !== undefined
                         ? pastInfo.needsSign
@@ -1531,7 +1384,7 @@
                 $('showPastMissingBtn').onclick = () => {
                     $('missingListTitle').textContent = '過去作業：未繳與未訂正清單';
                     if(!pastOptions.length){
-                        $('missingListBody').innerHTML = '<p>目前沒有已封存的作業紀錄（可以先按「載入更多歷史作業」）</p>';
+                        $('missingListBody').innerHTML = '<p>目前沒有已封存的作業紀錄</p>';
                     } else {
                         const blocks = pastOptions.map(([id, info]) => {
                             const label = `${info.dateLabel ? info.dateLabel+' ' : ''}${info.name}`;
@@ -1539,7 +1392,7 @@
                             const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName||''));
                             const missing = applicable.filter(s => {
                                 const g = gradingRecs.find(x=>x.studentId===s.id && x.assignmentId===id);
-                                if(g && g.correctness === '遺失') return false; // 已標記遺失的不重複算進未繳，歸類在遺失清單即可
+                                if(g && g.correctness === '遺失') return false;
                                 const rec = records.find(r=>r.studentId===s.id && r.assignmentId===id);
                                 return !rec || rec.status !== '已繳';
                             });
@@ -1551,7 +1404,7 @@
                                 const g = gradingRecs.find(x=>x.studentId===s.id && x.assignmentId===id);
                                 return g && g.correctness === '沒寫任務';
                             }) : [];
-                            if(!missing.length && !uncorrected.length && !notWritten.length) return ''; // 全部都沒人，整項作業跳過
+                            if(!missing.length && !uncorrected.length && !notWritten.length) return '';
                             const missingLine = missing.length ? `<p style="margin:0 0 4px;color:var(--muted)">未繳：${missing.map(s=>s.name).join('、')}</p>` : '';
                             const uncorrectedLine = uncorrected.length ? `<p style="margin:0 0 4px;color:var(--muted)">未訂正：${uncorrected.map(s=>s.name).join('、')}</p>` : '';
                             const notWrittenLine = notWritten.length ? `<p style="margin:0 0 14px;color:var(--muted)">沒寫任務：${notWritten.map(s=>s.name).join('、')}</p>` : '';
@@ -1563,7 +1416,7 @@
                 };
                 $('showPastLostBtn').onclick = () => {
                     $('missingListTitle').textContent = '過去作業：遺失清單';
-                    const countByStudent = {}; // studentId -> count
+                    const countByStudent = {};
                     let totalCount = 0;
                     pastOptions.forEach(([id]) => {
                         gradingRecs.filter(g => g.assignmentId === id && g.correctness === '遺失').forEach(g => {
@@ -1592,7 +1445,6 @@
                     const cur = g ? g.correctness : '';
                     const isDaily = a.name === '聯絡簿每日任務';
                     if(statusOf(s.id, a.id) !== '已繳'){
-                        // 缺交狀態下，遺失可以直接標記（東西不見了不需要先勾已繳），聯絡簿沒有遺失概念故不提供
                         if(isDaily) return `<td><span class="grade-missing">缺交</span></td>`;
                         if(cur === '遺失'){
                             return `<td><div class="cell-stack"><span class="grade-missing">缺交</span><button type="button" class="grade-btn active g-lost" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="遺失" title="取消遺失標記">✗</button></div></td>`;
@@ -1622,7 +1474,7 @@
                 const stu = st.students.find(x=>x.id===sid);
                 const a = st.assignments.find(x=>x.id===aid);
                 const g = gradeOf(sid, aid);
-                const nextVal = (g && g.correctness === val) ? '' : val; // 再點一次同一個＝重設回未評分
+                const nextVal = (g && g.correctness === val) ? '' : val;
                 await adminSetGrading({
                     studentId: sid, studentName: stu?stu.name:'',
                     assignmentId: aid, assignmentName: a?a.name:'',
@@ -1643,7 +1495,6 @@
                 });
             });
 
-            // ---- 加點 ----
             const sel = $('pointsStudentSelect');
             const curSel = sel.value;
             sel.innerHTML = '<option value="">請選擇學生</option>' + students.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
@@ -1656,7 +1507,6 @@
                 if(!stu) return;
                 const currentIds = new Set(st.assignments.map(a=>a.id));
 
-                // 檢查目前作業裡，這位學生還有哪些缺交或有錯未訂正（提醒用，不影響已經可以加的點）
                 const incomplete = [];
                 st.assignments.filter(a => a.name !== '聯絡簿每日任務').forEach(a => {
                     if(isPulledOut(stu, subjNameOf(a))) return;
@@ -1668,16 +1518,13 @@
                     window.showAlert(`「${stu.name}」還有未完成項目，這些不會計點：${incomplete.join('、')}`);
                 }
 
-                // 累積但還沒加過點的項目：掃全部 gradingRecords（不限於目前作業，之前封存過的也算）。
-                // 若作業還在目前清單裡，要額外用最新的 records 確認目前真的是「已繳」，
-                // 避免評過分後又被改回未繳，卻還被算進點數裡。已封存（不在目前清單）的沒有即時狀態可查，沿用當初的評分。
                 const eligible = gradingRecs.filter(g => {
                     if(g.studentId !== sid || g.pointsGiven || pointsOf(g) <= 0) return false;
                     if(currentIds.has(g.assignmentId) && statusOf(sid, g.assignmentId) !== '已繳') return false;
                     return true;
                 });
                 if(!eligible.length){
-                    $('pointsResult').innerHTML = `<p class="empty-hint">「${stu.name}」目前沒有可加點的項目${incomplete.length?'（見上方提醒）':''}</p>`;
+                    $('pointsResult').innerHTML = `<p class="empty-hint">「${stu.name}」目前沒有可加點的項目</p>`;
                     return;
                 }
                 const items = eligible.map(g => ({
@@ -1700,7 +1547,6 @@
                 $('pointsResult').innerHTML = `<p>已幫「${stu.name}」加 <strong>${total}</strong> 點</p>`;
             };
 
-            // ---- 加點紀錄載入／匯出 ----
             $('loadPointLogsBtn').onclick = async () => {
                 $('pointLogsList').innerHTML = '<p class="empty-hint">載入中…</p>';
                 try {
@@ -1715,7 +1561,7 @@
                         const logId = btn.getAttribute('data-undo-log');
                         const item = list.find(x=>x.id===logId);
                         if(!item) return;
-                        const ok2 = await window.askConfirm(`撤銷「${item.studentName} +${item.totalPoints}點」這筆加點紀錄嗎？相關項目會恢復成「尚未加點」，可以重新加。`);
+                        const ok2 = await window.askConfirm(`撤銷「${item.studentName} +${item.totalPoints}點」這筆加點紀錄嗎？`);
                         if(!ok2) return;
                         const undoBatch = writeBatch(db);
                         (item.items||[]).forEach(i => undoBatch.set(doc(gradingColl, recordDocId(item.studentId, i.assignmentId)), { pointsGiven: false }, { merge: true }));
@@ -1738,11 +1584,6 @@
             };
         }
 
-        /* ---- 老師後台：三分頁骨架（首次登入建立一次），科目/學生管理清單
-               皆用區域刷新，不動到輸入框，避免打字打到一半被清掉）。 ---- */
-        // 綁定為「每天一定有」的固定作業：聯絡簿用「日期」當 ID（不是隨機 ID），
-        // 這樣每天寫入的都是不同的文件，昨天的資料不會被今天覆蓋，也不需要手動封存——
-        // 過了一天，昨天那份就自動變成「已封存作業」，可以直接在「已封存作業的訂正紀錄」picker 找到繼續批改。
         function todayISODate(){
             const d = new Date();
             return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -1750,11 +1591,10 @@
         const DAILY_FIXED_ASSIGNMENTS = [
             { name: '聯絡簿每日任務', needsSign: true }
         ];
-        // 判斷某一天是不是「上課日」：跳過週六日、學期起訖日之外、以及自訂的假日
         function isSchoolDay(dateStr, st){
             const sem = st.semester || {};
             if(sem.skipWeekends !== false){
-                const day = new Date(dateStr + 'T00:00:00').getDay(); // 0=週日, 6=週六
+                const day = new Date(dateStr + 'T00:00:00').getDay();
                 if(day === 0 || day === 6) return false;
             }
             if(sem.startDate && dateStr < sem.startDate) return false;
@@ -1764,8 +1604,6 @@
         }
         function ensureDailyAssignments(st){
             let changed = false;
-            // 自動建立一個獨立的「聯絡簿」科目（如果還沒有），聯絡簿每日任務固定歸在這個科目下，
-            // 但這個科目刻意不出現在一般作業的科目下拉選單裡（見 quickAssignmentSubject 建立處）。
             let contactSubj = st.subjects.find(s => s.name === '聯絡簿');
             if(!contactSubj){
                 contactSubj = { id: crypto.randomUUID(), name: '聯絡簿', isSystem: true };
@@ -1777,15 +1615,14 @@
             DAILY_FIXED_ASSIGNMENTS.forEach(fixed => {
                 const existing = st.assignments.find(a => a.name === fixed.name);
                 if(!existing){
-                    // 完全還沒有過，不管今天是不是上課日都先建一份，避免整個功能無法使用
                     st.assignments.push({ id: `daily-${fixed.name}-${today}`, name: fixed.name, subjectId: contactSubj.id, needsSign: fixed.needsSign });
                     changed = true;
                     return;
                 }
-                if(!schoolDay) return; // 非上課日：維持原本那份不動，不會多出假日的紀錄
+                if(!schoolDay) return;
                 const todayId = `daily-${fixed.name}-${today}`;
                 if(existing.id !== todayId){
-                    st.assignments = st.assignments.filter(a => a.name !== fixed.name); // 把之前那份從「目前清單」移除，資料本身留在 Firestore 不會刪
+                    st.assignments = st.assignments.filter(a => a.name !== fixed.name);
                     st.assignments.push({ id: todayId, name: fixed.name, subjectId: contactSubj.id, needsSign: fixed.needsSign });
                     changed = true;
                 }
@@ -1798,10 +1635,6 @@
             st.groups = st.groups || []; st.students = st.students || [];
             st.subjects = st.subjects || []; st.assignments = st.assignments || [];
 
-            // 這個 st 是登入當下的快照，後續不會隨每次 settings 更新自動換掉（避免打字打到一半被蓋掉）。
-            // 但這代表如果資料是從別的地方（例如「今日作業管理」的刪除）改的，這份快照會過期。
-            // 所以每個會修改 st 的動作，一律先呼叫這個函式，跟最新的全域 settings 同步，
-            // 才不會把舊資料（含已經刪除的作業/學生/組別）整包存回去、變成「復活」。
             function resyncFromGlobal(){
                 if(!settings) return;
                 st.groups = settings.groups || [];
@@ -1848,7 +1681,7 @@
                         </div>
                         <div class="card">
                             <h2>今日快速結算</h2>
-                            <p class="empty-hint" style="text-align:left;padding:0 0 14px">小老師登記的紀錄會一直保留，直到你按「結束並封存」（存成歷史紀錄後清空）或「確定完成，直接刪除（不封存）」（不留歷史，直接清空）。</p>
+                            <p class="empty-hint" style="text-align:left;padding:0 0 14px">小老師登記的紀錄會一直保留，直到你按「結束並封存」或「確定完成，直接刪除」。</p>
                             <div class="row" style="flex-direction:column">
                                 <button class="btn outline" id="archiveBtn">結束並封存</button>
                                 <button class="btn outline danger" id="deleteNoArchiveBtn">確定完成，直接刪除（不封存）</button>
@@ -1877,7 +1710,7 @@
                     </div>
                     <div class="card">
                         <h2>聯絡簿每日批改</h2>
-                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">一位學生一排，繳交／簽名／批改一次點完，不用切頁面。簽名跟批改要先標記已繳才會出現；再點一次已繳（或已簽名）會恢復成未繳（未簽名）。</p>
+                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">一位學生一排，繳交／簽名／批改一次點完。</p>
                         <div class="row" style="margin-bottom:14px">
                             <button class="btn small" id="contactViewSeatBtn">依座號</button>
                             <button class="btn small outline" id="contactViewGroupBtn">依小組</button>
@@ -1886,7 +1719,7 @@
                     </div>
                     <div class="card">
                         <h2>結束今日並封存</h2>
-                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">把今天的聯絡簿狀態存成正式的歷史封存紀錄，並換成新的一輪——今天這份會從這個分頁移除（資料不會被刪除，之後在「已封存作業的訂正紀錄」還能繼續補交/補訂正），適合下班前一次按完。</p>
+                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">把今天的聯絡簿狀態存成正式的歷史封存紀錄。</p>
                         <button class="btn outline" id="archiveContactBtn">結束今日並封存</button>
                     </div>
                 </div>
@@ -1894,7 +1727,7 @@
                     <div class="card">
                         <h2>作業對錯與訂正（依座號排序） <button class="btn small outline" id="toggleGradeMatrixBtn" style="margin-left:8px;font-weight:normal">收合</button></h2>
                         <div id="gradeMatrixBody">
-                            <p class="empty-hint" style="text-align:left;padding:0 0 10px">紅框＝缺交（還沒繳交，無法評對錯）。已繳的作業可以點選：✓全對／▲有錯／✗遺失；選「有錯」後會多一顆「訂正完成」按鈕。全對 +10 點，訂正完成 +5 點，可以隨時修改重選。</p>
+                            <p class="empty-hint" style="text-align:left;padding:0 0 10px">紅框＝缺交。已繳的作業可以點選：✓全對／▲有錯／✗遺失。</p>
                             <div class="table-scroll">
                                 <table>
                                     <thead id="gradeThead"></thead>
@@ -1906,7 +1739,7 @@
                     </div>
                     <div class="card">
                         <h2>已封存作業的訂正紀錄 <button class="btn small outline" id="toggleArchivedGradingBtn" style="margin-left:8px;font-weight:normal">展開</button></h2>
-                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">作業被「結束並封存」清空後，矩陣表格看不到欄位，但資料還在。這裡可以選一份過去的作業繼續批改（就算完全還沒批改過也可以，不限於已經評過分的）。</p>
+                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">這裡可以選一份過去的作業繼續批改。</p>
                         <div id="archivedGradingBody" style="display:none">
                             <div class="row" style="margin-bottom:10px">
                                 <select id="pastSubjectSelect" style="flex:1"></select>
@@ -1923,7 +1756,7 @@
                     </div>
                     <div class="card">
                         <h2>加點</h2>
-                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">選學生後按「計算並加點」：會把目前累積、還沒加過點的全對／訂正完成項目一次加給他（會自動排除已經加過的，不會重複加）。如果該生還有作業缺交或有錯未訂正，會另外提醒你。</p>
+                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">選學生後按「計算並加點」。</p>
                         <div class="row">
                             <select id="pointsStudentSelect" style="flex:1"></select>
                             <button class="btn" id="calcPointsBtn">計算並加點</button>
@@ -1942,14 +1775,10 @@
                 <div id="tabStudents" class="tab-panel" style="display:none">
                     <div class="card">
                         <h2>學期設定</h2>
-                        <p class="empty-hint" style="text-align:left;padding:0 0 10px">聯絡簿只有在「上課日」才會換成新的一天，非上課日（假日/寒暑假）不會多出空白紀錄。一般作業不受這個設定影響。</p>
-                        
-                        <!-- 換成專為日期設計的 Flex 排版 (防撐破容器) -->
                         <div class="date-range-row">
                             <div class="field"><label>開學日</label><input type="date" id="semStartDate" class="txt-input"></div>
                             <div class="field"><label>結業日</label><input type="date" id="semEndDate" class="txt-input"></div>
                         </div>
-                        
                         <label style="display:flex;align-items:center;gap:6px;margin-bottom:14px">
                             <input type="checkbox" id="skipWeekendsChk" style="width:auto" checked>週六、週日不算上課日
                         </label>
@@ -2045,14 +1874,14 @@
                 });
                 const text = lines.join('\n') || '目前尚無作業';
                 try { await navigator.clipboard.writeText(text); window.showAlert('未繳名單已複製'); }
-                catch(e){ window.showAlert('複製失敗，請手動選取文字'); }
+                catch(e){ window.showAlert('複製失敗'); }
             };
             $('archiveBtn').onclick = async () => {
-                const dateLabel = await window.askInput('這批作業要標記的日期（方便日後查看，可修改）', todayStr());
+                const dateLabel = await window.askInput('這批作業要標記的日期', todayStr());
                 if(dateLabel === null) return;
-                const ok2 = await window.askConfirm('結束並封存會把目前作業與繳交/訂正狀態存成歷史紀錄，並從目前作業清單移除（資料不會被刪除，之後在「已封存作業的訂正紀錄」都還能繼續補交/補訂正），確定要繼續嗎？');
+                const ok2 = await window.askConfirm('確定要結束並封存嗎？');
                 if(!ok2) return;
-                const archivableAssignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務'); // 聯絡簿獨立管理
+                const archivableAssignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務');
                 const students2 = sortBySeat(st.students);
                 const snapshotRecords = students2.flatMap(s => archivableAssignments.map(a => {
                     const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
@@ -2065,7 +1894,7 @@
                         corrected: g?g.corrected:false,
                         pulledOut: isPulledOut(s, subj?subj.name:'')
                     };
-                    if(rec && rec.signStatus) entry.signStatus = rec.signStatus; // Firestore 不接受 undefined，沒有簽名資料就不加這個欄位
+                    if(rec && rec.signStatus) entry.signStatus = rec.signStatus;
                     return entry;
                 }));
                 await addDoc(archivesColl, {
@@ -2076,15 +1905,13 @@
                     studentCount: st.students.length,
                     assignmentCount: archivableAssignments.length
                 }).catch(e=>console.warn(e));
-                // 不刪除任何資料——只是把這批作業從「目前清單」移除，資料本身留在 records/gradingRecords，
-                // 之後在「已封存作業的訂正紀錄」還能繼續查看、補交、補訂正。
                 const dailyAsg = st.assignments.find(a => a.name === '聯絡簿每日任務');
                 st.assignments = dailyAsg ? [dailyAsg] : [];
                 saveSettings({ assignments: st.assignments });
                 ensureDailyAssignments(st);
             };
             $('deleteNoArchiveBtn').onclick = async () => {
-                const ok2 = await window.askConfirm('確定當天已全部完成、不需要保留歷史紀錄嗎？這會直接刪除今日作業與繳交紀錄。');
+                const ok2 = await window.askConfirm('確定直接刪除今日作業與繳交紀錄嗎？');
                 if(!ok2) return;
                 const dailyAsg2 = st.assignments.find(a => a.name === '聯絡簿每日任務');
                 await clearAll(dailyAsg2 ? [dailyAsg2.id] : []);
@@ -2173,7 +2000,7 @@
                         const item = list.find(x=>x.id===aid);
                         if(!item) return;
                         const label = item.dateLabel || new Date(item.timestamp).toLocaleDateString('zh-TW');
-                        const ok2 = await window.askConfirm(`把「${label}」這筆封存快照的繳交/訂正狀態寫回活資料嗎？之後就能在「訂正與加點→已封存作業的訂正紀錄」繼續補交/補訂正。已經抽離的學生不會被還原。`);
+                        const ok2 = await window.askConfirm(`把「${label}」還原成可編輯狀態嗎？`);
                         if(!ok2) return;
                         const recBatch = writeBatch(db);
                         const gradeBatch = writeBatch(db);
@@ -2188,7 +2015,7 @@
                                 status: r.status || '未繳',
                                 [ORDER_FIELD]: Date.now()
                             };
-                            if(r.signStatus) payload.signStatus = r.signStatus; // 只有原本就有簽名資料才還原這個欄位，避免沒簽名概念的作業被誤判成需要簽名
+                            if(r.signStatus) payload.signStatus = r.signStatus;
                             recBatch.set(ref, payload, { merge: true });
                             if(r.correctness !== undefined){
                                 const gref = doc(gradingColl, recordDocId(r.studentId, r.assignmentId));
@@ -2202,17 +2029,15 @@
                         });
                         await recBatch.commit().catch(e=>console.warn(e));
                         await gradeBatch.commit().catch(e=>console.warn(e));
-                        window.showAlert(`已還原「${label}」，可以去「訂正與加點→已封存作業的訂正紀錄」繼續操作了`);
+                        window.showAlert(`已還原「${label}」`);
                     });
                     $('archivesList').querySelectorAll('[data-del-archive]').forEach(b => b.onclick = async () => {
                         const aid = b.getAttribute('data-del-archive');
                         const item = list.find(x=>x.id===aid);
                         const label = item ? (item.dateLabel || new Date(item.timestamp).toLocaleDateString('zh-TW')) : '';
-                        const ok2 = await window.askConfirm(`刪除「${label}」這筆封存紀錄無法復原，裡面的訂正資料也會一併刪除，確定要刪除嗎？`);
+                        const ok2 = await window.askConfirm(`確定刪除「${label}」嗎？`);
                         if(!ok2) return;
-                        await deleteDoc(doc(db, 'archives', aid)).catch(e=>{ console.warn(e); window.showAlert('刪除失敗，請檢查網路或權限後重試'); });
-                        // 這份封存包含的作業，順便把對應的訂正紀錄也清掉，
-                        // 不然「已封存作業的訂正紀錄」選單還是會撈到已經刪除封存的作業，越積越多垃圾資料。
+                        await deleteDoc(doc(db, 'archives', aid)).catch(e=>{ console.warn(e); window.showAlert('刪除失敗'); });
                         const idsToClean = (item && item.assignments) ? item.assignments.map(a=>a.id) : [];
                         for(const gid of idsToClean){
                             await clearGradingForAssignment(gid);
@@ -2263,15 +2088,13 @@
                     const curGroup = st.groups.find(g=>g.id===stu.groupId);
                     const otherGroups = st.groups.filter(g=>g.id!==stu.groupId);
                     if(!otherGroups.length){ window.showAlert('目前沒有其他組別可以搬'); return; }
-                    const targetName = await window.askChoice(`「${stu.name}」目前在「${curGroup?curGroup.name:'（無組別）'}」，要搬到哪一組？`, otherGroups.map(g=>g.name));
+                    const targetName = await window.askChoice(`「${stu.name}」目前在「${curGroup?curGroup.name:''}」，要搬到哪一組？`, otherGroups.map(g=>g.name));
                     if(!targetName) return;
                     const targetGroup = st.groups.find(g => g.name === targetName);
                     if(!targetGroup) return;
                     resyncFromGlobal();
                     const freshStu = st.students.find(x=>x.id===sid);
                     if(freshStu) freshStu.groupId = targetGroup.id;
-                    // 只改 students 這個欄位（學生 ID 不變），records/archives 是登記當下就寫死的獨立資料，
-                    // 不會因為這裡改組別而被回頭修改，過去的紀錄與封存完全不受影響。
                     saveSettings({ students: st.students });
                     renderGroups();
                 });
@@ -2323,9 +2146,9 @@
             $('archiveContactBtn').onclick = async () => {
                 const dailyAsg = st.assignments.find(a => a.name === '聯絡簿每日任務');
                 if(!dailyAsg){ window.showAlert('目前沒有「聯絡簿每日任務」這項作業'); return; }
-                const dateLabel = await window.askInput('這筆聯絡簿封存要標記的日期（方便日後查看，可修改）', todayStr());
+                const dateLabel = await window.askInput('這筆聯絡簿封存要標記的日期', todayStr());
                 if(dateLabel === null) return;
-                const ok2 = await window.askConfirm('把今天的聯絡簿狀態存成歷史封存紀錄，並換成新的一輪（今天這份會從聯絡簿分頁移除，資料不會被刪除，之後在「已封存作業的訂正紀錄」還能繼續補交/補訂正），確定要繼續嗎？');
+                const ok2 = await window.askConfirm('確定要封存今天的聯絡簿紀錄嗎？');
                 if(!ok2) return;
                 const dSubj = st.subjects.find(x=>x.id===dailyAsg.subjectId);
                 const students2 = sortBySeat(st.students);
@@ -2350,8 +2173,6 @@
                     studentCount: st.students.length,
                     assignmentCount: 1
                 }).catch(e=>console.warn(e));
-                // 不刪除任何資料——只是強制換成新的一輪（新 ID），今天這份從「目前」移除，
-                // 明天（或下次打開）看到的聯絡簿是全新一份，跟一般作業封存後的行為一致。
                 st.assignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務');
                 st.assignments.push({ id: `daily-聯絡簿每日任務-${crypto.randomUUID()}`, name: '聯絡簿每日任務', subjectId: dailyAsg.subjectId, needsSign: true });
                 saveSettings({ assignments: st.assignments });
@@ -2364,8 +2185,6 @@
             renderContactTab(records, gradingRecords, st);
             editorReady = true;
         }
-        /* 可用 API：clearAll(excludeIds) / saveSettings(obj) / submitGroupRecords(items) / adminSetStatus(item) / adminSetGrading(item) */
-        /* ================================================== */
     </script>
 </body>
 </html>
