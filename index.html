@@ -81,6 +81,44 @@
         .icon-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: background .15s, transform .1s; }
         .icon-btn:hover { background: var(--accent-dark); transform: scale(1.06); }
         .icon-btn:active { transform: scale(0.95); }
+        
+        /* 修改班級按鈕專屬 outline 風格 (圓圈、Emoji) */
+        .icon-btn.title-edit-btn {
+            background: #fff;                 /* 白底 */
+            border: 2px solid var(--accent);  /* 藍綠色外框 */
+            border-radius: 50%;               /* 圓形 */
+            width: 46px;                      /* 桌機版寬度 */
+            height: 46px;                     /* 桌機版高度 */
+            font-size: 24px;                  /* 框內 emoji 大小約為框寬的 52% */
+            padding: 0;                       /* 取消內距 */
+            display: inline-flex;
+            align-items: center;              /* 內容垂直置中 */
+            justify-content: center;          /* 內容水平置中 */
+            margin-left: -2px;                /* 利用負值微調，讓按鈕貼近前字 */
+            margin-right: -2px;               /* 利用負值微調，讓按鈕貼近後字 */
+            transform: translateY(-2px);      /* 微調與標題垂直對齊 */
+            transition: background .15s;
+        }
+        .icon-btn.title-edit-btn:hover {
+            background: var(--accent);        /* hover 時填滿藍綠色 */
+            /* 移除 scale 放大效果，只維持垂直位置微調 */
+            transform: translateY(-2px);
+        }
+        
+        @media (max-width: 640px) {
+            .icon-btn.title-edit-btn {
+                width: 33px;                  /* 手機版寬度 */
+                height: 33px;                 /* 手機版高度 */
+                font-size: 17px;              /* 手機版字級 */
+                margin-left: -4px;            /* 手機版微調靠近前字 */
+                margin-right: -2px;           /* 手機版微調靠近後字 */
+                transform: translateY(-1px);  /* 手機版微調垂直對齊 */
+            }
+            .icon-btn.title-edit-btn:hover {
+                transform: translateY(-1px);  /* 移除 scale 放大效果 */
+            }
+        }
+
         header .header-actions { grid-column: 3; justify-self: end; }
         main, #adminArea { max-width: 900px; margin: 0 auto; padding: 0 16px 60px; }
         .card { background: var(--surface); border: 2px solid var(--line); border-radius: 18px; padding: 20px 22px; margin-bottom: 20px; }
@@ -246,10 +284,11 @@
     <!-- ====== 版面骨架 ====== -->
     <header>
         <h1 data-gated>
-            <span id="appTitle">608 作業登記</span>
-            <button id="editClassNameBtn" class="icon-btn admin-only hidden" title="更改班級名稱" aria-label="更改班級名稱">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            <span id="classNameSpan">608</span>
+            <button id="editClassNameBtn" class="icon-btn title-edit-btn admin-only hidden" title="更改班級名稱" aria-label="更改班級名稱">
+                ✏️
             </button>
+            <span>作業登記</span>
         </h1>
         <div class="header-actions">
             <button id="loginBtn" class="btn outline">老師登入</button>
@@ -463,7 +502,11 @@
             settings = snap.exists() ? snap.data() : null;
             settingsArrived = true;
             settingsErrored = false; refreshLoadError();
-            $('appTitle').textContent = `${(settings && settings.className) || '608'} 作業登記`;
+            
+            // 獨立更新班級名稱，不影響「作業登記」四個字
+            const cName = (settings && settings.className) || '608';
+            if($('classNameSpan')) $('classNameSpan').textContent = cName;
+            
             renderPublic(records, settings, { error: false });
             renderGradingTab(gradingRecords, records, settings);
             renderContactTab(records, gradingRecords, settings);
