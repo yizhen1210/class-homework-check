@@ -110,7 +110,7 @@
         
         header h1 { 
             font-size: 2em; 
-            line-height: 1.2; /* 強制固定 1.2 倍行高，避免瀏覽器自動計算產生誤差 */
+            line-height: 1.3; /* 設定為 1.3 倍行高 */
             margin: 0; 
             grid-column: 2; 
             text-align: center; 
@@ -255,7 +255,7 @@
                 padding: 20px 14px; 
                 margin-bottom: 18px; 
             }
-            header h1 { font-size: 1.5em; line-height: 1.2; grid-column: 2; }
+            header h1 { font-size: 1.5em; line-height: 1.3; grid-column: 2; }
             header .header-actions { grid-column: 3; justify-self: end; }
             main, #adminArea { padding: 0 10px 40px; }
             .card { padding: 16px 14px; border-radius: 14px; margin-bottom: 14px; }
@@ -2006,7 +2006,7 @@
                         const item = list.find(x=>x.id===aid);
                         if(!item) return;
                         const label = item.dateLabel || new Date(item.timestamp).toLocaleDateString('zh-TW');
-                        const ok2 = await window.askConfirm(`把「${label}」還原成可編輯狀態嗎？`);
+                        const ok2 = await window.askConfirm(`把「${label}」這筆封存快照的繳交/訂正狀態寫回活資料嗎？`);
                         if(!ok2) return;
                         const recBatch = writeBatch(db);
                         const gradeBatch = writeBatch(db);
