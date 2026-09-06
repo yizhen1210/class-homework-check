@@ -93,7 +93,7 @@
         
         /* 
          * iOS Safari date input width override 
-         * -webkit-appearance: none; 能解除 Safari 強制保留預設文字寬度的鎖定
+         * -webkit-appearance: none; 解除 Safari 強制保留預設文字寬度的鎖定
          */
         input[type="date"].txt-input { 
             box-sizing: border-box;
@@ -236,8 +236,9 @@
             header button:not(.icon-btn) { padding: 8px 14px; font-size: 0.9em; }
             .btn { padding: 8px 16px; font-size: 0.95em; }
             
-            /* 手機版較窄，改為上下排列日期框以防擠壓變形 */
-            .date-range-row { flex-direction: column; gap: 8px; }
+            /* 強制手機版左右併排，並縮小內距與字體以防撐破 */
+            .date-range-row { flex-direction: row; gap: 6px; }
+            .date-range-row .txt-input { padding: 8px 4px; font-size: 0.85em; text-align: center; }
         }
     </style>
 </head>
@@ -1637,7 +1638,7 @@
         /* ---- 老師後台：三分頁骨架（首次登入建立一次），科目/學生管理清單
                皆用區域刷新，不動到輸入框，避免打字打到一半被清掉）。 ---- */
         // 綁定為「每天一定有」的固定作業：聯絡簿用「日期」當 ID（不是隨機 ID），
-        // 這樣每天寫入的都是不同的文件，昨天的資料不會被今天覆蓋，也不需要手手動封存——
+        // 這樣每天寫入的都是不同的文件，昨天的資料不會被今天覆蓋，也不需要手動封存——
         // 過了一天，昨天那份就自動變成「已封存作業」，可以直接在「已封存作業的訂正紀錄」picker 找到繼續批改。
         function todayISODate(){
             const d = new Date();
@@ -1840,10 +1841,9 @@
                         <h2>學期設定</h2>
                         <p class="empty-hint" style="text-align:left;padding:0 0 10px">聯絡簿只有在「上課日」才會換成新的一天，非上課日（假日/寒暑假）不會多出空白紀錄。一般作業不受這個設定影響。</p>
                         
-                        <!-- 換回原本的排版結構即可，因為前面已經把 input 的外觀問題修復了 -->
-                        <div class="row">
-                            <div class="field" style="flex:1"><label>開學日</label><input type="date" id="semStartDate" class="txt-input"></div>
-                            <div class="field" style="flex:1"><label>結業日</label><input type="date" id="semEndDate" class="txt-input"></div>
+                        <div class="date-range-row">
+                            <div class="field"><label>開學日</label><input type="date" id="semStartDate" class="txt-input"></div>
+                            <div class="field"><label>結業日</label><input type="date" id="semEndDate" class="txt-input"></div>
                         </div>
                         
                         <label style="display:flex;align-items:center;gap:6px;margin-bottom:14px">
