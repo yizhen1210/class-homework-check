@@ -75,7 +75,49 @@
         .btn.outline.danger { background: transparent; color: var(--danger); }
         .btn.outline.danger:hover { background: var(--danger); color: #fff; }
 
-        .admin-only.hidden { display: none; }
+        .admin-only.hidden { display: none !important; }
+
+        /* ---- 登入鈕自訂設定 ---- */
+        #loginBtn {
+            background: transparent;
+            color: var(--accent);
+            border: 2px solid var(--accent);
+            padding: 9px 22px;
+            border-radius: 50px;
+            font-family: inherit;
+            font-size: 1.05em;
+            white-space: nowrap;
+            transition: all .2s;
+            cursor: pointer;
+        }
+        #loginBtn:hover {
+            background: var(--accent);
+            color: #fff;
+        }
+        #loginBtn:active {
+            transform: scale(0.97);
+        }
+
+        /* ---- 登出鈕自訂設定 ---- */
+        #logoutBtn {
+            background: transparent;
+            color: var(--danger);
+            border: 2px solid var(--danger);
+            padding: 9px 22px;
+            border-radius: 50px;
+            font-family: inherit;
+            font-size: 1.05em;
+            white-space: nowrap;
+            transition: all .2s;
+            cursor: pointer;
+        }
+        #logoutBtn:hover {
+            background: var(--danger);
+            color: #fff;
+        }
+        #logoutBtn:active {
+            transform: scale(0.97);
+        }
 
         /* ---- 本 app 專用樣式 ---- */
         /* 修改版面標題區高度，並加上底部主色分隔線 */
@@ -97,10 +139,10 @@
             display: flex; 
             align-items: center; 
             justify-content: center; 
-            gap: 12px; /* 登入前「608」與「作業登記」間的間隔；登入後按鈕會插入其中撐開 */
+            gap: 12px; 
         } 
 
-        /* 獨立設定的編輯鉛筆按鈕 (不再套用 icon-btn，完全客製化) */
+        /* 獨立設定的編輯鉛筆按鈕 */
         .title-edit-btn {
             background: #fff;                 /* 白底 */
             border: 2px solid var(--accent);  /* 藍綠色外框 */
@@ -116,7 +158,6 @@
             transition: background .15s;
             margin: 0; 
             outline: none;
-            /* 修正垂直對齊，依據 608 字體視覺重心微調 */
             transform: translateY(-2px);
         }
         .title-edit-btn:hover {
@@ -128,6 +169,10 @@
                 width: 33px;                  /* 手機版寬度 */
                 height: 33px;                 /* 手機版高度 */
                 font-size: 17px;              /* 手機版字級 */
+            }
+            #loginBtn, #logoutBtn {
+                padding: 6px 13px;
+                font-size: 0.84em;
             }
         }
 
@@ -145,10 +190,6 @@
         select, .txt-input { width: 100%; padding: 10px 14px; border: 2px solid var(--line); border-radius: 12px; font-family: inherit; font-size: 1em; background: var(--surface); color: var(--text); outline: none; }
         select:focus, .txt-input:focus { border-color: var(--accent); box-shadow: 0 0 12px 3px var(--focus-glow); }
         
-        /* 
-         * iOS Safari date input width override 
-         * -webkit-appearance: none; 解除 Safari 強制保留預設文字寬度的鎖定
-         */
         input[type="date"].txt-input { 
             box-sizing: border-box;
             -webkit-appearance: none;
@@ -310,8 +351,8 @@
             <span>作業登記</span>
         </h1>
         <div class="header-actions">
-            <button id="loginBtn" class="btn outline">老師登入</button>
-            <button id="logoutBtn" class="btn outline admin-only hidden">登出</button>
+            <button id="loginBtn">老師登入</button>
+            <button id="logoutBtn" class="admin-only hidden">登出</button>
         </div>
     </header>
 
@@ -1409,7 +1450,7 @@
                         };
                         if(nv !== '已繳') payload.signStatus = '未簽名';
                         await adminSetStatus(payload);
-                        let r = records.find(x=>x.studentId===sid && x.assignmentId===aid);
+                        let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
                         if(r) Object.assign(r, payload); else records.push(payload);
                         renderPastAssignmentGrader();
                     });
@@ -1427,7 +1468,7 @@
                             assignmentId: aid, assignmentName: aName,
                             signStatus: nv
                         });
-                        let r = records.find(x=>x.studentId===sid && x.assignmentId===aid);
+                        let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
                         if(r) r.signStatus = nv;
                         renderPastAssignmentGrader();
                     });
@@ -2319,7 +2360,7 @@
 
             renderGroups();
             renderRecordsTab(records, settings);
-            renderGradingTab(gradingRecords, records, settings);
+            renderGradingTab(gradingRecords, records, st);
             renderContactTab(records, gradingRecords, st);
             editorReady = true;
         }
