@@ -94,15 +94,17 @@
             display: inline-flex;
             align-items: center;              /* 內容垂直置中 */
             justify-content: center;          /* 內容水平置中 */
-            margin-left: -2px;                /* 利用負值微調，讓按鈕貼近前字 */
-            margin-right: -2px;               /* 利用負值微調，讓按鈕貼近後字 */
-            transform: translateY(-2px);      /* 微調與標題垂直對齊 */
+            /* 移除原本的負 margin，改用絕對定位覆蓋在間隙上 */
+            position: absolute;
+            left: 50%;
+            transform: translate(-50%, -2px); /* 水平置中、垂直微調 */
             transition: background .15s;
+            z-index: 10;
         }
         .icon-btn.title-edit-btn:hover {
             background: var(--accent);        /* hover 時填滿藍綠色 */
             /* 移除 scale 放大效果，只維持垂直位置微調 */
-            transform: translateY(-2px);
+            transform: translate(-50%, -2px);
         }
         
         @media (max-width: 640px) {
@@ -110,12 +112,10 @@
                 width: 33px;                  /* 手機版寬度 */
                 height: 33px;                 /* 手機版高度 */
                 font-size: 17px;              /* 手機版字級 */
-                margin-left: -4px;            /* 手機版微調靠近前字 */
-                margin-right: -2px;           /* 手機版微調靠近後字 */
-                transform: translateY(-1px);  /* 手機版微調垂直對齊 */
+                transform: translate(-50%, -1px);  /* 手機版微調垂直對齊 */
             }
             .icon-btn.title-edit-btn:hover {
-                transform: translateY(-1px);  /* 移除 scale 放大效果 */
+                transform: translate(-50%, -1px);  /* 移除 scale 放大效果 */
             }
         }
 
@@ -283,12 +283,14 @@
 <body>
     <!-- ====== 版面骨架 ====== -->
     <header>
-        <h1 data-gated>
-            <span id="classNameSpan">608</span>
+        <h1 data-gated style="position: relative; display: flex; align-items: center; justify-content: center;">
+            <span id="classNameSpan" style="margin-right: 0.3em;">608</span>
+            <!-- 將間隔用一個空的 span 佔位，按鈕用絕對定位疊在上面 -->
+            <span style="width: 50px; display: inline-block;"></span>
             <button id="editClassNameBtn" class="icon-btn title-edit-btn admin-only hidden" title="更改班級名稱" aria-label="更改班級名稱">
                 ✏️
             </button>
-            <span>作業登記</span>
+            <span style="margin-left: 0.1em;">作業登記</span>
         </h1>
         <div class="header-actions">
             <button id="loginBtn" class="btn outline">老師登入</button>
