@@ -7,7 +7,9 @@
 
     <!-- PWA / 桌面圖示：三張 PNG 與此檔同目錄一起上傳，檔名須與 manifest 一致 -->
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+    <link rel="apple-touch-icon" href="icon-180.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
     <meta name="theme-color" content="#8FA6A9">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -76,36 +78,30 @@
         .admin-only.hidden { display: none; }
 
         /* ---- 本 app 專用樣式 ---- */
-        header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 16px 20px; }
-        header h1 { font-size: 2em; margin: 0; grid-column: 2; text-align: center; display: flex; align-items: center; justify-content: center; gap: 10px; } 
-
-        /* 獨立設定的編輯鉛筆按鈕 */
-        .title-edit-btn {
-            background: #fff;
-            border: 2px solid var(--accent);
-            border-radius: 50%;
-            width: 46px;
-            height: 46px;
-            font-size: 24px;
-            padding: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: background .15s;
-            margin: 0; 
-            outline: none;
+        /* 修改版面標題區高度，並加上底部主色分隔線 */
+        header { 
+            display: grid; 
+            grid-template-columns: 1fr auto 1fr; 
+            align-items: center; 
+            padding: 30px 20px; 
+            border-bottom: 2px solid var(--accent);
+            margin-bottom: 24px;
         }
-        .title-edit-btn:hover {
-            background: var(--accent);
-        }
-
-        .icon-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: background .15s, transform .1s; }
-        .icon-btn:hover { background: var(--accent-dark); transform: scale(1.06); }
-        .icon-btn:active { transform: scale(0.95); }
         
-        /* 修改班級按鈕專屬 outline 風格 (圓圈、Emoji) */
-        .icon-btn.title-edit-btn {
+        /* 讓文字與鉛筆按鈕使用 Flex 橫向排版，自動夾帶間距 */
+        header h1 { 
+            font-size: 2em; 
+            margin: 0; 
+            grid-column: 2; 
+            text-align: center; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 12px; /* 登入前「608」與「作業登記」間的間隔；登入後按鈕會插入其中撐開 */
+        } 
+
+        /* 獨立設定的編輯鉛筆按鈕 (不再套用 icon-btn，完全客製化) */
+        .title-edit-btn {
             background: #fff;                 /* 白底 */
             border: 2px solid var(--accent);  /* 藍綠色外框 */
             border-radius: 50%;               /* 圓形 */
@@ -116,23 +112,28 @@
             display: inline-flex;
             align-items: center;              /* 內容垂直置中 */
             justify-content: center;          /* 內容水平置中 */
+            cursor: pointer;
             transition: background .15s;
-            margin: 0 4px;                    /* 登入後出現時，按鈕兩側保留一點呼吸空間 */
-            transform: none;                  /* 移除之前的偏移 */
+            margin: 0; 
+            outline: none;
+            /* 修正垂直對齊，依據 608 字體視覺重心微調 */
+            transform: translateY(-2px);
         }
-        .icon-btn.title-edit-btn:hover {
+        .title-edit-btn:hover {
             background: var(--accent);        /* hover 時填滿藍綠色 */
-            transform: none;                  /* 移除 hover 放大效果 */
         }
         
         @media (max-width: 640px) {
-            .icon-btn.title-edit-btn {
+            .title-edit-btn {
                 width: 33px;                  /* 手機版寬度 */
                 height: 33px;                 /* 手機版高度 */
                 font-size: 17px;              /* 手機版字級 */
-                margin: 0 2px;
             }
         }
+
+        .icon-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: background .15s, transform .1s; }
+        .icon-btn:hover { background: var(--accent-dark); transform: scale(1.06); }
+        .icon-btn:active { transform: scale(0.95); }
 
         header .header-actions { grid-column: 3; justify-self: end; }
         main, #adminArea { max-width: 900px; margin: 0 auto; padding: 0 16px 60px; }
@@ -251,18 +252,13 @@
         .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         @media (max-width: 680px) {
             body { font-size: 17px; }
-            header { grid-template-columns: 1fr; row-gap: 10px; padding: 14px 14px; }
-            header h1 { font-size: 1.5em; grid-column: 1; }
-            
-            /* 手機版鉛筆按鈕縮小 */
-            .title-edit-btn {
-                width: 33px;
-                height: 33px;
-                font-size: 17px;
+            header { 
+                grid-template-columns: 1fr; 
+                row-gap: 12px; 
+                padding: 20px 14px; 
+                margin-bottom: 18px; 
             }
-
-            header h1 .icon-btn { width: 26px; height: 26px; }
-            header h1 .icon-btn svg { width: 22px; height: 22px; }
+            header h1 { font-size: 1.5em; grid-column: 1; }
             header .header-actions { grid-column: 1; justify-self: center; }
             main, #adminArea { padding: 0 10px 40px; }
             .card { padding: 16px 14px; border-radius: 14px; margin-bottom: 14px; }
@@ -294,7 +290,7 @@
             .archive-actions .btn { padding: 5px 10px; font-size: 0.8em; }
         }
         @media (max-width: 420px) {
-            header button:not(.icon-btn) { padding: 8px 14px; font-size: 0.9em; }
+            header button:not(.icon-btn):not(.title-edit-btn) { padding: 8px 14px; font-size: 0.9em; }
             .btn { padding: 8px 16px; font-size: 0.95em; }
             
             /* 強制手機版左右併排，並縮小內距與字體以防撐破 */
@@ -302,14 +298,12 @@
             .date-range-row .txt-input { padding: 8px 4px; font-size: 0.85em; text-align: center; }
         }
     </style>
-<link rel="icon" type="image/png" href="icon-192.png">
 </head>
 <body>
     <!-- ====== 版面骨架 ====== -->
     <header>
         <h1 data-gated>
             <span id="classNameSpan">608</span>
-            <!-- 加回 admin-only hidden 控制登出入顯示 -->
             <button id="editClassNameBtn" class="title-edit-btn admin-only hidden" title="更改班級名稱" aria-label="更改班級名稱">
                 ✏️
             </button>
@@ -1909,6 +1903,7 @@
                         <h2>學期設定</h2>
                         <p class="empty-hint" style="text-align:left;padding:0 0 10px">聯絡簿只有在「上課日」才會換成新的一天，非上課日（假日/寒暑假）不會多出空白紀錄。一般作業不受這個設定影響。</p>
                         
+                        <!-- 換成專為日期設計的 Flex 排版 (防撐破容器) -->
                         <div class="date-range-row">
                             <div class="field"><label>開學日</label><input type="date" id="semStartDate" class="txt-input"></div>
                             <div class="field"><label>結業日</label><input type="date" id="semEndDate" class="txt-input"></div>
