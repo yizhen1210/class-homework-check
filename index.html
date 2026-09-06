@@ -87,9 +87,12 @@
         .card h2 { margin: 0 0 16px; font-size: 1.15em; }
         .field { margin-bottom: 14px; }
         .field label { display: block; margin-bottom: 6px; font-size: 0.9em; color: var(--muted); }
-        select, .txt-input { width: 100%; padding: 10px 14px; border: 2px solid var(--line); border-radius: 12px; font-family: inherit; font-size: 1em; background: var(--surface); color: var(--text); outline: none; }
+        
+        /* 解決 iOS 寬度撐破容器的問題：加入 min-width: 0 和 max-width: 100% */
+        select, .txt-input { width: 100%; max-width: 100%; min-width: 0; padding: 10px 14px; border: 2px solid var(--line); border-radius: 12px; font-family: inherit; font-size: 1em; background: var(--surface); color: var(--text); outline: none; }
         input[type="date"].txt-input { box-sizing: border-box; }
         select:focus, .txt-input:focus { border-color: var(--accent); box-shadow: 0 0 12px 3px var(--focus-glow); }
+        
         .student-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
         .daily-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: nowrap; }
         .daily-row:last-child { border-bottom: none; }
@@ -120,6 +123,11 @@
         .mini-status-btn.active.unsigned { background: #b8860c; border-color: #b8860c; color: #fff; }
         .row { display: flex; gap: 10px; margin-bottom: 14px; }
         .row .txt-input { flex: 1; }
+        
+        /* 專門處理併排日期欄位的 RWD Flex 排版 */
+        .date-range-row { display: flex; flex-direction: row; gap: 10px; margin-bottom: 14px; width: 100%; }
+        .date-range-row .field { flex: 1; min-width: 0; margin-bottom: 0; }
+
         .group-block { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; }
         .group-block-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .group-block-head strong { font-size: 1.05em; }
@@ -188,6 +196,7 @@
             .card { padding: 16px 14px; border-radius: 14px; margin-bottom: 14px; }
             .card h2 { font-size: 1.05em; }
             .row { flex-direction: column; gap: 8px; }
+            .date-range-row { gap: 8px; } /* 手機版間距微調，維持併排 */
             .row .txt-input { width: 100%; }
             .status-choices { gap: 8px; }
             .status-choices label { min-width: 72px; padding: 9px 4px; font-size: 0.88em; }
@@ -1817,10 +1826,13 @@
                     <div class="card">
                         <h2>學期設定</h2>
                         <p class="empty-hint" style="text-align:left;padding:0 0 10px">聯絡簿只有在「上課日」才會換成新的一天，非上課日（假日/寒暑假）不會多出空白紀錄。一般作業不受這個設定影響。</p>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-                            <div class="field" style="margin-bottom:0;min-width:0"><label>開學日</label><input type="date" id="semStartDate" class="txt-input"></div>
-                            <div class="field" style="margin-bottom:0;min-width:0"><label>結業日</label><input type="date" id="semEndDate" class="txt-input"></div>
+                        
+                        <!-- 換成專為日期設計的 Flex 排版 (防撐破容器) -->
+                        <div class="date-range-row">
+                            <div class="field"><label>開學日</label><input type="date" id="semStartDate" class="txt-input"></div>
+                            <div class="field"><label>結業日</label><input type="date" id="semEndDate" class="txt-input"></div>
                         </div>
+                        
                         <label style="display:flex;align-items:center;gap:6px;margin-bottom:14px">
                             <input type="checkbox" id="skipWeekendsChk" style="width:auto" checked>週六、週日不算上課日
                         </label>
