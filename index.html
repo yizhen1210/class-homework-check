@@ -45,7 +45,6 @@
         .modal-content { background: var(--surface); border: 3px solid var(--line); padding: 36px 44px; border-radius: 20px; text-align: center; box-shadow: 0 20px 55px rgba(0,0,0,0.4); width: min(520px, 90vw); }
         .modal-title { font-size: 1.4em; margin: 0 0 22px; }
         
-        /* 合併重複的 input 樣式以保持整潔 */
         .modal-content input, .modal-input { 
             display: block; width: 100%; margin: 0 0 24px; padding: 12px 18px; 
             border: 2px solid var(--line); border-radius: 14px; font-family: inherit; 
@@ -111,6 +110,7 @@
         
         header h1 { 
             font-size: 2em; 
+            line-height: 1.2; /* 強制固定 1.2 倍行高，避免瀏覽器自動計算產生誤差 */
             margin: 0; 
             grid-column: 2; 
             text-align: center; 
@@ -248,9 +248,15 @@
         .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         @media (max-width: 680px) {
             body { font-size: 17px; }
-            header { grid-template-columns: 1fr; row-gap: 12px; padding: 20px 14px; margin-bottom: 18px; }
-            header h1 { font-size: 1.5em; grid-column: 1; }
-            header .header-actions { grid-column: 1; justify-self: center; }
+            header { 
+                display: grid; 
+                grid-template-columns: 1fr auto 1fr; 
+                align-items: center; 
+                padding: 20px 14px; 
+                margin-bottom: 18px; 
+            }
+            header h1 { font-size: 1.5em; line-height: 1.2; grid-column: 2; }
+            header .header-actions { grid-column: 3; justify-self: end; }
             main, #adminArea { padding: 0 10px 40px; }
             .card { padding: 16px 14px; border-radius: 14px; margin-bottom: 14px; }
             .card h2 { font-size: 1.05em; }
@@ -1681,7 +1687,7 @@
                         </div>
                         <div class="card">
                             <h2>今日快速結算</h2>
-                            <p class="empty-hint" style="text-align:left;padding:0 0 14px">小老師登記的紀錄會一直保留，直到你按「結束並封存」或「確定完成，直接刪除」。</p>
+                            <p class="empty-hint" style="text-align:left;padding:0 0 14px">小老師登記的紀錄會一直保留，直到你按「結束並封存」或「確定完成，直接刪除（不封存）」。</p>
                             <div class="row" style="flex-direction:column">
                                 <button class="btn outline" id="archiveBtn">結束並封存</button>
                                 <button class="btn outline danger" id="deleteNoArchiveBtn">確定完成，直接刪除（不封存）</button>
