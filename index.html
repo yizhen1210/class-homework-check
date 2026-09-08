@@ -64,10 +64,16 @@
             .modal-title { white-space: nowrap; }
         }
 
-        /* ---- 一般按鈕 ---- */
-        .btn { padding: 9px 22px; border-radius: 50px; border: 2px solid var(--accent); background: var(--accent); color: #fff; font-family: inherit; font-size: 1em; cursor: pointer; transition: background .15s, color .15s, border-color .15s, transform .1s; }
+        /* ---- 一般按鈕與縮放效果 ---- */
+        button, .btn, .cell-status-btn, .grade-btn, .corrected-btn, .mini-status-btn, .tab-btn, .icon-btn, .title-edit-btn, #loginBtn, #logoutBtn {
+            transition: background .15s, color .15s, border-color .15s, transform .1s, filter .15s;
+        }
+        button:active, .btn:active, .cell-status-btn:active, .grade-btn:active, .corrected-btn:active, .mini-status-btn:active, .tab-btn:active, .icon-btn:active, .title-edit-btn:active, #loginBtn:active, #logoutBtn:active {
+            transform: scale(0.97);
+        }
+
+        .btn { padding: 9px 22px; border-radius: 50px; border: 2px solid var(--accent); background: var(--accent); color: #fff; font-family: inherit; font-size: 1em; cursor: pointer; }
         .btn:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
-        .btn:active { transform: scale(0.97); }
         .btn.outline { background: transparent; color: var(--accent); }
         .btn.outline:hover { background: var(--accent); color: #fff; }
         .btn.small { padding: 5px 14px; font-size: 0.85em; }
@@ -86,16 +92,13 @@
             font-family: inherit;
             font-size: 1.05em;
             white-space: nowrap;
-            transition: all .2s;
             cursor: pointer;
         }
         #loginBtn { color: var(--accent); border: 2px solid var(--accent); }
         #loginBtn:hover { background: var(--accent); color: #fff; }
-        #loginBtn:active { transform: scale(0.97); }
 
         #logoutBtn { color: var(--danger); border: 2px solid var(--danger); }
         #logoutBtn:hover { background: var(--danger); color: #fff; }
-        #logoutBtn:active { transform: scale(0.97); }
 
         header { 
             display: grid; 
@@ -129,7 +132,6 @@
             align-items: center;              
             justify-content: center;          
             cursor: pointer;
-            transition: background .15s;
             margin-left: -6px; 
             outline: none;
             transform: translateY(-2px);
@@ -146,9 +148,8 @@
             #loginBtn, #logoutBtn { padding: 6px 13px; font-size: 0.84em; }
         }
 
-        .icon-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: background .15s, transform .1s; }
+        .icon-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .icon-btn:hover { background: var(--accent-dark); transform: scale(1.06); }
-        .icon-btn:active { transform: scale(0.95); }
 
         header .header-actions { grid-column: 3; justify-self: end; display: flex; align-items: center; }
         main, #adminArea { max-width: 1100px; margin: 0 auto; padding: 0 16px 60px; }
@@ -167,42 +168,21 @@
         /* ---- 完美對齊的 Grid 列佈局 ---- */
         .daily-row { 
             display: grid; 
-            grid-template-columns: minmax(70px, 1fr) 92px 92px 38px 38px 76px 38px 80px; 
+            grid-template-columns: minmax(70px, 1fr) 92px 92px 38px 38px 76px 38px; 
             align-items: center; 
             gap: 12px; 
             padding: 10px 0; 
             border-bottom: 1px solid var(--line); 
         }
         .daily-row.no-sign { 
-            grid-template-columns: minmax(70px, 1fr) 92px 38px 38px 76px 38px 80px; 
+            grid-template-columns: minmax(70px, 1fr) 92px 38px 38px 76px 38px; 
         }
         .daily-row .student-name { min-width: 70px; flex-shrink: 0; }
         #dailyQuickGradeList, #pastAssignmentGradeList { overflow-x: auto; }
-
-        /* ---- 歷史封存紀錄 Grid 網格佈局 ---- */
-        .archive-grid-head, .archive-grid-row {
-            display: grid;
-            grid-template-columns: minmax(80px, 1fr) minmax(110px, 1.2fr) minmax(160px, 1.2fr) minmax(150px, 1.2fr) minmax(140px, 1.5fr);
-            align-items: center;
-            gap: 10px;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--line);
-            font-size: 0.95em;
-        }
-        .archive-grid-row.no-sign, .archive-grid-head.no-sign {
-            grid-template-columns: minmax(80px, 1fr) minmax(110px, 1.2fr) minmax(160px, 1.2fr) minmax(140px, 1.5fr);
-        }
-        .archive-grid-head {
-            font-weight: bold;
-            border-bottom: 2px solid var(--line);
-            color: var(--muted);
-            font-size: 0.88em;
-        }
         
         .row-slot-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 92px; min-height: 30px; }
         .row-slot-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; min-height: 30px; }
         .row-slot-corrected { display: inline-flex; align-items: center; justify-content: center; width: 76px; min-height: 30px; }
-        .row-slot-points { display: inline-flex; align-items: center; justify-content: flex-start; width: 80px; min-height: 30px; font-size: 0.85em; color: var(--muted); white-space: nowrap; }
         
         .corrected-btn { width: 100%; box-sizing: border-box; padding: 5px 2px; border-radius: 16px; border: 2px solid #7b5ea7; background: transparent; color: #7b5ea7; font-family: inherit; font-size: 0.75em; cursor: pointer; transition: background .15s, color .15s; white-space: nowrap; text-align: center; }
         .corrected-btn:hover { background: rgba(123,94,167,0.12); }
@@ -216,7 +196,7 @@
         .student-name { flex: 1; font-size: 1em; }
         .mini-status-group { display: flex; gap: 6px; flex-shrink: 0; }
         .row-status-groups { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
-        .mini-status-btn { padding: 7px 12px; border-radius: 20px; border: 2px solid var(--line); background: var(--surface); color: var(--text); font-family: inherit; font-size: 0.85em; cursor: pointer; transition: background .15s, border-color .15s; }
+        .mini-status-btn { padding: 7px 12px; border-radius: 20px; border: 2px solid var(--line); background: var(--surface); color: var(--text); font-family: inherit; font-size: 0.85em; cursor: pointer; }
         .mini-status-btn:hover { border-color: var(--accent); }
         .mini-status-btn.active.submitted { background: var(--accent); border-color: var(--accent); color: #fff; }
         .mini-status-btn.active.missing { background: var(--danger); border-color: var(--danger); color: #fff; }
@@ -256,9 +236,8 @@
         .assignment-name { font-size: 1em; flex: 1; }
         .assignment-actions { display: flex; gap: 8px; flex-shrink: 0; }
         .archive-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: nowrap; white-space: nowrap; }
-        .cell-status-btn { padding: 6px 14px; border-radius: 20px; border: none; font-family: inherit; font-size: 0.85em; cursor: pointer; color: #fff; transition: filter .15s, transform .1s; }
+        .cell-status-btn { padding: 6px 14px; border-radius: 20px; border: none; font-family: inherit; font-size: 0.85em; cursor: pointer; color: #fff; }
         .cell-status-btn:hover { filter: brightness(0.9); }
-        .cell-status-btn:active { transform: scale(0.95); }
         .cell-status-btn.submitted { background: var(--accent); }
         .cell-status-btn.missing { background: var(--danger); }
         .cell-status-btn.unsigned { background: #b8860c; }
@@ -271,12 +250,12 @@
         .sign-tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); font-size: 0.75em; vertical-align: middle; }
         .sign-placeholder { font-size: 0.75em; color: var(--muted); }
         .grade-missing { display: inline-block; padding: 4px 10px; border-radius: 8px; border: 2px solid var(--danger); box-shadow: 0 0 0 3px rgba(196,103,79,0.25); color: var(--danger); font-size: 0.85em; font-weight: bold; }
-        .grade-btn { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); color: var(--muted); font-size: 0.95em; cursor: pointer; font-family: inherit; line-height: 1; transition: background .15s, border-color .15s, color .15s; }
+        .grade-btn { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); color: var(--muted); font-size: 0.95em; cursor: pointer; font-family: inherit; line-height: 1; }
         .grade-btn:hover { border-color: var(--accent); }
         .grade-btn.active.g-ok { background: #2f6fb0; border-color: #2f6fb0; color: #fff; }
         .grade-btn.active.g-err { background: var(--danger); border-color: var(--danger); color: #fff; }
         .grade-btn.active.g-lost { background: #7a3b3b; border-color: #7a3b3b; color: #fff; }
-        .tab-btn { flex: 1; min-width: 110px; padding: 10px 12px; border: 2px solid var(--line); background: var(--surface); color: var(--text); border-radius: 12px; font-family: inherit; font-size: 0.95em; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
+        .tab-btn { flex: 1; min-width: 110px; padding: 10px 12px; border: 2px solid var(--line); background: var(--surface); color: var(--text); border-radius: 12px; font-family: inherit; font-size: 0.95em; cursor: pointer; }
         .tab-btn:hover { border-color: var(--accent); }
         .tab-btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
         .tab-btn.active:hover { background: var(--accent-dark); }
@@ -525,7 +504,7 @@
                     (data.assignments||[]).forEach(a => {
                         window.__archiveDocsMap[a.id] = data;
                         if(!currentIds.has(a.id) && !window.__extraPastAssignments[a.id]) {
-                            window.__extraPastAssignments[a.id] = { name: a.name, dateLabel, subjectName: a.subjectName || '未分類', needsSign: !!a.needsSign };
+                            window.__extraPastAssignments[a.id] = { name: a.name, dateLabel, subjectName: a.subjectName || '未分類', needsSign: !!a.needsSign, signOnly: !!a.signOnly };
                         }
                     });
                 });
@@ -603,8 +582,8 @@
                     const rec = recs.find(r => r.studentId===s.id && r.assignmentId===a.id);
                     return !rec || rec.status !== '已繳';
                 });
-                let html = `<p style="margin-bottom:4px"><strong>${a.name}</strong>${a.needsSign ? '（需簽名）' : ''}：${missing.length ? missing.map(s=>s.name).join('、') : '全部已繳'}</p>`;
-                if(a.needsSign){
+                let html = `<p style="margin-bottom:4px"><strong>${a.name}</strong>${a.needsSign ? '（需簽名）' : (a.signOnly ? '（只要簽名）' : '')}：${missing.length ? missing.map(s=>s.name).join('、') : '全部已繳'}</p>`;
+                if(a.needsSign || a.signOnly){
                     const unsigned = applicable.filter(s => {
                         const rec = recs.find(r => r.studentId===s.id && r.assignmentId===a.id);
                         return rec && rec.status === '已繳' && rec.signStatus !== '已簽名';
@@ -775,7 +754,7 @@
                     if(signGroup){
                         const curAsg = st.assignments.find(a => a.id === aSel.value);
                         const isExamOrTest = curAsg && (curAsg.name.includes('卷') || curAsg.name.includes('考') || curAsg.name.includes('聽') || curAsg.name.includes('測驗'));
-                        if(isExamOrTest || st2 === '已繳'){
+                        if(curAsg && curAsg.signOnly || isExamOrTest || st2 === '已繳'){
                             signGroup.style.display = 'flex';
                         } else {
                             signGroup.style.display = 'none';
@@ -796,6 +775,7 @@
                     const wrap = $('studentRows');
                     const curAsg = st.assignments.find(a => a.id === aSel.value);
                     const isExamOrTest = curAsg && (curAsg.name.includes('卷') || curAsg.name.includes('考') || curAsg.name.includes('聽') || curAsg.name.includes('測驗'));
+                    const showSignByDefault = curAsg && (curAsg.signOnly || isExamOrTest);
                     wrap.innerHTML = students.map(s => `
                         <div class="student-row" data-student="${s.id}" data-name="${s.name}">
                             <span class="student-name">${s.name}</span>
@@ -803,7 +783,7 @@
                                 <div class="mini-status-group status-group">
                                     ${STATUS_LIST.map(v => `<button type="button" class="mini-status-btn" data-status="${v}">${v}</button>`).join('')}
                                 </div>
-                                ${needsSign ? `<div class="mini-status-group sign-group" style="${isExamOrTest ? 'display:flex' : 'display:none'}">
+                                ${needsSign ? `<div class="mini-status-group sign-group" style="${showSignByDefault ? 'display:flex' : 'display:none'}">
                                     ${SIGN_LIST.map(v => `<button type="button" class="mini-status-btn" data-sign="${v}">${v}</button>`).join('')}
                                 </div>` : ''}
                             </div>
@@ -826,7 +806,7 @@
                     const curSubj = curAsg ? st.subjects.find(x=>x.id===curAsg.subjectId) : null;
                     const curSubjName = curSubj ? curSubj.name : '';
                     const list = sortBySeat(st.students.filter(s => s.groupId === gSel.value && !isPulledOut(s, curSubjName)));
-                    buildStudentRows(list, !!(curAsg && curAsg.needsSign));
+                    buildStudentRows(list, !!(curAsg && (curAsg.needsSign || curAsg.signOnly)));
                     $('studentStep').style.display = list.length ? 'block' : 'none';
                     $('noStudentHint').style.display = list.length ? 'none' : 'block';
                     if(curAsg && list.length){
@@ -839,7 +819,7 @@
                                 const row = wrap.querySelector(`.student-row[data-student="${data.studentId}"]`);
                                 if(!row) return;
                                 if(data.status) setRowStatus(row, data.status);
-                                if(curAsg.needsSign && data.signStatus) setRowSign(row, data.signStatus);
+                                if((curAsg.needsSign || curAsg.signOnly) && data.signStatus) setRowSign(row, data.signStatus);
                             });
                         }).catch(e => console.warn(e));
                     }
@@ -852,7 +832,7 @@
                 function refreshAssignments(){
                     aSel.innerHTML = '';
                     const list = st.assignments.filter(a => a.subjectId === subSel.value && a.name !== '聯絡簿每日任務');
-                    list.forEach(a => aSel.add(new Option(a.name + (a.needsSign ? '（需簽名）' : ''), a.id)));
+                    list.forEach(a => aSel.add(new Option(a.name + (a.signOnly ? '（只要簽名）' : (a.needsSign ? '（需簽名）' : '')), a.id)));
                     $('noAssignmentHint').style.display = list.length ? 'none' : 'block';
                     updateGroupVisibility();
                 }
@@ -873,7 +853,7 @@
                         subjectId: subSel.value, subjectName: subSel.options[subSel.selectedIndex].text,
                         assignmentId: aSel.value, assignmentName: curAsg ? curAsg.name : '',
                         status: row.dataset.status,
-                        ...(curAsg && curAsg.needsSign ? { signStatus: row.dataset.signStatus } : {})
+                        ...((curAsg && (curAsg.needsSign || curAsg.signOnly)) ? { signStatus: row.dataset.signStatus } : {})
                     }));
                     await submitGroupRecords(items);
                     $('fSubmit').disabled = false;
@@ -953,7 +933,7 @@
                 if(isPulledOut(s, subjNameOf(a))) return;
                 const v = statusOf(s.id, a.id);
                 if(v==='已繳') doneCount++; else missingCount++;
-                if(a.needsSign && v==='已繳' && signOf(s.id, a.id) !== '已簽名') unsignedCount++;
+                if((a.needsSign || a.signOnly) && (a.signOnly || v==='已繳') && signOf(s.id, a.id) !== '已簽名') unsignedCount++;
             }));
             const statDefs = [
                 { label:'學生', val: students.length },
@@ -974,11 +954,15 @@
                             return `<p><strong>${a.name}</strong>：${missing.length ? missing.map(s=>s.name).join('、') : '全部已繳'}</p>`;
                         }).join('') : '<p>目前尚無作業</p>';
                     } else {
-                        const signAssignments = assignments.filter(a => a.needsSign);
+                        const signAssignments = assignments.filter(a => a.needsSign || a.signOnly);
                         $('missingListTitle').textContent = '未簽名詳情';
                         $('missingListBody').innerHTML = signAssignments.length ? signAssignments.map(a => {
                             const applicable = students.filter(s => !isPulledOut(s, subjNameOf(a)));
-                            const unsigned = applicable.filter(s => statusOf(s.id, a.id) === '已繳' && signOf(s.id, a.id) !== '已簽名');
+                            const unsigned = applicable.filter(s => {
+                                const stt = statusOf(s.id, a.id);
+                                if(!a.signOnly && stt !== '已繳') return false;
+                                return signOf(s.id, a.id) !== '已簽名';
+                            });
                             return `<p><strong>${a.name}</strong>：${unsigned.length ? unsigned.map(s=>s.name).join('、') : '全部已簽名'}</p>`;
                         }).join('') : '<p>目前沒有需要簽名的作業</p>';
                     }
@@ -988,7 +972,7 @@
 
             $('assignmentMgmtList').innerHTML = assignments.length ? assignments.map(a => `
                 <div class="assignment-row" data-assignment="${a.id}">
-                    <span class="assignment-name">${a.name}${a.needsSign ? '<span class="sign-tag">需簽名</span>' : ''}</span>
+                    <span class="assignment-name">${a.name}${a.signOnly ? '<span class="sign-tag" style="background:#b8860c;color:#fff">只要簽名</span>' : (a.needsSign ? '<span class="sign-tag">需簽名</span>' : '')}</span>
                     <div class="assignment-actions">
                         <button class="btn small" data-mark-all="${a.id}">✓ 全班已繳</button>
                         <button class="btn small outline danger" data-del-assignment2="${a.id}">刪除</button>
@@ -1044,7 +1028,7 @@
                 return name;
             }
             const thead = $('matrixThead');
-            thead.innerHTML = '<tr><th>學生</th>' + assignments.map(a=>`<th>${formatAssignmentLabel(a.name)}${a.needsSign ? `<br><span class="sign-tag">${compactCols ? '簽' : '需簽名'}</span>` : ''}</th>`).join('') + '</tr>';
+            thead.innerHTML = '<tr><th>學生</th>' + assignments.map(a=>`<th>${formatAssignmentLabel(a.name)}${a.signOnly ? `<br><span class="sign-tag" style="background:#b8860c;color:#fff">${compactCols ? '簽' : '只要簽名'}</span>` : (a.needsSign ? `<br><span class="sign-tag">${compactCols ? '簽' : '需簽名'}</span>` : '')}</th>`).join('') + '</tr>';
             const tbody = $('matrixTbody');
             tbody.innerHTML = students.length ? students.map(s => {
                 const cells = assignments.map(a => {
@@ -1054,8 +1038,8 @@
                     const v = statusOf(s.id, a.id);
                     const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(v)}" data-student="${s.id}" data-assignment="${a.id}">${v}</button>`;
                     const isExamOrTest = a.name.includes('卷') || a.name.includes('考') || a.name.includes('聽') || a.name.includes('測驗');
-                    const showSign = a.needsSign && (isExamOrTest || v === '已繳');
-                    if(!a.needsSign) return `<td>${statusBtn}</td>`;
+                    const showSign = (a.needsSign || a.signOnly) && (a.signOnly || isExamOrTest || v === '已繳');
+                    if(!a.needsSign && !a.signOnly) return `<td>${statusBtn}</td>`;
                     
                     const sv = signOf(s.id, a.id);
                     const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(sv)}" data-sign-student="${s.id}" data-sign-assignment="${a.id}" style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${sv}</button>`;
@@ -1151,7 +1135,7 @@
                     const rec = recs.find(r=>r.studentId===s.id && r.assignmentId===dailyAsg.id);
                     const dStatus = rec ? rec.status : '未繳';
                     if(dStatus !== '已繳') missingList.push(s.name);
-                    if(!rec || rec.signStatus !== '已簽名') unsignedList.push(s.name);
+                    if(dStatus === '已繳' && (!rec || rec.signStatus !== '已簽名')) unsignedList.push(s.name);
                     const g = gradingRecs.find(x=>x.studentId===s.id && x.assignmentId===dailyAsg.id);
                     if(g && g.correctness === '有錯' && !g.corrected) uncorrectedList.push(s.name);
                     if(g && g.correctness === '沒寫任務') notWrittenList.push(s.name);
@@ -1257,9 +1241,17 @@
             }
         }
 
-        function pointsOf(g){
+        function isExamAssignment(name){
+            const n = name || '';
+            return n.includes('卷') || n.includes('考') || n.includes('聽') || n.includes('測驗');
+        }
+
+        function pointsOf(g, st){
             if(!g) return 0;
             if(g.assignmentName === '聯絡簿每日任務') return 0;
+            if(isExamAssignment(g.assignmentName)) return 0;
+            const asg = st && st.assignments ? st.assignments.find(a => a.id === g.assignmentId) : null;
+            if(asg && asg.signOnly) return 0;
             if(g.correctness === '全對') return 10;
             if(g.correctness === '有錯' && g.corrected) return 5;
             return 0;
@@ -1283,7 +1275,7 @@
             }
 
             const students = sortBySeat(st.students);
-            const assignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務');
+            const assignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務' && !a.signOnly);
             const subjNameOf = a => { const s = st.subjects.find(x=>x.id===a.subjectId); return s ? s.name : ''; };
             const statusOf = (sid, aid) => { const r = recs.find(x=>x.studentId===sid && x.assignmentId===aid); return r ? r.status : '未繳'; };
             const gradeOf = (sid, aid) => gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
@@ -1296,7 +1288,7 @@
                     if(currentIds.has(g.assignmentId) || !g.assignmentName || knownPast[g.assignmentId]) return;
                     const m = g.assignmentId.match(/^daily-.+-(\d{4})-(\d{2})-(\d{2})$/);
                     if(g.assignmentName === '聯絡簿每日任務'){
-                        knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: m ? `${m[1]}/${m[2]}/${m[3]}` : '', subjectName: '聯絡簿' };
+                        knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: m ? `${m[1]}/${m[2]}/${m[3]}` : '', subjectName: '聯絡簿', signOnly: true };
                     } else {
                         knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: '', subjectName: '未分類' };
                     }
@@ -1312,7 +1304,7 @@
                 function refreshPastAssignmentOptions(){
                     const curPastSel = selPast.value;
                     const subjName = selSubj.value;
-                    const opts = subjName ? (bySubject[subjName] || []) : [];
+                    const opts = subjName ? (bySubject[subjName] || []).filter(([id,info]) => !info.signOnly) : [];
                     selPast.innerHTML = '<option value="">請選擇作業</option>' + opts.map(([id,info])=>`<option value="${id}">${info.dateLabel ? info.dateLabel+' ' : ''}${info.name}</option>`).join('');
                     selPast.value = opts.some(([id])=>id===curPastSel) ? curPastSel : '';
                 }
@@ -1337,8 +1329,8 @@
                     const archiveDoc = window.__archiveDocsMap ? window.__archiveDocsMap[aid] : null;
                     const foundAsg = archiveDoc ? (archiveDoc.assignments||[]).find(a=>a.id===aid) : null;
                     const pastNeedsSign = !!(
-                        (foundAsg && foundAsg.needsSign) ||
-                        (pastInfo && pastInfo.needsSign) ||
+                        (foundAsg && (foundAsg.needsSign || foundAsg.signOnly)) ||
+                        (pastInfo && (pastInfo.needsSign || pastInfo.signOnly)) ||
                         isPastDaily ||
                         records.some(r => r.assignmentId === aid && r.signStatus && r.signStatus !== '未簽名') ||
                         (archiveDoc && (archiveDoc.records || []).some(r => r.assignmentId === aid && r.signStatus && r.signStatus !== '未簽名'))
@@ -1352,7 +1344,6 @@
                             <span class="row-slot-icon"></span>
                             <span class="row-slot-corrected"><button type="button" class="corrected-btn" style="visibility:hidden;pointer-events:none">訂正</button></span>
                             <span class="row-slot-icon"></span>
-                            <span class="row-slot-points"></span>
                         </div>`;
                         const g = gradeOfPast(s.id);
                         const cur = g ? g.correctness : '';
@@ -1367,8 +1358,6 @@
                         const showSign = pastNeedsSign && (isExamOrTest || dStatus === '已繳');
                         const signBtn = pastNeedsSign ? `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(dSign)}" data-past-sign-toggle style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${dSign}</button>` : '';
                         const correctedBtn = `<button type="button" class="corrected-btn ${g&&g.corrected?'active':''}" data-past-corrected="1" style="visibility:${showCorrected?'visible':'hidden'};pointer-events:${showCorrected?'auto':'none'}">${g&&g.corrected?'✓訂正':'訂正'}</button>`;
-                        const hasPt = pointsOf(g)>0;
-                        const ptText = hasPt ? (g.pointsGiven?'已加點':'尚未加點') : '';
                         return `<div class="daily-row ${pastNeedsSign?'':'no-sign'}" data-past-student="${s.id}">
                             <span class="student-name">${s.name}</span>
                             <span class="row-slot-pill">${statusBtn}</span>
@@ -1377,7 +1366,7 @@
                             <span class="row-slot-icon"><button type="button" class="grade-btn ${cur==='有錯'?'active g-err':''}" data-past-grade="有錯" title="有錯">▲</button></span>
                             <span class="row-slot-corrected">${correctedBtn}</span>
                             <span class="row-slot-icon"><button type="button" class="grade-btn ${cur===thirdVal?'active g-lost':''}" data-past-grade="${thirdVal}" title="${thirdVal}">${thirdIcon}</button></span>
-                            <span class="row-slot-points">${ptText}</span>
+                            ${pointsOf(g, st)>0 ? `<span class="empty-hint" style="padding:0">${g.pointsGiven?'已加點':'尚未加點'}</span>` : ''}
                         </div>`;
                     }).join('');
                     box.querySelectorAll('[data-past-status-toggle]').forEach(btn => btn.onclick = async () => {
@@ -1461,10 +1450,12 @@
                 };
             }
 
-            // Global Missing, Uncorrected, and Lost buttons handler at the top of tabGrading
+            // Global buttons handler at the top of tabGrading in exact order: 未繳清單、未訂正清單、未簽名清單、遺失作業清單
             const globalMissingBtn = $('globalMissingListBtn');
             const globalUncorrectedBtn = $('globalUncorrectedListBtn');
+            const globalUnsignedBtn = $('globalUnsignedListBtn');
             const globalLostBtn = $('globalLostListBtn');
+
             if(globalMissingBtn){
                 globalMissingBtn.onclick = () => {
                     $('missingListTitle').textContent = '未繳清單';
@@ -1477,9 +1468,8 @@
                             if(!allAssignmentsMap[id]) allAssignmentsMap[id] = { name: info.name, subjectName: info.subjectName };
                         });
                     }
-                    const entries = Object.entries(allAssignmentsMap);
                     const activeAssIds = new Set(st.assignments.map(a=>a.id));
-                    const blocks = entries.map(([id, info]) => {
+                    const blocks = Object.entries(allAssignmentsMap).map(([id, info]) => {
                         const hasGrading = gradingRecs.some(g => g.assignmentId === id);
                         const hasRecord = records.some(r => r.assignmentId === id);
                         const archiveDoc = window.__archiveDocsMap ? window.__archiveDocsMap[id] : null;
@@ -1505,12 +1495,12 @@
                 globalUncorrectedBtn.onclick = () => {
                     $('missingListTitle').textContent = '未訂正清單';
                     const allAssignmentsMap = {};
-                    st.assignments.filter(a => a.name !== '聯絡簿每日任務').forEach(a => {
+                    st.assignments.filter(a => a.name !== '聯絡簿每日任務' && !a.signOnly).forEach(a => {
                         allAssignmentsMap[a.id] = { name: a.name, subjectName: subjNameOf(a) };
                     });
                     if(window.__extraPastAssignments){
                         Object.entries(window.__extraPastAssignments).forEach(([id, info]) => {
-                            if(!allAssignmentsMap[id]) allAssignmentsMap[id] = { name: info.name, subjectName: info.subjectName };
+                            if(!info.signOnly && !allAssignmentsMap[id]) allAssignmentsMap[id] = { name: info.name, subjectName: info.subjectName };
                         });
                     }
                     const blocks = Object.entries(allAssignmentsMap).map(([id, info]) => {
@@ -1528,29 +1518,83 @@
                     $('missingListModal').style.display = 'flex';
                 };
             }
+            if(globalUnsignedBtn){
+                globalUnsignedBtn.onclick = () => {
+                    $('missingListTitle').textContent = '未簽名清單';
+                    const allAssignmentsMap = {};
+                    st.assignments.filter(a => a.name !== '聯絡簿每日任務' && (a.needsSign || a.signOnly)).forEach(a => {
+                        allAssignmentsMap[a.id] = { name: a.name, subjectName: subjNameOf(a), signOnly: !!a.signOnly };
+                    });
+                    if(window.__extraPastAssignments){
+                        Object.entries(window.__extraPastAssignments).forEach(([id, info]) => {
+                            if((info.needsSign || info.signOnly) && !allAssignmentsMap[id]) allAssignmentsMap[id] = { name: info.name, subjectName: info.subjectName, signOnly: !!info.signOnly };
+                        });
+                    }
+                    const blocks = Object.entries(allAssignmentsMap).map(([id, info]) => {
+                        const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName));
+                        const unsigned = applicable.filter(s => {
+                            const rec = records.find(r => r.studentId === s.id && r.assignmentId === id);
+                            const archDoc = window.__archiveDocsMap ? window.__archiveDocsMap[id] : null;
+                            const archRec = archDoc && (archDoc.records||[]).find(r => r.studentId === s.id && r.assignmentId === id);
+                            const status = rec ? rec.status : (archRec ? archRec.status : '未繳');
+                            const signStatus = rec ? rec.signStatus : (archRec ? archRec.signStatus : '未簽名');
+                            if(!info.signOnly && status !== '已繳') return false;
+                            return signStatus !== '已簽名';
+                        });
+                        if(!unsigned.length) return '';
+                        return `<p style="margin-bottom:4px"><strong>${info.name}</strong>：${unsigned.map(s=>s.name).join('、')}</p>`;
+                    }).filter(Boolean);
+                    $('missingListBody').innerHTML = blocks.length ? blocks.join('') : '<p class="empty-hint">目前沒有未簽名項目</p>';
+                    $('missingListModal').style.display = 'flex';
+                };
+            }
             if(globalLostBtn){
                 globalLostBtn.onclick = () => {
                     $('missingListTitle').textContent = '遺失作業清單';
                     const lostCounts = {};
-                    st.students.forEach(s => { lostCounts[s.id] = 0; });
+                    st.students.forEach(s => { lostCounts[s.id] = { count: 0, assignments: [] }; });
                     gradingRecs.forEach(g => {
-                        if(g.correctness === '遺失' || g.correctness === '沒寫任務'){
-                            if(lostCounts[g.studentId] !== undefined) lostCounts[g.studentId]++;
+                        if(g.correctness === '遺失'){
+                            if(lostCounts[g.studentId] !== undefined) {
+                                lostCounts[g.studentId].count++;
+                                lostCounts[g.studentId].assignments.push(g.assignmentName);
+                            }
                         }
                     });
                     if(window.__archiveDocsMap){
                         Object.values(window.__archiveDocsMap).forEach(doc => {
                             if(doc && doc.records){
                                 doc.records.forEach(r => {
-                                    if(r.correctness === '遺失' || r.correctness === '沒寫任務'){
-                                        if(lostCounts[r.studentId] !== undefined) lostCounts[r.studentId]++;
+                                    if(r.correctness === '遺失'){
+                                        if(lostCounts[r.studentId] !== undefined) {
+                                            lostCounts[r.studentId].count++;
+                                            lostCounts[r.studentId].assignments.push(r.assignmentName);
+                                        }
                                     }
                                 });
                             }
                         });
                     }
-                    const sortedList = sortBySeat(st.students).map(s => ({ name: s.name, count: lostCounts[s.id] || 0 })).filter(x => x.count > 0);
-                    $('missingListBody').innerHTML = sortedList.length ? sortedList.map(x => `<p style="margin-bottom:4px"><strong>${x.name}</strong>：${x.count} 件</p>`).join('') : '<p class="empty-hint">目前沒有遺失紀錄</p>';
+                    const sortedList = sortBySeat(st.students).map(s => ({ id: s.id, name: s.name, ...lostCounts[s.id] })).filter(x => x.count > 0);
+                    $('missingListBody').innerHTML = sortedList.length ? sortedList.map(x => `
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--line)">
+                            <span><strong>${x.name}</strong>：${x.count} 件</span>
+                            <button class="btn small outline" data-lost-detail="${x.id}">詳情</button>
+                        </div>
+                        <div id="lostDetail_${x.id}" style="display:none;margin:4px 0 10px 14px;font-size:0.9em;color:var(--muted)">
+                            ${x.assignments.join('、')}
+                        </div>
+                    `).join('') : '<p class="empty-hint">目前沒有遺失紀錄</p>';
+                    
+                    $('missingListBody').querySelectorAll('[data-lost-detail]').forEach(btn => {
+                        btn.onclick = () => {
+                            const sid = btn.getAttribute('data-lost-detail');
+                            const detailEl = document.getElementById(`lostDetail_${sid}`);
+                            if(detailEl){
+                                detailEl.style.display = detailEl.style.display === 'block' ? 'none' : 'block';
+                            }
+                        };
+                    });
                     $('missingListModal').style.display = 'flex';
                 };
             }
@@ -1675,7 +1719,7 @@
                 const currentIds = new Set(st.assignments.map(a=>a.id));
 
                 const eligible = gradingRecs.filter(g => {
-                    if(g.studentId !== sid || g.pointsGiven || pointsOf(g) <= 0) return false;
+                    if(g.studentId !== sid || g.pointsGiven || pointsOf(g, st) <= 0) return false;
                     return true;
                 });
                 if(!eligible.length){
@@ -1685,7 +1729,7 @@
                 const items = eligible.map(g => ({
                     assignmentId: g.assignmentId, assignmentName: g.assignmentName,
                     type: g.correctness === '全對' ? '全對' : '訂正完成',
-                    points: pointsOf(g)
+                    points: pointsOf(g, st)
                 }));
                 const total = items.reduce((sum,i)=>sum+i.points, 0);
                 const ok = await window.askConfirm(`要幫「${stu.name}」加 ${total} 點嗎？`);
@@ -1819,9 +1863,14 @@
                                 </button>
                             </div>
                             <input id="quickAssignmentName" class="txt-input" placeholder="新增今日作業，例如：數學習作 P.26-28">
-                            <label style="display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:0.9em;color:var(--muted)">
-                                <input type="checkbox" id="quickAssignmentNeedsSign" style="width:auto">需要簽名
-                            </label>
+                            <div style="display:flex;flex-direction:column;gap:4px;justify-content:center;">
+                                <label style="display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:0.9em;color:var(--muted);margin:0">
+                                    <input type="checkbox" id="quickAssignmentNeedsSign" style="width:auto">需要簽名
+                                </label>
+                                <label style="display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:0.9em;color:var(--muted);margin:0">
+                                    <input type="checkbox" id="quickAssignmentSignOnly" style="width:auto">只要簽名
+                                </label>
+                            </div>
                             <button class="btn" id="quickAddAssignmentBtn">＋ 新增作業</button>
                             <button class="btn outline" id="copyMissingBtn">複製未繳名單</button>
                         </div>
@@ -1883,6 +1932,7 @@
                         <div class="row" style="margin-bottom:14px">
                             <button class="btn outline" id="globalMissingListBtn">未繳清單</button>
                             <button class="btn outline" id="globalUncorrectedListBtn">未訂正清單</button>
+                            <button class="btn outline" id="globalUnsignedListBtn">未簽名清單</button>
                             <button class="btn outline" id="globalLostListBtn">遺失作業清單</button>
                         </div>
                     </div>
@@ -2004,12 +2054,20 @@
                 const inp = $('quickAssignmentName');
                 const subjSel = $('quickAssignmentSubject');
                 const signChk = $('quickAssignmentNeedsSign');
+                const signOnlyChk = $('quickAssignmentSignOnly');
                 const name = inp.value.trim();
                 if(!name) return;
-                st.assignments.push({ id: crypto.randomUUID(), name, subjectId: subjSel.value || '', needsSign: signChk.checked });
+                st.assignments.push({ 
+                    id: crypto.randomUUID(), 
+                    name, 
+                    subjectId: subjSel.value || '', 
+                    needsSign: signChk.checked || signOnlyChk.checked,
+                    signOnly: signOnlyChk.checked 
+                });
                 saveSettings({ assignments: st.assignments });
                 inp.value = '';
                 signChk.checked = false;
+                signOnlyChk.checked = false;
                 renderRecordsTab(records, settings);
             };
             $('copyMissingBtn').onclick = async () => {
@@ -2021,11 +2079,13 @@
                         const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
                         return !rec || rec.status === '未繳';
                     });
-                    let line = `${a.name}${a.needsSign ? '（需簽名）' : ''}：${missing.length ? missing.map(s=>s.name).join('、') : '無人未繳'}`;
-                    if(a.needsSign){
+                    let line = `${a.name}${a.signOnly ? '（只要簽名）' : (a.needsSign ? '（需簽名）' : '')}：${missing.length ? missing.map(s=>s.name).join('、') : '無人未繳'}`;
+                    if(a.needsSign || a.signOnly){
                         const unsigned = applicable.filter(s => {
                             const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
-                            return rec && rec.status === '已繳' && rec.signStatus !== '已簽名';
+                            const stt = rec ? rec.status : '未繳';
+                            if(!a.signOnly && stt !== '已繳') return false;
+                            return !rec || rec.signStatus !== '已簽名';
                         });
                         line += `\n　未簽名：${unsigned.length ? unsigned.map(s=>s.name).join('、') : '全部已簽名'}`;
                     }
@@ -2059,7 +2119,7 @@
                 await addDoc(archivesColl, {
                     timestamp: Date.now(),
                     dateLabel: dateLabel || todayStr(),
-                    assignments: archivableAssignments.map(a=>{ const s=st.subjects.find(x=>x.id===a.subjectId); return { id:a.id, name:a.name, subjectName: s?s.name:'', needsSign: !!a.needsSign }; }),
+                    assignments: archivableAssignments.map(a=>{ const s=st.subjects.find(x=>x.id===a.subjectId); return { id:a.id, name:a.name, subjectName: s?s.name:'', needsSign: !!a.needsSign, signOnly: !!a.signOnly }; }),
                     records: snapshotRecords,
                     studentCount: st.students.length,
                     assignmentCount: archivableAssignments.length
@@ -2104,62 +2164,44 @@
 
                     function renderArchiveDetail(item){
                         const box = archivesListEl.querySelector(`[data-detail="${item.id}"]`);
-                        const anyNeedsSign = (item.assignments || []).some(x => x.needsSign);
-                        const gridClass = anyNeedsSign ? '' : 'no-sign';
-                        
-                        let headHtml = `<div class="archive-grid-head ${gridClass}">
-                            <div>學生</div>
-                            <div>作業</div>
-                            <div>狀態</div>
-                            ${anyNeedsSign ? '<div>簽名</div>' : ''}
-                            <div>備註</div>
-                        </div>`;
-                        
-                        let rowsHtml = (item.records||[]).map((r,i)=>{
-                            const asg = (item.assignments || []).find(x => x.id === r.assignmentId);
-                            const needsSign = asg && asg.needsSign;
-                            const isSigned = r.signStatus === '已簽名';
-                            const isExamOrTest = asg && (asg.name.includes('卷') || asg.name.includes('考') || asg.name.includes('聽') || asg.name.includes('測驗'));
-                            const showSign = needsSign && (isExamOrTest || r.status === '已繳');
-                            
-                            const statusBtn = r.pulledOut ? '<span class="badge-pulled-out">抽離</span>' : `<button type="button" class="cell-status-btn ${badgeClass(r.status)}" data-arch-status="${i}">${r.status}</button>`;
-                            const makeupBtn = (!r.pulledOut && r.status !== '已繳') ? `<button class="btn small outline" data-makeup="${i}">補交</button>` : '';
-                            
-                            let signHtml = '';
-                            if(anyNeedsSign){
-                                if(needsSign){
-                                    if(r.pulledOut){
-                                        signHtml = '';
-                                    } else {
-                                        const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(r.signStatus||'未簽名')}" data-arch-sign="${i}" style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${r.signStatus||'未簽名'}</button>`;
-                                        const makeupSignBtn = (!isSigned && showSign) ? `<button class="btn small outline" data-makeup-sign="${i}">補簽名</button>` : '';
-                                        signHtml = `<div style="display:flex;gap:4px;align-items:center">${signBtn}${makeupSignBtn}</div>`;
-                                    }
-                                } else {
-                                    signHtml = '<span style="color:var(--muted)">－</span>';
-                                }
-                            }
-                            
-                            return `<div class="archive-grid-row ${gridClass}">
-                                <div>${r.studentName}</div>
-                                <div>${r.assignmentName}</div>
-                                <div style="display:flex;gap:4px;align-items:center">${statusBtn}${makeupBtn}</div>
-                                ${anyNeedsSign ? `<div>${signHtml}</div>` : ''}
-                                <div style="font-size:0.85em;color:var(--muted);overflow-wrap:anywhere">${r.remark||''}</div>
-                            </div>`;
-                        }).join('');
-                        
-                        box.innerHTML = headHtml + rowsHtml;
-                        
+                        const hasGrading = (item.records||[]).some(r => r.correctness !== undefined);
+                        const anyNeedsSign = (item.assignments || []).some(x => x.needsSign || x.signOnly);
+                        box.innerHTML = `<table><thead><tr><th>學生</th><th>作業</th><th>狀態</th>${anyNeedsSign?'<th>簽名</th>':''}${hasGrading?'<th>訂正</th>':''}<th>備註</th><th>操作</th></tr></thead><tbody>${
+                            (item.records||[]).map((r,i)=>{
+                                const asg = (item.assignments || []).find(x => x.id === r.assignmentId);
+                                const needsSign = asg && (asg.needsSign || asg.signOnly);
+                                const isSignOnly = asg && asg.signOnly;
+                                const isSigned = r.signStatus === '已簽名';
+                                const isExamOrTest = asg && (asg.name.includes('卷') || asg.name.includes('考') || asg.name.includes('聽') || asg.name.includes('測驗'));
+                                const showSign = needsSign && (isSignOnly || isExamOrTest || r.status === '已繳');
+                                const showCorrected = r.correctness === '有錯';
+                                return `<tr>
+                                    <td>${r.studentName}</td><td>${r.assignmentName}</td>
+                                    <td>${r.pulledOut ? '<span class="badge-pulled-out">抽離</span>' : `<button type="button" class="cell-status-btn ${badgeClass(r.status)}" data-arch-status="${i}">${r.status}</button>`}</td>
+                                    ${anyNeedsSign ? `<td>${needsSign ? (r.pulledOut ? '' : `<div style="display:flex;gap:4px;align-items:center"><button type="button" class="cell-status-btn cell-sign-btn ${signClass(r.signStatus||'未簽名')}" data-arch-sign="${i}" style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${r.signStatus||'未簽名'}</button>${(!isSigned && showSign) ? `<button class="btn small outline" data-makeup-sign="${i}">補簽名</button>` : ''}</div>`) : '－'}</td>` : ''}
+                                    ${hasGrading ? `<td>
+                                        ${r.pulledOut ? '' : `
+                                            <div class="mini-status-group">
+                                                <button type="button" class="grade-btn ${r.correctness==='全對'?'active g-ok':''}" data-arch-grade="${i}" data-arch-grade-value="全對" title="全對">✓</button>
+                                                <button type="button" class="grade-btn ${r.correctness==='有錯'?'active g-err':''}" data-arch-grade="${i}" data-arch-grade-value="有錯" title="有錯">▲</button>
+                                                <button type="button" class="grade-btn ${r.correctness==='沒寫任務'||r.correctness==='遺失'?'active g-lost':''}" data-arch-grade="${i}" data-arch-grade-value="${r.assignmentName==='聯絡簿每日任務'?'沒寫任務':'遺失'}" title="沒寫任務/遺失">${r.assignmentName==='聯絡簿每日任務'?'－':'✗'}</button>
+                                            </div>
+                                            <button type="button" class="corrected-btn ${r.corrected?'active':''}" data-arch-corrected="${i}" style="visibility:${showCorrected?'visible':'hidden'};pointer-events:${showCorrected?'auto':'none'}">${r.corrected?'✓訂正':'訂正'}</button>
+                                        `}
+                                    </td>` : ''}
+                                    <td>${r.remark||''}</td>
+                                    <td>${(!r.pulledOut && r.status!=='已繳') ? `<button class="btn small outline" data-makeup="${i}">新增補交</button>` : ''}</td>
+                                </tr>`;
+                            }).join('')
+                        }</tbody></table>`;
                         box.querySelectorAll('[data-makeup]').forEach(btn => btn.onclick = async () => {
                             const idx = Number(btn.getAttribute('data-makeup'));
                             const r = item.records[idx];
                             const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                            const remarkText = `補交: ${timeStr}`;
+                            const remarkText = `已補交（${timeStr}）`;
                             const updatedRecords = item.records.map((r2,i2) => i2===idx ? { ...r2, status: '已繳', remark: remarkText } : r2);
                             item.records = updatedRecords;
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
-                            
                             const stu = st.students.find(x=>x.id===r.studentId);
                             const grp = st.groups.find(x=>x.id===stu?.groupId);
                             const a = item.assignments.find(x=>x.id===r.assignmentId);
@@ -2170,21 +2212,18 @@
                                 subjectId: a?a.subjectId||'':'', subjectName: subj?subj.name:'',
                                 assignmentId: r.assignmentId, assignmentName: r.assignmentName,
                                 status: '已繳',
-                                ...(a && a.needsSign ? { signStatus: r.signStatus || '未簽名' } : {})
+                                ...((a && (a.needsSign || a.signOnly)) ? { signStatus: r.signStatus || '未簽名' } : {})
                             });
                             renderArchiveDetail(item);
-                            renderGradingTab(gradingRecords, records, st);
                         });
-                        
                         box.querySelectorAll('[data-makeup-sign]').forEach(btn => btn.onclick = async () => {
                             const idx = Number(btn.getAttribute('data-makeup-sign'));
                             const r = item.records[idx];
                             const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                            const remarkText = r.remark ? `${r.remark} / 補簽: ${timeStr}` : `補簽: ${timeStr}`;
+                            const remarkText = r.remark ? `${r.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`;
                             const updatedRecords = item.records.map((r2,i2) => i2===idx ? { ...r2, signStatus: '已簽名', remark: remarkText } : r2);
                             item.records = updatedRecords;
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
-                            
                             const stu = st.students.find(x=>x.id===r.studentId);
                             const grp = st.groups.find(x=>x.id===stu?.groupId);
                             const a = item.assignments.find(x=>x.id===r.assignmentId);
@@ -2198,55 +2237,45 @@
                                 signStatus: '已簽名'
                             });
                             renderArchiveDetail(item);
-                            renderGradingTab(gradingRecords, records, st);
                         });
-                        
                         box.querySelectorAll('[data-arch-status]').forEach(btn => btn.onclick = async () => {
                             const idx = Number(btn.getAttribute('data-arch-status'));
                             const cur = item.records[idx];
                             const nv = cur.status === '已繳' ? '未繳' : '已繳';
                             const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                            const remarkText = nv === '已繳' ? `狀態改已繳: ${timeStr}` : cur.remark;
+                            const remarkText = nv === '已繳' ? `狀態改已繳（${timeStr}）` : cur.remark;
                             const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, status: nv, signStatus: nv==='已繳' ? (r.signStatus||'未簽名') : '未簽名', remark: remarkText } : r);
                             item.records = updatedRecords;
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
-                            
-                            const stu = st.students.find(x=>x.id===cur.studentId);
-                            const grp = st.groups.find(x=>x.id===stu?.groupId);
-                            const a = item.assignments.find(x=>x.id===cur.assignmentId);
-                            const subj = a ? st.subjects.find(x=>x.id===a.subjectId) : null;
-                            await adminSetStatus({
-                                groupId: grp?grp.id:'', groupName: grp?grp.name:'',
-                                studentId: cur.studentId, studentName: cur.studentName,
-                                subjectId: a?a.subjectId||'':'', subjectName: subj?subj.name:'',
-                                assignmentId: cur.assignmentId, assignmentName: cur.assignmentName,
-                                status: nv
-                            });
                             renderArchiveDetail(item);
                         });
-                        
                         box.querySelectorAll('[data-arch-sign]').forEach(btn => btn.onclick = async () => {
                             const idx = Number(btn.getAttribute('data-arch-sign'));
                             const cur = item.records[idx];
                             const nv = (cur.signStatus === '已簽名') ? '未簽名' : '已簽名';
                             const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                            const remarkText = nv === '已簽名' ? (cur.remark ? `${cur.remark} / 簽名: ${timeStr}` : `簽名: ${timeStr}`) : cur.remark;
+                            const remarkText = nv === '已簽名' ? (cur.remark ? `${cur.remark} / 簽名（${timeStr}）` : `簽名（${timeStr}）`) : cur.remark;
                             const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, signStatus: nv, remark: remarkText } : r);
                             item.records = updatedRecords;
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
-                            
-                            const stu = st.students.find(x=>x.studentId===cur.studentId);
-                            const grp = st.groups.find(x=>x.id===stu?.groupId);
-                            const a = item.assignments.find(x=>x.id===cur.assignmentId);
-                            const subj = a ? st.subjects.find(x=>x.id===a.subjectId) : null;
-                            await adminSetStatus({
-                                groupId: grp?grp.id:'', groupName: grp?grp.name:'',
-                                studentId: cur.studentId, studentName: cur.studentName,
-                                subjectId: a?a.subjectId||'':'', subjectName: subj?subj.name:'',
-                                assignmentId: cur.assignmentId, assignmentName: cur.assignmentName,
-                                status: cur.status || '已繳',
-                                signStatus: nv
-                            });
+                            renderArchiveDetail(item);
+                        });
+                        box.querySelectorAll('[data-arch-grade]').forEach(btn => btn.onclick = async () => {
+                            const idx = Number(btn.getAttribute('data-arch-grade'));
+                            const val = btn.getAttribute('data-arch-grade-value');
+                            const cur = item.records[idx];
+                            const nextVal = cur.correctness === val ? '' : val;
+                            const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, correctness: nextVal, corrected: nextVal==='有錯' ? r.corrected : false } : r);
+                            item.records = updatedRecords;
+                            await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
+                            renderArchiveDetail(item);
+                        });
+                        box.querySelectorAll('[data-arch-corrected]').forEach(btn => btn.onclick = async () => {
+                            const idx = Number(btn.getAttribute('data-arch-corrected'));
+                            const cur = item.records[idx];
+                            const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, corrected: !r.corrected } : r);
+                            item.records = updatedRecords;
+                            await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
                             renderArchiveDetail(item);
                         });
                     }
