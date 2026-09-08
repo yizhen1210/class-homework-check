@@ -164,14 +164,14 @@
         /* ---- 完美對齊的 Grid 列佈局 ---- */
         .daily-row { 
             display: grid; 
-            grid-template-columns: minmax(70px, 1fr) 92px 92px 38px 38px 76px 38px 100px; 
+            grid-template-columns: minmax(70px, 1fr) 140px 140px 38px 38px 76px 38px max-content; 
             align-items: center; 
             gap: 12px; 
             padding: 10px 0; 
             border-bottom: 1px solid var(--line); 
         }
         .daily-row.no-sign { 
-            grid-template-columns: minmax(70px, 1fr) 92px 38px 38px 76px 38px 100px; 
+            grid-template-columns: minmax(70px, 1fr) 140px 38px 38px 76px 38px max-content; 
         }
         .daily-row .student-name { min-width: 70px; flex-shrink: 0; }
         #dailyQuickGradeList, #pastAssignmentGradeList { overflow-x: auto; }
@@ -179,7 +179,7 @@
         .row-slot-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 92px; min-height: 30px; gap: 6px; }
         .row-slot-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; min-height: 30px; }
         .row-slot-corrected { display: inline-flex; align-items: center; justify-content: center; width: 76px; min-height: 30px; }
-        .row-slot-points { display: inline-flex; align-items: center; justify-content: flex-end; width: 100px; min-height: 30px; font-size: 0.85em; color: var(--muted); white-space: nowrap; }
+        .row-slot-points { display: inline-flex; align-items: center; justify-content: flex-start; min-height: 30px; font-size: 0.85em; color: var(--muted); white-space: nowrap; }
         
         .corrected-btn { width: 100%; box-sizing: border-box; padding: 5px 2px; border-radius: 16px; border: 2px solid #7b5ea7; background: transparent; color: #7b5ea7; font-family: inherit; font-size: 0.75em; cursor: pointer; transition: background .15s, color .15s, transform 0.1s; white-space: nowrap; text-align: center; }
         .corrected-btn:hover { background: rgba(123,94,167,0.12); }
@@ -496,6 +496,7 @@
                 const currentIds = new Set(settings && settings.assignments ? settings.assignments.map(a=>a.id) : []);
                 snap.docs.forEach(d => {
                     const data = d.data();
+                    data._id = d.id;
                     window.__archiveDocsMap[d.id] = data;
                     const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
                     (data.assignments||[]).forEach(a => {
@@ -1043,7 +1044,7 @@
                     const sv = signOf(s.id, a.id);
                     const svDisplay = sv === '未簽名' ? '未簽' : sv;
                     const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(sv)}" data-sign-student="${s.id}" data-sign-assignment="${a.id}" style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${svDisplay}</button>`;
-                    return `<td><div class="cell-stack">${statusBtn}${signBtn}</div></td>`;
+                    return `<td><div class="cell-stack">${statusBtn}${signBtn}</div></div></td>`;
                 }).join('');
                 return `<tr><td>${formatStudentCell(s.name)}</td>${cells}</tr>`;
             }).join('') : '';
@@ -1202,8 +1203,8 @@
                     const stu = st.students.find(x=>x.id===sid);
                     const grp = st.groups.find(x=>x.id===stu?.groupId);
                     const cur = recs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
-                    const curText = btn.textContent.trim();
-                    const nv = (curText === '已簽名' || curText === '已簽') ? '未簽名' : '已簽名';
+                    const currentText = btn.textContent.trim();
+                    const nv = (currentText === '已簽名' || currentText === '已簽') ? '未簽名' : '已簽名';
                     await adminSetStatus({
                         groupId: grp?grp.id:'', groupName: grp?grp.name:'',
                         studentId: sid, studentName: stu?stu.name:'',
@@ -1292,7 +1293,7 @@
                     if(currentIds.has(g.assignmentId) || !g.assignmentName || knownPast[g.assignmentId]) return;
                     const m = g.assignmentId.match(/^daily-.+-(\d{4})-(\d{2})-(\d{2})$/);
                     if(g.assignmentName === '聯絡簿每日任務'){
-                        knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: m ? `${m[1]}/${m[2]}/${m[3]}` : '', subjectName: '聯絡簿', signOnly: true };
+                        knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: m ? `${m[1]}/${m[2]}/${m[3]}` : '', subjectName: '聯絡簿', signOnly: false, needsSign: true };
                     } else {
                         knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: '', subjectName: '未分類' };
                     }
@@ -1328,7 +1329,7 @@
                     const isPastDaily = aName === '聯絡簿每日任務';
                     const gradeOfPast = sid => gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
                     const pastSubjName = knownPast[aid] ? (knownPast[aid].subjectName||'') : '';
-                    const dSubj = isPastDaily ? st.subjects.find(x=>x.id===(st.assignments.find(a==='聯絡簿每日任務')||{}).subjectId) : st.subjects.find(x=>x.name===pastSubjName);
+                    const dSubj = isPastDaily ? st.subjects.find(x=>x.id===(st.assignments.find(a=>a.name==='聯絡簿每日任務')||{}).subjectId) : st.subjects.find(x=>x.name===pastSubjName);
                     const pastInfo = knownPast[aid];
                     const archiveDoc = window.__archiveDocsMap ? window.__archiveDocsMap[aid] : null;
                     const foundAsg = archiveDoc ? (archiveDoc.assignments||[]).find(a=>a.id===aid) : null;
@@ -1343,35 +1344,39 @@
                     const isContact = aName === '聯絡簿每日任務';
                     const pastNeedsPoints = !isExam && !isContact;
                     box.innerHTML = sortBySeat(st.students).map(s => {
-                        if(isPulledOut(s, pastSubjName)) return `<div class="daily-row ${pastNeedsSign?'':'no-sign'} ${pastNeedsPoints?'has-points':''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign?'140px ':''}38px 38px 76px 38px ${pastNeedsPoints?'100px':''}">
+                        if(isPulledOut(s, pastSubjName)) return `<div class="daily-row ${pastNeedsSign?'':'no-sign'} ${pastNeedsPoints?'has-points':''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign?'140px ':''}38px 38px 76px 38px ${pastNeedsPoints?'max-content':''}">
                             <span class="student-name">${s.name}</span>
-                            <span class="row-slot-pill"><span class="pulled-out-pill">抽離</span></span>
-                            ${pastNeedsSign ? `<span class="row-slot-pill"></span>` : ''}
+                            <span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%"><button type="button" class="cell-status-btn" style="background:transparent; color:var(--muted); font-weight:bold; pointer-events:none; box-shadow:none;">抽離</button><button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button></div></span>
+                            ${pastNeedsSign ? `<span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%"><button type="button" class="cell-status-btn" style="background:transparent; color:var(--muted); font-weight:bold; pointer-events:none; box-shadow:none;">抽離</button><button class="btn small outline" style="visibility:hidden;pointer-events:none;">補簽</button></div></span>` : ''}
                             <span class="row-slot-icon"></span>
                             <span class="row-slot-icon"></span>
                             <span class="row-slot-corrected"><button type="button" class="corrected-btn" style="visibility:hidden;pointer-events:none">訂正</button></span>
                             <span class="row-slot-icon"></span>
-                            ${pastNeedsPoints ? `<span class="row-slot-points"></span>` : ''}
+                            ${pastNeedsPoints ? `<span class="row-slot-points" style="visibility:hidden">尚未加點</span>` : ''}
                         </div>`;
                         const g = gradeOfPast(s.id);
                         const cur = g ? g.correctness : '';
                         const thirdVal = isPastDaily ? '沒寫任務' : '遺失';
                         const thirdIcon = isPastDaily ? '－' : '✗';
                         const rec = records.find(r=>r.studentId===s.id && r.assignmentId===aid);
-                        const dStatus = rec ? rec.status : '未繳';
-                        const dSign = (rec && rec.signStatus) ? rec.signStatus : '未簽名';
-                        const dSignDisplay = dSign === '未簽名' ? '未簽' : dSign;
+                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === s.id && r.assignmentId === aid);
+                        const dStatus = rec ? rec.status : (archRec ? archRec.status : '未繳');
+                        const dSign = rec && rec.signStatus ? rec.signStatus : (archRec && archRec.signStatus ? archRec.signStatus : '未簽名');
+                        const dSignDisplay = dSign === '未簽名' ? '未簽' : (dSign === '已簽名' ? '已簽' : dSign);
                         const isSigned = dSign === '已簽名';
                         const showCorrected = cur==='有錯';
                         const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(dStatus)}" data-past-status-toggle>${dStatus}</button>`;
                         const isExamOrTest = aName.includes('卷') || aName.includes('考') || aName.includes('聽') || aName.includes('測驗');
                         const showSign = pastNeedsSign && (isExamOrTest || dStatus === '已繳');
                         const signBtn = pastNeedsSign ? `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(dSign)}" data-past-sign-toggle style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${dSignDisplay}</button>` : '';
-                        const makeupSignBtn = (pastNeedsSign && !isSigned && showSign) ? `<button class="btn small outline" data-past-makeup-sign="1">補簽</button>` : '';
+                        const makeupSignBtn = (pastNeedsSign && !isSigned && showSign) ? `<button class="btn small outline" data-past-makeup-sign="1">補簽</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補簽</button>`;
                         const correctedBtn = `<button type="button" class="corrected-btn ${g&&g.corrected?'active':''}" data-past-corrected="1" style="visibility:${showCorrected?'visible':'hidden'};pointer-events:${showCorrected?'auto':'none'}">${g&&g.corrected?'✓訂正':'訂正'}</button>`;
-                        const makeupBtn = (dStatus !== '已繳') ? `<button class="btn small outline" data-past-makeup="1">補交</button>` : '';
-                        const pointsSlot = pastNeedsPoints ? `<span class="row-slot-points">${pointsOf(g, st)>0 ? (g.pointsGiven?'已加點':'尚未加點') : ''}</span>` : '';
-                        return `<div class="daily-row ${pastNeedsSign?'':'no-sign'} ${pastNeedsPoints?'has-points':''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign?'140px ':''}38px 38px 76px 38px ${pastNeedsPoints?'100px':''}" data-past-student="${s.id}">
+                        const makeupBtn = (dStatus !== '已繳') ? `<button class="btn small outline" data-past-makeup="1">補交</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button>`;
+                        
+                        const pts = pointsOf(g, st);
+                        const pointsSlot = pastNeedsPoints ? `<span class="row-slot-points" style="visibility:${pts > 0 ? 'visible' : 'hidden'}">${pts > 0 ? (g.pointsGiven ? '已加點' : '尚未加點') : '尚未加點'}</span>` : '';
+                        
+                        return `<div class="daily-row ${pastNeedsSign?'':'no-sign'} ${pastNeedsPoints?'has-points':''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign?'140px ':''}38px 38px 76px 38px ${pastNeedsPoints?'max-content':''}" data-past-student="${s.id}">
                             <span class="student-name">${s.name}</span>
                             <span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%">${statusBtn}${makeupBtn}</div></span>
                             ${pastNeedsSign ? `<span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%">${signBtn}${makeupSignBtn}</div></span>` : ''}
@@ -1388,9 +1393,12 @@
                         const stu = st.students.find(x=>x.id===sid);
                         const grp = st.groups.find(x=>x.id===stu?.groupId);
                         const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
-                        const nv = (cur2 && cur2.status === '已繳') ? '未繳' : '已繳';
+                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && r.assignmentId === aid);
+                        const curStatus = cur2 ? cur2.status : (archRec ? archRec.status : '未繳');
+                        const curRemark = cur2 ? cur2.remark : (archRec ? archRec.remark : '');
+                        const nv = curStatus === '已繳' ? '未繳' : '已繳';
                         const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                        const remarkText = nv === '已繳' ? `已補交（${timeStr}）` : (cur2 ? cur2.remark : '');
+                        const remarkText = nv === '已繳' ? `已補交（${timeStr}）` : curRemark;
                         const payload = {
                             groupId: grp?grp.id:'', groupName: grp?grp.name:'',
                             studentId: sid, studentName: stu?stu.name:'',
@@ -1402,6 +1410,107 @@
                         await adminSetStatus(payload);
                         let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
                         if(r) Object.assign(r, payload); else records.push(payload);
+                        if (archiveDoc && archiveDoc._id) {
+                            const archIdx = (archiveDoc.records || []).findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                            if (archIdx !== -1) {
+                                archiveDoc.records[archIdx].status = nv;
+                                archiveDoc.records[archIdx].remark = remarkText;
+                                setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            }
+                        }
+                        renderPastAssignmentGrader();
+                    });
+                    box.querySelectorAll('[data-past-makeup]').forEach(btn => btn.onclick = async () => {
+                        const row = btn.closest('.daily-row');
+                        const sid = row.getAttribute('data-past-student');
+                        const stu = st.students.find(x=>x.id===sid);
+                        const grp = st.groups.find(x=>x.id===stu?.groupId);
+                        const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
+                        const payload = {
+                            groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                            studentId: sid, studentName: stu?stu.name:'',
+                            subjectId: dSubj?dSubj.id:'', subjectName: dSubj?dSubj.name:'',
+                            assignmentId: aid, assignmentName: aName,
+                            status: '已繳',
+                            remark: `已補交（${timeStr}）`
+                        };
+                        await adminSetStatus(payload);
+                        let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        if(r) Object.assign(r, payload); else records.push(payload);
+                        if (archiveDoc && archiveDoc._id) {
+                            const archIdx = (archiveDoc.records || []).findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                            if (archIdx !== -1) {
+                                archiveDoc.records[archIdx].status = '已繳';
+                                archiveDoc.records[archIdx].remark = payload.remark;
+                                setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            }
+                        }
+                        renderPastAssignmentGrader();
+                    });
+                    box.querySelectorAll('[data-past-sign-toggle]').forEach(btn => btn.onclick = async () => {
+                        const row = btn.closest('.daily-row');
+                        const sid = row.getAttribute('data-past-student');
+                        const stu = st.students.find(x=>x.id===sid);
+                        const grp = st.groups.find(x=>x.id===stu?.groupId);
+                        const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && r.assignmentId === aid);
+                        const curSignStatus = cur2 && cur2.signStatus ? cur2.signStatus : (archRec && archRec.signStatus ? archRec.signStatus : '未簽名');
+                        const curRemark = cur2 ? cur2.remark : (archRec ? archRec.remark : '');
+                        const nv = (curSignStatus === '已簽名' || curSignStatus === '已簽') ? '未簽名' : '已簽名';
+                        const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
+                        const remarkText = nv === '已簽名' ? (curRemark ? `${curRemark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`) : curRemark;
+                        const payload = {
+                            groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                            studentId: sid, studentName: stu?stu.name:'',
+                            subjectId: dSubj?dSubj.id:'', subjectName: dSubj?dSubj.name:'',
+                            assignmentId: aid, assignmentName: aName,
+                            signStatus: nv,
+                            remark: remarkText
+                        };
+                        await adminSetStatus(payload);
+                        let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        if(r) { r.signStatus = nv; r.remark = remarkText; } else records.push(payload);
+                        if (archiveDoc && archiveDoc._id) {
+                            const archIdx = (archiveDoc.records || []).findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                            if (archIdx !== -1) {
+                                archiveDoc.records[archIdx].signStatus = nv;
+                                archiveDoc.records[archIdx].remark = remarkText;
+                                setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            }
+                        }
+                        renderPastAssignmentGrader();
+                    });
+                    box.querySelectorAll('[data-past-makeup-sign]').forEach(btn => btn.onclick = async () => {
+                        const row = btn.closest('.daily-row');
+                        const sid = row.getAttribute('data-past-student');
+                        const stu = st.students.find(x=>x.id===sid);
+                        const grp = st.groups.find(x=>x.id===stu?.groupId);
+                        const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
+                        const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && r.assignmentId === aid);
+                        const curStatus = cur2 ? cur2.status : (archRec ? archRec.status : '未繳');
+                        const curRemark = cur2 ? cur2.remark : (archRec ? archRec.remark : '');
+                        const remarkText = curRemark ? `${curRemark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`;
+                        const payload = {
+                            groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                            studentId: sid, studentName: stu?stu.name:'',
+                            subjectId: dSubj?dSubj.id:'', subjectName: dSubj?dSubj.name:'',
+                            assignmentId: aid, assignmentName: aName,
+                            status: curStatus,
+                            signStatus: '已簽名',
+                            remark: remarkText
+                        };
+                        await adminSetStatus(payload);
+                        let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        if(r) { r.signStatus = '已簽名'; r.remark = remarkText; } else records.push(payload);
+                        if (archiveDoc && archiveDoc._id) {
+                            const archIdx = (archiveDoc.records || []).findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                            if (archIdx !== -1) {
+                                archiveDoc.records[archIdx].signStatus = '已簽名';
+                                archiveDoc.records[archIdx].remark = remarkText;
+                                setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            }
+                        }
                         renderPastAssignmentGrader();
                     });
                     box.querySelectorAll('[data-past-makeup]').forEach(btn => btn.onclick = async () => {
@@ -1429,8 +1538,8 @@
                         const stu = st.students.find(x=>x.id===sid);
                         const grp = st.groups.find(x=>x.id===stu?.groupId);
                         const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
-                        const curText = btn.textContent.trim();
-                        const nv = (curText === '已簽名' || curText === '已簽') ? '未簽名' : '已簽名';
+                        const currentText = btn.textContent.trim();
+                        const nv = (currentText === '已簽名' || currentText === '已簽') ? '未簽名' : '已簽名';
                         const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                         const remarkText = nv === '已簽名' ? (cur2 && cur2.remark ? `${cur2.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`) : (cur2 ? cur2.remark : '');
                         await adminSetStatus({
@@ -1510,7 +1619,6 @@
                 };
             }
 
-            // Global buttons handler at the top of tabGrading in exact order: 未繳清單、未訂正清單、未簽名清單、遺失作業清單
             const globalMissingBtn = $('globalMissingListBtn');
             const globalUncorrectedBtn = $('globalUncorrectedListBtn');
             const globalUnsignedBtn = $('globalUnsignedListBtn');
@@ -1668,63 +1776,49 @@
             const tbody = $('gradeTbody');
 
             const renderGradingRowsContent = () => {
+                const getRowHtml = (s, isGroupMode) => {
+                    const cellStyle = isGroupMode ? ' style="text-align: center; min-width: 82px; vertical-align: top;"' : '';
+                    const firstCellStyle = isGroupMode ? ' style="text-align: left; white-space: nowrap;"' : '';
+                    
+                    const cells = assignments.map(a => {
+                        if(isPulledOut(s, subjNameOf(a))) return `<td${cellStyle}><span class="cell-pulled-out">抽離</span></td>`;
+                        const gRecord = gradeOf(s.id, a.id);
+                        const cur = gRecord ? gRecord.correctness : '';
+                        const showCorrected = cur === '有錯';
+                        const isDaily = a.name === '聯絡簿每日任務';
+                        const thirdBtn = isDaily
+                            ? `<button type="button" class="grade-btn ${cur==='沒寫任務'?'active g-lost':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="沒寫任務" title="沒寫任務">－</button>`
+                            : `<button type="button" class="grade-btn ${cur==='遺失'?'active g-lost':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="遺失" title="遺失">✗</button>`;
+                        const btns = `
+                            <div class="mini-status-group">
+                                <button type="button" class="grade-btn ${cur==='全對'?'active g-ok':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="全對" title="全對">✓</button>
+                                <button type="button" class="grade-btn ${cur==='有錯'?'active g-err':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="有錯" title="有錯">▲</button>
+                                ${thirdBtn}
+                            </div>`;
+                        const correctedBtn = `<button type="button" class="corrected-btn ${gRecord&&gRecord.corrected?'active':''}" data-corrected-student="${s.id}" data-corrected-assignment="${a.id}" style="visibility:${showCorrected?'visible':'hidden'};pointer-events:${showCorrected?'auto':'none'}">${gRecord&&gRecord.corrected?'✓訂正':'訂正'}</button>`;
+                        return `<td${cellStyle}><div class="cell-stack">${btns}<div class="corrected-slot">${correctedBtn}</div></div></td>`;
+                    }).join('');
+                    return `<tr><td${firstCellStyle}>${s.name}</td>${cells}</tr>`;
+                };
+
                 if(gradingViewMode === 'group'){
-                    const assignmentHeaders = assignments.map(a => `<div style="text-align:center;font-size:0.85em;color:var(--muted);min-width:130px;width:130px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${a.name}">${a.name}</div>`).join('');
+                    const theadHtml = '<tr><th style="text-align: left; white-space: nowrap;">學生</th>' + assignments.map(a=>`<th style="text-align: center; min-width: 82px; vertical-align: top;">${a.name}</th>`).join('') + '</tr>';
                     return st.groups.map(g => {
                         const gStudents = sortBySeat(st.students.filter(s=>s.groupId===g.id));
                         return `<div class="group-block">
-                            <div class="group-block-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:nowrap;">
-                                <strong style="flex-shrink:0;margin-right:16px;">${g.name}</strong>
-                                <div style="display:flex;gap:20px;overflow-x:auto;align-items:center;padding-bottom:4px;flex:1;justify-content:flex-start;">${assignmentHeaders}</div>
+                            <div class="group-block-head"><strong>${g.name}</strong></div>
+                            <div class="table-scroll">
+                                <table>
+                                    <thead>${theadHtml}</thead>
+                                    <tbody>
+                                        ${gStudents.length ? gStudents.map(s => getRowHtml(s, true)).join('') : `<tr><td colspan="${assignments.length + 1}" class="empty-hint">此組別尚無學生</td></tr>`}
+                                    </tbody>
+                                </table>
                             </div>
-                            ${gStudents.length ? gStudents.map(s => {
-                                const cells = assignments.map(a => {
-                                    if(isPulledOut(s, subjNameOf(a))) return `<div style="min-width:130px;width:130px;text-align:center;flex-shrink:0;"><span class="cell-pulled-out">抽離</span></div>`;
-                                    const gRecord = gradeOf(s.id, a.id);
-                                    const cur = gRecord ? gRecord.correctness : '';
-                                    const showCorrected = cur === '有錯';
-                                    const isDaily = a.name === '聯絡簿每日任務';
-                                    const thirdBtn = isDaily
-                                        ? `<button type="button" class="grade-btn ${cur==='沒寫任務'?'active g-lost':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="沒寫任務" title="沒寫任務">－</button>`
-                                        : `<button type="button" class="grade-btn ${cur==='遺失'?'active g-lost':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="遺失" title="遺失">✗</button>`;
-                                    const btns = `
-                                        <div class="mini-status-group">
-                                            <button type="button" class="grade-btn ${cur==='全對'?'active g-ok':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="全對" title="全對">✓</button>
-                                            <button type="button" class="grade-btn ${cur==='有錯'?'active g-err':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="有錯" title="有錯">▲</button>
-                                            ${thirdBtn}
-                                        </div>`;
-                                    const correctedBtn = `<button type="button" class="corrected-btn ${gRecord&&gRecord.corrected?'active':''}" data-corrected-student="${s.id}" data-corrected-assignment="${a.id}" style="visibility:${showCorrected?'visible':'hidden'};pointer-events:${showCorrected?'auto':'none'}">${gRecord&&gRecord.corrected?'✓訂正':'訂正'}</button>`;
-                                    return `<div style="min-width:130px;width:130px;display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;"><div class="cell-stack">${btns}<div class="corrected-slot">${correctedBtn}</div></div></div>`;
-                                }).join('');
-                                return `<div class="student-row" style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid var(--line);">
-                                    <span class="student-name" style="min-width:70px;flex-shrink:0;">${s.name}</span>
-                                    <div style="display:flex;gap:20px;overflow-x:auto;align-items:center;padding-bottom:4px;flex:1;justify-content:flex-start;">${cells}</div>
-                                </div>`;
-                            }).join('') : '<p class="empty-hint">此組別尚無學生</p>'}
                         </div>`;
                     }).join('') || '<p class="empty-hint">尚未新增組別</p>';
                 } else {
-                    return students.length ? students.map(s => {
-                        const cells = assignments.map(a => {
-                            if(isPulledOut(s, subjNameOf(a))) return `<td><span class="cell-pulled-out">抽離</span></td>`;
-                            const gRecord = gradeOf(s.id, a.id);
-                            const cur = gRecord ? gRecord.correctness : '';
-                            const showCorrected = cur === '有錯';
-                            const isDaily = a.name === '聯絡簿每日任務';
-                            const thirdBtn = isDaily
-                                ? `<button type="button" class="grade-btn ${cur==='沒寫任務'?'active g-lost':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="沒寫任務" title="沒寫任務">－</button>`
-                                : `<button type="button" class="grade-btn ${cur==='遺失'?'active g-lost':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="遺失" title="遺失">✗</button>`;
-                            const btns = `
-                                <div class="mini-status-group">
-                                    <button type="button" class="grade-btn ${cur==='全對'?'active g-ok':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="全對" title="全對">✓</button>
-                                    <button type="button" class="grade-btn ${cur==='有錯'?'active g-err':''}" data-grade-student="${s.id}" data-grade-assignment="${a.id}" data-grade-value="有錯" title="有錯">▲</button>
-                                    ${thirdBtn}
-                                </div>`;
-                            const correctedBtn = `<button type="button" class="corrected-btn ${gRecord&&gRecord.corrected?'active':''}" data-corrected-student="${s.id}" data-corrected-assignment="${a.id}" style="visibility:${showCorrected?'visible':'hidden'};pointer-events:${showCorrected?'auto':'none'}">${gRecord&&gRecord.corrected?'✓訂正':'訂正'}</button>`;
-                            return `<td><div class="cell-stack">${btns}<div class="corrected-slot">${correctedBtn}</div></div></td>`;
-                        }).join('');
-                        return `<tr><td>${s.name}</td>${cells}</tr>`;
-                    }).join('') : '';
+                    return students.length ? students.map(s => getRowHtml(s, false)).join('') : '';
                 }
             };
 
@@ -2234,9 +2328,16 @@
 
                     function renderArchiveDetail(item){
                         const box = archivesListEl.querySelector(`[data-detail="${item.id}"]`);
-                        const hasGrading = (item.records||[]).some(r => r.correctness !== undefined);
-                        const anyNeedsSign = (item.assignments || []).some(x => x.needsSign || x.signOnly);
-                        box.innerHTML = `<table><thead><tr><th>學生</th><th>作業</th><th>狀態</th>${anyNeedsSign?'<th>簽名</th>':''}${hasGrading?'<th>訂正</th>':''}<th>備註</th></tr></thead><tbody>${
+                        
+                        const headerHtml = `<div style="display: grid; grid-template-columns: 110px 170px 140px 140px 1fr; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 2px solid var(--line); font-weight: bold; color: #000; font-size: 0.95em; text-align: left;">
+                            <span>學生</span>
+                            <span>作業</span>
+                            <span>狀態</span>
+                            <span>簽名</span>
+                            <span>備註</span>
+                        </div>`;
+
+                        box.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;min-width:680px;">` + headerHtml + 
                             (item.records||[]).map((r,i)=>{
                                 const asg = (item.assignments || []).find(x => x.id === r.assignmentId);
                                 const needsSign = asg && (asg.needsSign || asg.signOnly);
@@ -2244,26 +2345,38 @@
                                 const isSigned = r.signStatus === '已簽名';
                                 const isExamOrTest = asg && (asg.name.includes('卷') || asg.name.includes('考') || asg.name.includes('聽') || asg.name.includes('測驗'));
                                 const showSign = needsSign && (isSignOnly || isExamOrTest || r.status === '已繳');
-                                const showCorrected = r.correctness === '有錯';
-                                const signDisplay = (r.signStatus||'未簽名') === '未簽名' ? '未簽' : (r.signStatus||'已簽名');
-                                return `<tr>
-                                    <td>${r.studentName}</td><td>${r.assignmentName}</td>
-                                    <td>${r.pulledOut ? '<span class="badge-pulled-out">抽離</span>' : `<div style="display:flex;gap:6px;align-items:center"><button type="button" class="cell-status-btn ${badgeClass(r.status)}" data-arch-status="${i}">${r.status}</button>${r.status!=='已繳'?`<button class="btn small outline" data-makeup="${i}">補交</button>`:''}</div>`}</td>
-                                    ${anyNeedsSign ? `<td>${needsSign ? (r.pulledOut ? '' : `<div style="display:flex;gap:6px;align-items:center"><button type="button" class="cell-status-btn cell-sign-btn ${signClass(r.signStatus||'未簽名')}" data-arch-sign="${i}" style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${signDisplay}</button>${(!isSigned && showSign) ? `<button class="btn small outline" data-makeup-sign="${i}">補簽</button>` : ''}</div>`) : '－'}</td>` : ''}
-                                    ${hasGrading ? `<td>
-                                        ${r.pulledOut ? '' : `
-                                            <div class="mini-status-group">
-                                                <button type="button" class="grade-btn ${r.correctness==='全對'?'active g-ok':''}" data-arch-grade="${i}" data-arch-grade-value="全對" title="全對">✓</button>
-                                                <button type="button" class="grade-btn ${r.correctness==='有錯'?'active g-err':''}" data-arch-grade="${i}" data-arch-grade-value="有錯" title="有錯">▲</button>
-                                                <button type="button" class="grade-btn ${r.correctness==='沒寫任務'||r.correctness==='遺失'?'active g-lost':''}" data-arch-grade="${i}" data-arch-grade-value="${r.assignmentName==='聯絡簿每日任務'?'沒寫任務':'遺失'}" title="沒寫任務/遺失">${r.assignmentName==='聯絡簿每日任務'?'－':'✗'}</button>
-                                            </div>
-                                            <button type="button" class="corrected-btn ${r.corrected?'active':''}" data-arch-corrected="${i}" style="visibility:${showCorrected?'visible':'hidden'};pointer-events:${showCorrected?'auto':'none'}">${r.corrected?'✓訂正':'訂正'}</button>
-                                        `}
-                                    </td>` : ''}
-                                    <td>${r.remark||''}</td>
-                                </tr>`;
+                                const signDisplay = (r.signStatus||'未簽名') === '未簽名' ? '未簽' : ((r.signStatus||'已簽名') === '已簽名' ? '已簽' : r.signStatus);
+                                
+                                const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(r.status)}" data-arch-status="${i}">${r.status}</button>`;
+                                const makeupBtn = r.status !== '已繳' ? `<button class="btn small outline" data-makeup="${i}">補交</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button>`;
+                                
+                                let statusCol = '';
+                                if (r.pulledOut) {
+                                    statusCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;"><button type="button" class="cell-status-btn" style="background:transparent; color:var(--muted); font-weight:bold; pointer-events:none; box-shadow:none;">抽離</button><button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button></div>`;
+                                } else {
+                                    statusCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;">${statusBtn}${makeupBtn}</div>`;
+                                }
+                                
+                                let signCol = '';
+                                if (needsSign && !r.pulledOut) {
+                                    const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(r.signStatus||'未簽名')}" data-arch-sign="${i}" style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${signDisplay}</button>`;
+                                    const makeupSignBtn = (!isSigned && showSign) ? `<button class="btn small outline" data-makeup-sign="${i}">補簽</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補簽</button>`;
+                                    signCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;">${signBtn}${makeupSignBtn}</div>`;
+                                } else {
+                                    // 即使不需要簽名，也輸出隱藏的相同結構按鈕佔位，確保寬度永遠一致完美對齊
+                                    signCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;visibility:hidden;pointer-events:none;"><button type="button" class="cell-status-btn">已簽</button><button class="btn small outline">補簽</button></div>`;
+                                }
+                                
+                                return `<div style="display: grid; grid-template-columns: 110px 170px 140px 140px 1fr; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line);">
+                                    <span class="student-name" style="font-size:1em; color:#000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${r.studentName}</span>
+                                    <span style="font-size:0.95em; color:#000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${r.assignmentName}</span>
+                                    ${statusCol}
+                                    ${signCol}
+                                    <span class="row-slot-points" style="font-size:0.85em; color:var(--muted); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${r.remark||''}</span>
+                                </div>`;
                             }).join('')
-                        }</tbody></table>`;
+                        + `</div>`;
+                        
                         box.querySelectorAll('[data-makeup]').forEach(btn => btn.onclick = async () => {
                             const idx = Number(btn.getAttribute('data-makeup'));
                             const r = item.records[idx];
@@ -2276,7 +2389,7 @@
                             const grp = st.groups.find(x=>x.id===stu?.groupId);
                             const a = item.assignments.find(x=>x.id===r.assignmentId);
                             const subj = a ? st.subjects.find(x=>x.id===a.subjectId) : null;
-                            await adminSetStatus({
+                            const payload = {
                                 groupId: grp?grp.id:'', groupName: grp?grp.name:'',
                                 studentId: r.studentId, studentName: r.studentName,
                                 subjectId: a?a.subjectId||'':'', subjectName: subj?subj.name:'',
@@ -2284,14 +2397,17 @@
                                 status: '已繳',
                                 remark: remarkText,
                                 ...((a && (a.needsSign || a.signOnly)) ? { signStatus: r.signStatus || '未簽名' } : {})
-                            });
+                            };
+                            await adminSetStatus(payload);
+                            let rLive = records.find(rx=>rx.studentId===r.studentId && rx.assignmentId===r.assignmentId);
+                            if(rLive) Object.assign(rLive, payload); else records.push(payload);
                             renderArchiveDetail(item);
                         });
                         box.querySelectorAll('[data-makeup-sign]').forEach(btn => btn.onclick = async () => {
                             const idx = Number(btn.getAttribute('data-makeup-sign'));
                             const r = item.records[idx];
                             const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                            const remarkText = r.remark ? `${r.remark} / 已補簽（${timeStr}）` : `已補簽（${timeStr}）`;
+                            const remarkText = r.remark ? `${r.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`;
                             const updatedRecords = item.records.map((r2,i2) => i2===idx ? { ...r2, signStatus: '已簽名', remark: remarkText } : r2);
                             item.records = updatedRecords;
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
@@ -2299,7 +2415,7 @@
                             const grp = st.groups.find(x=>x.id===stu?.groupId);
                             const a = item.assignments.find(x=>x.id===r.assignmentId);
                             const subj = a ? st.subjects.find(x=>x.id===a.subjectId) : null;
-                            await adminSetStatus({
+                            const payload = {
                                 groupId: grp?grp.id:'', groupName: grp?grp.name:'',
                                 studentId: r.studentId, studentName: r.studentName,
                                 subjectId: a?a.subjectId||'':'', subjectName: subj?subj.name:'',
@@ -2307,7 +2423,10 @@
                                 status: r.status || '已繳',
                                 signStatus: '已簽名',
                                 remark: remarkText
-                            });
+                            };
+                            await adminSetStatus(payload);
+                            let rLive = records.find(rx=>rx.studentId===r.studentId && rx.assignmentId===r.assignmentId);
+                            if(rLive) Object.assign(rLive, payload); else records.push(payload);
                             renderArchiveDetail(item);
                         });
                         box.querySelectorAll('[data-arch-status]').forEach(btn => btn.onclick = async () => {
@@ -2319,6 +2438,24 @@
                             const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, status: nv, signStatus: nv==='已繳' ? (r.signStatus||'未簽名') : '未簽名', remark: remarkText } : r);
                             item.records = updatedRecords;
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
+                            
+                            const stu = st.students.find(x=>x.id===cur.studentId);
+                            const grp = st.groups.find(x=>x.id===stu?.groupId);
+                            const a = item.assignments.find(x=>x.id===cur.assignmentId);
+                            const subj = a ? st.subjects.find(x=>x.id===a.subjectId) : null;
+                            const payload = {
+                                groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                                studentId: cur.studentId, studentName: cur.studentName,
+                                subjectId: a?a.subjectId||'':'', subjectName: subj?subj.name:'',
+                                assignmentId: cur.assignmentId, assignmentName: cur.assignmentName,
+                                status: nv,
+                                signStatus: nv==='已繳' ? (cur.signStatus||'未簽名') : '未簽名',
+                                remark: remarkText
+                            };
+                            await adminSetStatus(payload);
+                            let rLive = records.find(rx=>rx.studentId===cur.studentId && rx.assignmentId===cur.assignmentId);
+                            if(rLive) Object.assign(rLive, payload); else records.push(payload);
+                            
                             renderArchiveDetail(item);
                         });
                         box.querySelectorAll('[data-arch-sign]').forEach(btn => btn.onclick = async () => {
@@ -2326,28 +2463,27 @@
                             const cur = item.records[idx];
                             const nv = (cur.signStatus === '已簽名') ? '未簽名' : '已簽名';
                             const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                            const remarkText = nv === '已簽名' ? (cur.remark ? `${cur.remark} / 簽名（${timeStr}）` : `簽名（${timeStr}）`) : cur.remark;
+                            const remarkText = nv === '已簽名' ? (cur.remark ? `${cur.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`) : cur.remark;
                             const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, signStatus: nv, remark: remarkText } : r);
                             item.records = updatedRecords;
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
-                            renderArchiveDetail(item);
-                        });
-                        box.querySelectorAll('[data-arch-grade]').forEach(btn => btn.onclick = async () => {
-                            const idx = Number(btn.getAttribute('data-arch-grade'));
-                            const val = btn.getAttribute('data-arch-grade-value');
-                            const cur = item.records[idx];
-                            const nextVal = cur.correctness === val ? '' : val;
-                            const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, correctness: nextVal, corrected: nextVal==='有錯' ? r.corrected : false } : r);
-                            item.records = updatedRecords;
-                            await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
-                            renderArchiveDetail(item);
-                        });
-                        box.querySelectorAll('[data-arch-corrected]').forEach(btn => btn.onclick = async () => {
-                            const idx = Number(btn.getAttribute('data-arch-corrected'));
-                            const cur = item.records[idx];
-                            const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, corrected: !r.corrected } : r);
-                            item.records = updatedRecords;
-                            await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
+                            
+                            const stu = st.students.find(x=>x.id===cur.studentId);
+                            const grp = st.groups.find(x=>x.id===stu?.groupId);
+                            const a = item.assignments.find(x=>x.id===cur.assignmentId);
+                            const subj = a ? st.subjects.find(x=>x.id===a.subjectId) : null;
+                            const payload = {
+                                groupId: grp?grp.id:'', groupName: grp?grp.name:'',
+                                studentId: cur.studentId, studentName: cur.studentName,
+                                subjectId: a?a.subjectId||'':'', subjectName: subj?subj.name:'',
+                                assignmentId: cur.assignmentId, assignmentName: cur.assignmentName,
+                                signStatus: nv,
+                                remark: remarkText
+                            };
+                            await adminSetStatus(payload);
+                            let rLive = records.find(rx=>rx.studentId===cur.studentId && rx.assignmentId===cur.assignmentId);
+                            if(rLive) Object.assign(rLive, payload); else records.push({ ...payload, status: cur.status || '未繳' });
+                            
                             renderArchiveDetail(item);
                         });
                     }
