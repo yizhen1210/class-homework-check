@@ -44,7 +44,7 @@
         .modal-content { background: var(--surface); border: 3px solid var(--line); padding: 36px 44px; border-radius: 20px; text-align: center; box-shadow: 0 20px 55px rgba(0,0,0,0.4); width: min(520px, 90vw); }
         .modal-title { font-size: 1.4em; margin: 0 0 22px; }
         
-        .modal-content input, .modal-input { 
+        .modal-content input:not([type="checkbox"]), .modal-input { 
             display: block; width: 100%; margin: 0 0 24px; padding: 12px 18px; 
             border: 2px solid var(--line); border-radius: 14px; font-family: inherit; 
             font-size: 1.1em; outline: none; text-align: center; background: var(--surface); color: var(--text); 
@@ -355,6 +355,25 @@
             <div class="modal-actions">
                 <button class="btn-cancel" id="choiceCancel">取消</button>
                 <button class="btn-ok" id="choiceOk">確定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 封存選擇彈窗 -->
+    <div id="archiveModal" class="modal-overlay">
+        <div class="modal-content" style="max-width:440px; text-align:left">
+            <p class="modal-title" style="text-align:center; margin-bottom:12px">結束並封存</p>
+            <div class="field" style="margin-bottom:20px">
+                <label style="text-align:center; margin-bottom:10px">請輸入這批作業的日期標記：</label>
+                <input type="text" id="archiveDateInput" class="txt-input" style="margin-bottom:0; text-align:center; width:100%; box-sizing:border-box">
+            </div>
+            <p style="margin:0 0 10px; font-size:1em; color:var(--text); font-weight:bold">請選擇要封存的作業：</p>
+            <p style="margin:-4px 0 12px; font-size:0.85em; color:var(--muted)">💡 將勾勾取消，該項作業就會「保留跨日」，繼續待在今日作業清單中供小老師登記。</p>
+            <div id="archiveCheckboxes" style="max-height:35vh; overflow-y:auto; margin-bottom:24px; display:flex; flex-direction:column; gap:12px; background:var(--bg); padding:16px; border-radius:12px; border:1px solid var(--line)">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="document.getElementById('archiveModal').style.display='none'">取消</button>
+                <button class="btn-ok" id="archiveConfirmBtn">確定封存</button>
             </div>
         </div>
     </div>
@@ -1983,10 +2002,10 @@
                     return;
                 }
                 if(!schoolDay) return;
-                const todayId = `daily-${fixed.name}-${today}`;
-                if(existing.id !== todayId){
+                const todayPrefix = `daily-${fixed.name}-${today}`;
+                if(!existing.id.startsWith(todayPrefix)){
                     st.assignments = st.assignments.filter(a => a.name !== fixed.name);
-                    st.assignments.push({ id: todayId, name: fixed.name, subjectId: contactSubj.id, needsSign: fixed.needsSign });
+                    st.assignments.push({ id: todayPrefix, name: fixed.name, subjectId: contactSubj.id, needsSign: fixed.needsSign });
                     changed = true;
                 }
             });
@@ -2049,9 +2068,9 @@
                         </div>
                         <div class="card">
                             <h2>今日快速結算</h2>
-                            <p class="empty-hint" style="text-align:left;padding:0 0 14px">小老師登記的紀錄會一直保留，直到你按「結束並封存」或「確定完成，直接刪除（不封存）」。</p>
+                            <p class="empty-hint" style="text-align:left;padding:0 0 14px">點擊結束並封存時，可以自由勾選要保留到明天的作業。</p>
                             <div class="row" style="flex-direction:column">
-                                <button class="btn outline" id="archiveBtn">結束並封存</button>
+                                <button class="btn outline" id="archiveBtn">結束並封存...</button>
                                 <button class="btn outline danger" id="deleteNoArchiveBtn">確定完成，直接刪除（不封存）</button>
                             </div>
                         </div>
@@ -2259,13 +2278,37 @@
                 try { await navigator.clipboard.writeText(text); window.showAlert('未繳名單已複製'); }
                 catch(e){ window.showAlert('複製失敗'); }
             };
-            $('archiveBtn').onclick = async () => {
-                const dateLabel = await window.askInput('這批作業要標記的日期', todayStr());
-                if(dateLabel === null) return;
-                const ok2 = await window.askConfirm('確定要結束並封存嗎？');
-                if(!ok2) return;
-                const archivableAssignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務');
+            
+            // 全新升級：勾選式封存邏輯
+            $('archiveBtn').onclick = () => {
+                const archivable = st.assignments.filter(a => a.name !== '聯絡簿每日任務');
+                if(!archivable.length) {
+                    window.showAlert('目前沒有可以封存的作業');
+                    return;
+                }
+                $('archiveDateInput').value = todayStr();
+                $('archiveCheckboxes').innerHTML = archivable.map(a => `
+                    <label style="display:flex; align-items:center; gap:10px; font-size:1.05em; cursor:pointer">
+                        <input type="checkbox" value="${a.id}" checked style="width:22px;height:22px;margin:0;cursor:pointer;accent-color:var(--accent);flex-shrink:0">
+                        <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.name}</span>
+                    </label>
+                `).join('');
+                $('archiveModal').style.display = 'flex';
+            };
+
+            $('archiveConfirmBtn').onclick = async () => {
+                const selectedIds = [...$('archiveCheckboxes').querySelectorAll('input:checked')].map(cb => cb.value);
+                if(!selectedIds.length){
+                    window.showAlert('請至少選擇一項作業來封存');
+                    return;
+                }
+                const dateLabel = $('archiveDateInput').value.trim() || todayStr();
+                
+                $('archiveConfirmBtn').disabled = true;
+                const archivableAssignments = st.assignments.filter(a => selectedIds.includes(a.id));
                 const students2 = sortBySeat(st.students);
+                
+                // 收集快照
                 const snapshotRecords = students2.flatMap(s => archivableAssignments.map(a => {
                     const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
                     const g = gradingRecords.find(x=>x.studentId===s.id && x.assignmentId===a.id);
@@ -2280,20 +2323,34 @@
                     if(rec && rec.signStatus) entry.signStatus = rec.signStatus;
                     return entry;
                 }));
+                
+                // 寫入封存庫
                 await addDoc(archivesColl, {
                     timestamp: Date.now(),
-                    dateLabel: dateLabel || todayStr(),
+                    dateLabel: dateLabel,
                     assignments: archivableAssignments.map(a=>{ const s=st.subjects.find(x=>x.id===a.subjectId); return { id:a.id, name:a.name, subjectName: s?s.name:'', needsSign: !!a.needsSign, signOnly: !!a.signOnly }; }),
                     records: snapshotRecords,
                     studentCount: st.students.length,
                     assignmentCount: archivableAssignments.length
                 }).catch(e=>console.warn(e));
-                const dailyAsg = st.assignments.find(a => a.name === '聯絡簿每日任務');
-                st.assignments = dailyAsg ? [dailyAsg] : [];
+                
+                // 保留未被勾選的作業
+                st.assignments = st.assignments.filter(a => !selectedIds.includes(a.id));
                 saveSettings({ assignments: st.assignments });
                 ensureDailyAssignments(st);
                 autoLoadArchives();
+                
+                $('archiveModal').style.display = 'none';
+                $('archiveConfirmBtn').disabled = false;
+                
+                const leftCount = st.assignments.filter(a => a.name !== '聯絡簿每日任務').length;
+                if(leftCount > 0) {
+                    window.showAlert(`封存成功！尚有 ${leftCount} 項作業保留在清單中供後續登記。`);
+                } else {
+                    window.showAlert('今日作業已全數封存！');
+                }
             };
+
             $('deleteNoArchiveBtn').onclick = async () => {
                 const ok2 = await window.askConfirm('確定直接刪除今日作業與繳交紀錄嗎？');
                 if(!ok2) return;
@@ -2675,8 +2732,13 @@
                     studentCount: st.students.length,
                     assignmentCount: 1
                 }).catch(e=>console.warn(e));
+                
+                await clearRecordsForAssignment(dailyAsg.id);
+                await clearGradingForAssignment(dailyAsg.id);
+                
                 st.assignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務');
-                st.assignments.push({ id: `daily-聯絡簿每日任務-${crypto.randomUUID()}`, name: '聯絡簿每日任務', subjectId: dailyAsg.subjectId, needsSign: true });
+                const newId = `daily-聯絡簿每日任務-${todayISODate()}-${crypto.randomUUID().slice(0,6)}`;
+                st.assignments.push({ id: newId, name: '聯絡簿每日任務', subjectId: dailyAsg.subjectId, needsSign: true });
                 saveSettings({ assignments: st.assignments });
                 window.showAlert('已封存今天的聯絡簿紀錄，換成新的一輪');
                 autoLoadArchives();
