@@ -603,7 +603,11 @@
                 if(a.needsSign || a.signOnly){
                     const unsigned = applicable.filter(s => {
                         const rec = recs.find(r => r.studentId===s.id && r.assignmentId===a.id);
-                        return rec && (a.signOnly || rec.status === '已繳') && rec.signStatus !== '已簽名';
+                        const stt = rec ? rec.status : '未繳';
+                        const sgn = (rec && rec.signStatus) ? rec.signStatus : '未簽名';
+                        const isExamOrTest = isExamAssignment(a.name);
+                        if (!a.signOnly && !isExamOrTest && stt !== '已繳') return false;
+                        return sgn !== '已簽名';
                     });
                     html += `<p style="margin:0 0 14px;color:var(--muted)">未簽名：${unsigned.length ? unsigned.map(s=>s.name).join('、') : '全部已簽名'}</p>`;
                 }
@@ -950,8 +954,10 @@
                 if(isPulledOut(s, subjNameOf(a))) return;
                 const v = statusOf(s.id, a.id);
                 if(v==='已繳') doneCount++; else missingCount++;
-                if((a.needsSign || a.signOnly) && signOf(s.id, a.id) !== '已簽名') {
-                    if (a.signOnly || v === '已繳') unsignedCount++;
+                if(a.needsSign || a.signOnly) {
+                    const sgn = signOf(s.id, a.id);
+                    const isExamOrTest = isExamAssignment(a.name);
+                    if ((a.signOnly || isExamOrTest || v === '已繳') && sgn !== '已簽名') unsignedCount++;
                 }
             }));
             const statDefs = [
@@ -979,7 +985,8 @@
                             const applicable = students.filter(s => !isPulledOut(s, subjNameOf(a)));
                             const unsigned = applicable.filter(s => {
                                 const stt = statusOf(s.id, a.id);
-                                if(!a.signOnly && stt !== '已繳') return false;
+                                const isExamOrTest = isExamAssignment(a.name);
+                                if(!a.signOnly && !isExamOrTest && stt !== '已繳') return false;
                                 return signOf(s.id, a.id) !== '已簽名';
                             });
                             return `<p><strong>${a.name}</strong>：${unsigned.length ? unsigned.map(s=>s.name).join('、') : '全部已簽名'}</p>`;
@@ -1729,7 +1736,8 @@
                                 if(status !== '已繳') return false;
                                 return signStatus !== '已簽名';
                             }
-                            if(!info.signOnly && status !== '已繳') return false;
+                            const isExamOrTest = isExamAssignment(info.name);
+                            if(!info.signOnly && !isExamOrTest && status !== '已繳') return false;
                             return signStatus !== '已簽名';
                         });
                         if(!unsigned.length) return '';
@@ -1743,23 +1751,28 @@
                 globalLostBtn.onclick = () => {
                     $('missingListTitle').textContent = '遺失作業清單';
                     const lostCounts = {};
-                    st.students.forEach(s => { lostCounts[s.id] = { count: 0, assignments: [] }; });
+                    st.students.forEach(s => { lostCounts[s.id] = { count: 0, assignments: [], seenIds: new Set() }; });
                     gradingRecs.forEach(g => {
                         if(g.correctness === '遺失'){
-                            if(lostCounts[g.studentId] !== undefined) {
-                                lostCounts[g.studentId].count++;
-                                lostCounts[g.studentId].assignments.push(g.assignmentName);
+                            const lc = lostCounts[g.studentId];
+                            if(lc && !lc.seenIds.has(g.assignmentId)) {
+                                lc.seenIds.add(g.assignmentId);
+                                lc.count++;
+                                lc.assignments.push(g.assignmentName);
                             }
                         }
                     });
                     if(window.__archiveDocsMap){
-                        Object.values(window.__archiveDocsMap).forEach(doc => {
+                        const uniqueDocs = new Set(Object.values(window.__archiveDocsMap));
+                        uniqueDocs.forEach(doc => {
                             if(doc && doc.records){
                                 doc.records.forEach(r => {
                                     if(r.correctness === '遺失'){
-                                        if(lostCounts[r.studentId] !== undefined) {
-                                            lostCounts[r.studentId].count++;
-                                            lostCounts[r.studentId].assignments.push(r.assignmentName);
+                                        const lc = lostCounts[r.studentId];
+                                        if(lc && !lc.seenIds.has(r.assignmentId)) {
+                                            lc.seenIds.add(r.assignmentId);
+                                            lc.count++;
+                                            lc.assignments.push(r.assignmentName);
                                         }
                                     }
                                 });
@@ -2267,8 +2280,10 @@
                         const unsigned = applicable.filter(s => {
                             const rec = records.find(r=>r.studentId===s.id && r.assignmentId===a.id);
                             const stt = rec ? rec.status : '未繳';
-                            if(!a.signOnly && stt !== '已繳') return false;
-                            return !rec || rec.signStatus !== '已簽名';
+                            const sgn = (rec && rec.signStatus) ? rec.signStatus : '未簽名';
+                            const isExamOrTest = isExamAssignment(a.name);
+                            if(!a.signOnly && !isExamOrTest && stt !== '已繳') return false;
+                            return sgn !== '已簽名';
                         });
                         line += `\n　未簽名：${unsigned.length ? unsigned.map(s=>s.name).join('、') : '全部已簽名'}`;
                     }
