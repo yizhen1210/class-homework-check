@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>領域業務規則單元測試</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; padding: 24px; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+        .pass { color: #2e7d32; background: #e8f5e9; padding: 6px 12px; border-radius: 6px; margin: 4px 0; font-family: monospace; }
+        .fail { color: #c62828; background: #ffebee; padding: 6px 12px; border-radius: 6px; margin: 4px 0; font-family: monospace; font-weight: bold; }
+        .summary { margin-top: 20px; font-size: 1.2em; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>班級作業登記系統 - 單元測試執行器</h1>
+    <div id="results">執行中...</div>
+
+    <script type="module">
+        import { runAllDomainTests } from './domain_rules.test.js';
+
+        const resultsEl = document.getElementById('results');
+        resultsEl.innerHTML = '';
+        let passCount = 0;
+        let failCount = 0;
+
+        const assert = {
+            strictEqual(actual, expected, message) {
+                if (actual !== expected) {
+                    throw new Error(`${message || '斷言失敗'}：預期為 ${JSON.stringify(expected)}，但得到 ${JSON.stringify(actual)}`);
+                }
+                passCount++;
+            },
+            deepStrictEqual(actual, expected, message) {
+                const a = JSON.stringify(actual);
+                const e = JSON.stringify(expected);
+                if (a !== e) {
+                    throw new Error(`${message || '深層斷言失敗'}：預期為 ${e}，但得到 ${a}`);
+                }
+                passCount++;
+            }
+        };
+
+        try {
+            runAllDomainTests(assert);
+            resultsEl.innerHTML = `
+                <div class="pass">✓ 全部 ${passCount} 項斷言測試順利通過！</div>
+                <div class="summary" style="color:#2e7d32">測試結果：PASSED (100%)</div>
+            `;
+        } catch (err) {
+            resultsEl.innerHTML = `
+                <div class="fail">✕ 測試失敗: ${err.message}</div>
+                <pre style="color:#c62828">${err.stack}</pre>
+            `;
+        }
+    </script>
+</body>
+</html>
+

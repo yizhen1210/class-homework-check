@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 管理員判定輔助函數（與前端配置一致）
+    function isAdmin() {
+      return request.auth != null && 
+             (request.auth.token.email == 'annychen1210@gmail.com' ||
+              request.auth.token.email in ['one@gmail.com', 'two@gmail.com']);
+    }
+
+    // 系統與班級設定：允許前台讀取科目與作業清單，僅管理員可修改
+    match /config/settings {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 今日作業繳交紀錄：允許前台讀取與提交登記，僅管理員可清空刪除
+    match /records/{recordId} {
+      allow read: if true;
+      allow create, update: if true; // 供小老師免登入登記作業
+      allow delete: if isAdmin();
+    }
+
+    // 歷史封存庫：僅管理員可檢視與修改
+    match /archives/{archiveId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 作業對錯與訂正紀錄：僅管理員可操作
+    match /gradingRecords/{gradingId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 加點流水帳紀錄：僅管理員可操作
+    match /pointLogs/{logId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
+
