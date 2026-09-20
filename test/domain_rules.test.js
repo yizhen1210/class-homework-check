@@ -15,7 +15,8 @@ import {
     nextSign,
     sortArchivedAssignments,
     resolveLostAssignments,
-    getLatestEligibleAssignmentDate
+    getLatestEligibleAssignmentDate,
+    isGradingMissingExempt
 } from '../src/domain/rules.js';
 
 export function runAllDomainTests(assert) {
@@ -182,6 +183,15 @@ export function runAllDomainTests(assert) {
         };
         const latest = getLatestEligibleAssignmentDate(eligible, {}, archMap, {});
         assert.strictEqual(latest, '9月16日', '應提取到最新日期 9月16日');
+    }
+
+    // 11. 未繳作業缺交顯示與豁免判斷 (聽考、複A卷、複B卷)
+    {
+        assert.strictEqual(isGradingMissingExempt('國語聽考'), true, '國語聽考應豁免缺交限制');
+        assert.strictEqual(isGradingMissingExempt('數學複A卷'), true, '數學複A卷應豁免缺交限制');
+        assert.strictEqual(isGradingMissingExempt('複b卷'), true, '複b卷小寫應豁免缺交限制');
+        assert.strictEqual(isGradingMissingExempt('數學習作'), false, '數學習作不應豁免');
+        assert.strictEqual(isGradingMissingExempt('2026/09/14 L3預習單'), false, '預習單不應豁免');
     }
 }
 

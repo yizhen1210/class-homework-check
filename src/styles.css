@@ -236,7 +236,7 @@ th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line
 #gradeTbody td:first-child, #gradeThead th:first-child { text-align: left; white-space: nowrap; }
 .sign-tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); font-size: 0.75em; vertical-align: middle; }
 .sign-placeholder { font-size: 0.75em; color: var(--muted); }
-.grade-missing { display: inline-block; padding: 4px 10px; border-radius: 8px; border: 2px solid var(--danger); box-shadow: 0 0 0 3px rgba(196,103,79,0.25); color: var(--danger); font-size: 0.85em; font-weight: bold; }
+.grade-missing { display: inline-flex; align-items: center; justify-content: center; padding: 5px 12px; border-radius: 6px; background: var(--danger); color: #fff; font-size: 0.85em; font-weight: bold; letter-spacing: 1px; user-select: none; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
 .grade-btn { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); color: var(--muted); font-size: 0.95em; cursor: pointer; font-family: inherit; line-height: 1; transition: background .15s, border-color .15s, color .15s, transform 0.1s; }
 .grade-btn:hover { border-color: var(--accent); }
 .grade-btn.active.g-ok { background: #2f6fb0; border-color: #2f6fb0; color: #fff; }

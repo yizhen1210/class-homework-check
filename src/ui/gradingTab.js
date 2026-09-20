@@ -15,7 +15,8 @@ import {
     formatPointLogItems,
     sortArchivedAssignments,
     resolveLostAssignments,
-    getLatestEligibleAssignmentDate
+    getLatestEligibleAssignmentDate,
+    isGradingMissingExempt
 } from '../domain/rules.js';
 
 import {
@@ -64,6 +65,7 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
         return s ? s.name : '';
     };
     const gradeOf = (sid, aid) => gradingRecs.find(x => x.studentId === sid && x.assignmentId === aid);
+    const statusOf = (sid, aid) => { const r = recs.find(x => x.studentId === sid && x.assignmentId === aid); return r ? r.status : '未繳'; };
 
     // 2. 歷史作業批改區塊
     const archivedBox = $('pastAssignmentSelect');
@@ -660,6 +662,13 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
 
             const cells = assignments.map(a => {
                 if (isPulledOut(s, subjNameOf(a))) return `<td${cellStyle}><span class="cell-pulled-out">抽離</span></td>`;
+
+                const isExempt = isGradingMissingExempt(a.name);
+                const isSubmitted = statusOf(s.id, a.id) === '已繳';
+                if (!isSubmitted && !isExempt) {
+                    return `<td${cellStyle}><div class="cell-stack" style="min-height:70px;justify-content:center;"><span class="grade-missing">缺交</span></div></td>`;
+                }
+
                 const gRecord = gradeOf(s.id, a.id);
                 const cur = gRecord ? gRecord.correctness : '';
                 const showCorrected = cur === '有錯';

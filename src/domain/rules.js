@@ -374,3 +374,12 @@ export function renameAssignmentInArchive(archiveData, assignmentId, newName) {
         modified
     };
 }
+
+/**
+ * 判斷該作業在未繳交時是否豁免顯示「缺交」（包含聽考、複A卷、複B卷）
+ */
+export function isGradingMissingExempt(assignmentName) {
+    const n = assignmentName || '';
+    return /(?:聽考|複[AaＡａ]卷|複[BbＢｂ]卷)/.test(n);
+}
+

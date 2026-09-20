@@ -288,6 +288,34 @@ def run_tests():
     t.assert_equal(migrate_name('L2預習單', '2026/09/14'), 'L3預習單', "乾淨名稱不帶日期")
     t.assert_equal(migrate_name('2026/09/14 L2預習單', '2026/09/14'), 'L3預習單', "去除重複日期前綴")
 
+    # 10. 未繳作業缺交顯示與豁免判斷 (聽考、複A卷、複B卷)
+    def is_grading_missing_exempt(name):
+        return bool(re.search(r'(?:聽考|複[AaＡａ]卷|複[BbＢｂ]卷)', name or ''))
+
+    t.assert_equal(is_grading_missing_exempt('國語聽考'), True, '國語聽考應豁免缺交限制')
+    t.assert_equal(is_grading_missing_exempt('聽考'), True, '聽考應豁免缺交限制')
+    t.assert_equal(is_grading_missing_exempt('數學複A卷'), True, '數學複A卷應豁免缺交限制')
+    t.assert_equal(is_grading_missing_exempt('複a卷'), True, '複a卷小寫應豁免缺交限制')
+    t.assert_equal(is_grading_missing_exempt('期末複B卷'), True, '期末複B卷應豁免缺交限制')
+    t.assert_equal(is_grading_missing_exempt('數學習作'), False, '數學習作不應豁免')
+    t.assert_equal(is_grading_missing_exempt('2026/09/14 L3預習單'), False, '預習單不應豁免')
+
+    def get_cell_render_type(is_pulled_out, status, assignment_name):
+        if is_pulled_out:
+            return 'pulled_out'
+        is_submitted = (status == '已繳')
+        is_exempt = is_grading_missing_exempt(assignment_name)
+        if not is_submitted and not is_exempt:
+            return 'missing_badge' # 顯示紅色長方框「缺交」
+        return 'grading_buttons' # 顯示正常批改按鈕
+
+    t.assert_equal(get_cell_render_type(True, '已繳', '數學習作'), 'pulled_out', '抽離優先顯示')
+    t.assert_equal(get_cell_render_type(False, '未繳', '數學習作'), 'missing_badge', '一般作業未繳顯示缺交')
+    t.assert_equal(get_cell_render_type(False, '已繳', '數學習作'), 'grading_buttons', '一般作業已繳顯示按鈕')
+    t.assert_equal(get_cell_render_type(False, '未繳', '數學複A卷'), 'grading_buttons', '複A卷未繳維持顯示批改按鈕')
+    t.assert_equal(get_cell_render_type(False, '未繳', '國語聽考'), 'grading_buttons', '聽考未繳維持顯示批改按鈕')
+    t.assert_equal(get_cell_render_type(False, '未繳', '複B卷'), 'grading_buttons', '複B卷未繳維持顯示批改按鈕')
+
     print(f"✓ 恭喜！全數 {t.passes} 項領域業務測試斷言通過！")
 
 if __name__ == '__main__':

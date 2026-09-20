@@ -101,17 +101,30 @@ export function renderPublic(recs, st, status) {
             </div>
             <div class="card">
                 <h2>登記作業繳交</h2>
-                <div class="field"><label>科目</label><select id="fSubject"></select></div>
-                <div class="field"><label>作業</label><select id="fAssignment"></select></div>
-                <p id="noAssignmentHint" class="empty-hint" style="display:none">此科目尚無作業，請請老師先設定</p>
-                <div id="groupStep" style="display:none">
-                    <div class="field"><label>組別</label><select id="fGroup"></select></div>
-                    <p id="noStudentHint" class="empty-hint" style="display:none">此組別尚無學生，請請老師先設定</p>
-                    <div id="studentStep" style="display:none">
-                        <div id="studentRows"></div>
-                        <button id="fSubmit" class="btn" style="width:100%;margin-top:14px">送出本組登記</button>
-                        <p id="fMsg"></p>
+                <div class="row align-center" style="gap:12px; margin-bottom:12px; flex-wrap:wrap;">
+                    <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:140px;">
+                        <label for="fSubject" style="margin:0;white-space:nowrap;font-weight:bold;">科目</label>
+                        <select id="fSubject" style="flex:1;min-width:0;"></select>
                     </div>
+                    <div style="display:flex;align-items:center;gap:6px;flex:1.5;min-width:180px;">
+                        <label for="fAssignment" style="margin:0;white-space:nowrap;font-weight:bold;">作業</label>
+                        <select id="fAssignment" style="flex:1;min-width:0;"></select>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:140px;">
+                        <label for="fGroup" style="margin:0;white-space:nowrap;font-weight:bold;">組別</label>
+                        <select id="fGroup" style="flex:1;min-width:0;"></select>
+                    </div>
+                </div>
+                <p id="noAssignmentHint" class="empty-hint" style="display:none">此科目尚無作業，請請老師先設定</p>
+                <p id="noStudentHint" class="empty-hint" style="display:none">此組別尚無學生，請請老師先設定</p>
+                <div id="studentStep" style="display:none">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 8px;">
+                        <span style="font-weight:bold;font-size:0.95em;color:var(--text);">組員繳交登記</span>
+                        <button type="button" class="btn small outline" id="fMarkAllSubmittedBtn">✓ 一鍵全組已繳</button>
+                    </div>
+                    <div id="studentRows"></div>
+                    <button id="fSubmit" class="btn" style="width:100%;margin-top:14px">送出本組登記</button>
+                    <p id="fMsg"></p>
                 </div>
             </div>`;
 
@@ -120,6 +133,14 @@ export function renderPublic(recs, st, status) {
         const subSel = $('fSubject'), aSel = $('fAssignment'), gSel = $('fGroup');
         (st.subjects || []).filter(s => !s.isSystem).forEach(s => subSel.add(new Option(s.name, s.id)));
         (st.groups || []).forEach(g => gSel.add(new Option(g.name, g.id)));
+
+        const markAllBtn = $('fMarkAllSubmittedBtn');
+        if (markAllBtn) {
+            markAllBtn.onclick = () => {
+                const rows = $('studentRows').querySelectorAll('.student-row');
+                rows.forEach(row => setRowStatus(row, '已繳'));
+            };
+        }
 
         function setRowStatus(row, st2) {
             row.dataset.status = st2;
@@ -187,6 +208,10 @@ export function renderPublic(recs, st, status) {
 
         function refreshStudents() {
             const curAsg = st.assignments.find(a => a.id === aSel.value);
+            if (!curAsg) {
+                $('studentStep').style.display = 'none';
+                return;
+            }
             const curSubj = curAsg ? st.subjects.find(x => x.id === curAsg.subjectId) : null;
             const curSubjName = curSubj ? curSubj.name : '';
             const list = sortBySeat((st.students || []).filter(s => s.groupId === gSel.value && !isPulledOut(s, curSubjName)));
@@ -210,12 +235,6 @@ export function renderPublic(recs, st, status) {
             }
         }
 
-        function updateGroupVisibility() {
-            const show = !!aSel.value;
-            $('groupStep').style.display = show ? 'block' : 'none';
-            if (show) refreshStudents();
-        }
-
         function refreshAssignments() {
             aSel.innerHTML = '';
             const list = (st.assignments || []).filter(a => a.subjectId === subSel.value && a.name !== '聯絡簿每日任務');
@@ -223,12 +242,18 @@ export function renderPublic(recs, st, status) {
                 const signNote = a.signOnly ? '（只要簽名）' : (a.needsSign ? '（需簽名）' : '');
                 aSel.add(new Option(a.name + signNote, a.id));
             });
-            $('noAssignmentHint').style.display = list.length ? 'none' : 'block';
-            updateGroupVisibility();
+            const hasAssignments = list.length > 0;
+            $('noAssignmentHint').style.display = hasAssignments ? 'none' : 'block';
+            if (hasAssignments) {
+                refreshStudents();
+            } else {
+                $('studentStep').style.display = 'none';
+                $('noStudentHint').style.display = 'none';
+            }
         }
 
         subSel.onchange = refreshAssignments;
-        aSel.onchange = updateGroupVisibility;
+        aSel.onchange = refreshStudents;
         gSel.onchange = refreshStudents;
         refreshAssignments();
 
