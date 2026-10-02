@@ -7,6 +7,7 @@ import {
     signClass,
     sortBySeat,
     isPulledOut,
+    isRecordPulledOut,
     isExamAssignment,
     pointsOf,
     escapeHtml,
@@ -164,7 +165,9 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
 
             box.innerHTML = sortBySeat(st.students).map(s => {
                 const sName = escapeHtml(s.name);
-                if (isPulledOut(s, pastSubjName)) {
+                const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === aid);
+                const isPull = isRecordPulledOut(archRec, s, pastSubjName, aName) || isPulledOut(s, foundAsg ? foundAsg.subjectName : '', foundAsg ? foundAsg.name : '');
+                if (isPull) {
                     return `<div class="daily-row ${pastNeedsSign ? '' : 'no-sign'} ${pastNeedsPoints ? 'has-points' : ''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign ? '140px ' : ''}38px 38px 76px 38px ${pastNeedsPoints ? '72px' : ''}">
                         <span class="student-name">${sName}</span>
                         <span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%"><button type="button" class="cell-status-btn" style="background:transparent; color:var(--muted); font-weight:bold; pointer-events:none; box-shadow:none;">抽離</button><button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button></div></span>
@@ -628,7 +631,7 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 const archiveDoc = state.archiveDocsMap ? state.archiveDocsMap[id] : null;
                 if (!hasGrading && !hasRecord && !activeAssIds.has(id) && !archiveDoc) return '';
 
-                const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName));
+                const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName, info.name));
                 const missing = applicable.filter(s => {
                     const g = gradingRecs.find(x => x.studentId === s.id && x.assignmentId === id);
                     if (g && (g.correctness === '遺失' || g.correctness === '沒寫任務')) return false;
@@ -661,7 +664,7 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 const hasAnyGrading = gradingRecs.some(g => g.assignmentId === id) || (state.archiveDocsMap && state.archiveDocsMap[id]);
                 if (!hasAnyGrading) return '';
                 const uncorrected = sortBySeat(st.students).filter(s => {
-                    if (isPulledOut(s, info.subjectName)) return false;
+                    if (isPulledOut(s, info.subjectName, info.name)) return false;
                     const g = gradingRecs.find(x => x.studentId === s.id && x.assignmentId === id);
                     return g && g.correctness === '有錯' && !g.corrected;
                 });
@@ -686,7 +689,7 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 });
             }
             const blocks = Object.entries(allAssignmentsMap).map(([id, info]) => {
-                const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName));
+                const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName, info.name));
                 const unsigned = applicable.filter(s => {
                     const rec = recs.find(r => r.studentId === s.id && r.assignmentId === id);
                     const archDoc = state.archiveDocsMap ? state.archiveDocsMap[id] : null;

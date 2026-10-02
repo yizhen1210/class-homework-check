@@ -51,21 +51,39 @@ def run_tests():
     t.assert_equal(sorted_s[5].get('seat') in ('', None), True, "無座號置底")
 
     # 2. 抽離上課判斷
-    def is_pulled_out(student, subject):
-        if not student or not student.get('pullout') or not subject:
+    def is_pulled_out(student, subject, assignment_name=''):
+        if not student or not student.get('pullout'):
             return False
+        combined = f"{subject or ''} {assignment_name or ''}".strip()
         p = student['pullout']
-        if '國' in subject and p.get('chinese'):
+        if '國' in combined and p.get('chinese'):
             return True
-        if '數' in subject and p.get('math'):
+        if '數' in combined and p.get('math'):
             return True
+        return False
+
+    def is_record_pulled_out(record, student, subject='', assignment_name=''):
+        if record and record.get('pulledOut'):
+            return True
+        if student:
+            return is_pulled_out(student, subject, assignment_name or (record.get('assignmentName') if record else ''))
         return False
 
     s1 = {'name': 'A', 'pullout': {'chinese': True, 'math': False}}
     s2 = {'name': 'B', 'pullout': {'chinese': False, 'math': True}}
+    s3 = {'name': 'C', 'pullout': None}
     t.assert_equal(is_pulled_out(s1, '國語'), True, "國語抽離判定")
     t.assert_equal(is_pulled_out(s1, '數學'), False, "國語抽離但在數學不應被抽離")
     t.assert_equal(is_pulled_out(s2, '數學'), True, "數學抽離判定")
+    t.assert_equal(is_pulled_out(s1, '', '國語習作'), True, "科目為空但作業包含國語應抽離")
+    t.assert_equal(is_pulled_out(s1, '未分類', '2026/09/25 國習 p.10'), True, "科目未分類但作業包含國字應抽離")
+    t.assert_equal(is_pulled_out(s2, '', '數課第三單元'), True, "作業包含數課應抽離")
+    t.assert_equal(is_pulled_out(s1, '', '英文閱讀'), False, "非國數作業不應抽離")
+
+    t.assert_equal(is_record_pulled_out({'pulledOut': True}, s3, '自然'), True, "歷史快照標記抽離應直接為 True")
+    t.assert_equal(is_record_pulled_out({'pulledOut': False, 'assignmentName': '國語生字簿'}, s1, ''), True, "快照為 False 但學生抽離國語應回退為 True")
+    t.assert_equal(is_record_pulled_out(None, s2, '數學'), True, "無快照但學生抽離數學應為 True")
+    t.assert_equal(is_record_pulled_out(None, s1, '自然', '昆蟲紀錄'), False, "非抽離科目應為 False")
 
     # 3. 點數計算規則
     def points_of(g, assignments, fallback_meta=None):

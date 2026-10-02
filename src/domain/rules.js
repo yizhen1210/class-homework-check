@@ -32,13 +32,26 @@ export function sortBySeat(list) {
 }
 
 /**
- * 判斷學生在該科目是否為抽離課程
+ * 判斷學生在該科目或作業中是否為抽離課程
  */
-export function isPulledOut(student, subjectName) {
-    if (!student || !student.pullout || !subjectName) return false;
-    const sName = subjectName.trim();
-    if (sName.includes('國') && student.pullout.chinese) return true;
-    if (sName.includes('數') && student.pullout.math) return true;
+export function isPulledOut(student, subjectName, assignmentName = '') {
+    if (!student || !student.pullout) return false;
+    const sName = String(subjectName || '').trim();
+    const aName = String(assignmentName || '').trim();
+    const combined = `${sName} ${aName}`;
+    if (combined.includes('國') && !!student.pullout.chinese) return true;
+    if (combined.includes('數') && !!student.pullout.math) return true;
+    return false;
+}
+
+/**
+ * 綜合判斷紀錄或學生在某作業中是否屬於抽離課程（包含歷史快照與活資料安全回退）
+ */
+export function isRecordPulledOut(record, student, subjectName = '', assignmentName = '') {
+    if (record && record.pulledOut) return true;
+    if (student) {
+        return isPulledOut(student, subjectName, assignmentName || (record ? record.assignmentName : ''));
+    }
     return false;
 }
 

@@ -557,10 +557,25 @@
                                 console.log(`[Auto-Migration] 成功將「${oldName}」更新為「${newName}」`);
                             }
                         });
+                        // 自動修復歷史封存抽離狀態（針對 9/23 ~ 10/1 或任何歷史紀錄）
+                        if (Array.isArray(data.records) && settings && Array.isArray(settings.students)) {
+                            data.records.forEach(r => {
+                                const stu = settings.students.find(s => s.id === r.studentId || s.name === r.studentName);
+                                if (stu && stu.pullout) {
+                                    const asg = (data.assignments || []).find(a => a.id === r.assignmentId);
+                                    const asgSubj = asg ? (asg.subjectName || ((settings.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
+                                    const shouldPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
+                                    if (shouldPull && !r.pulledOut) {
+                                        r.pulledOut = true;
+                                        modified = true;
+                                    }
+                                }
+                            });
+                        }
                         if (modified) {
                             await setDoc(doc(db, 'archives', d.id), {
                                 assignments: data.assignments,
-                                records: data.records
+                                records: sanitizeArchiveRecords(data.records)
                             }, { merge: true }).catch(e => console.warn(e));
                         }
                     }
@@ -836,10 +851,20 @@
                 return (a.name||'').localeCompare(b.name||'', 'zh-Hant');
             });
         }
-        function isPulledOut(student, subjectName){
+        function isPulledOut(student, subjectName, assignmentName = ''){
             if(!student || !student.pullout) return false;
-            if(subjectName === '國語' && student.pullout.chinese) return true;
-            if(subjectName === '數學' && student.pullout.math) return true;
+            const sName = String(subjectName || '').trim();
+            const aName = String(assignmentName || '').trim();
+            const combined = `${sName} ${aName}`;
+            if(combined.includes('國') && !!student.pullout.chinese) return true;
+            if(combined.includes('數') && !!student.pullout.math) return true;
+            return false;
+        }
+        function isRecordPulledOut(record, student, subjectName = '', assignmentName = ''){
+            if(record && record.pulledOut) return true;
+            if(student){
+                return isPulledOut(student, subjectName, assignmentName || (record ? record.assignmentName : ''));
+            }
             return false;
         }
         function pulloutLabel(p){
@@ -1708,7 +1733,9 @@
                     const isContact = aName === '聯絡簿每日任務';
                     const pastNeedsPoints = !isExam && !isContact;
                     box.innerHTML = sortBySeat(st.students).map(s => {
-                        if(isPulledOut(s, pastSubjName)) return `<div class="daily-row ${pastNeedsSign?'':'no-sign'} ${pastNeedsPoints?'has-points':''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign?'140px ':''}38px 38px 76px 38px ${pastNeedsPoints?'72px':''}">
+                        const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === aid);
+                        const isPull = isRecordPulledOut(archRec, s, pastSubjName, aName) || isPulledOut(s, foundAsg ? foundAsg.subjectName : '', foundAsg ? foundAsg.name : '');
+                        if(isPull) return `<div class="daily-row ${pastNeedsSign?'':'no-sign'} ${pastNeedsPoints?'has-points':''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign?'140px ':''}38px 38px 76px 38px ${pastNeedsPoints?'72px':''}">
                             <span class="student-name">${s.name}</span>
                             <span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%"><button type="button" class="cell-status-btn" style="background:transparent; color:var(--muted); font-weight:bold; pointer-events:none; box-shadow:none;">抽離</button><button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button></div></span>
                             ${pastNeedsSign ? `<span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%"><button type="button" class="cell-status-btn" style="background:transparent; color:var(--muted); font-weight:bold; pointer-events:none; box-shadow:none;">抽離</button><button class="btn small outline" style="visibility:hidden;pointer-events:none;">補簽</button></div></span>` : ''}
@@ -2111,7 +2138,7 @@
                         const archiveDoc = window.__archiveDocsMap ? window.__archiveDocsMap[id] : null;
                         if(!hasGrading && !hasRecord && !activeAssIds.has(id) && !archiveDoc) return '';
                         
-                        const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName));
+                        const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName, info.name));
                         const missing = applicable.filter(s => {
                             const g = gradingRecs.find(x => x.studentId === s.id && x.assignmentId === id);
                             if(g && (g.correctness === '遺失' || g.correctness === '沒寫任務')) return false;
@@ -2143,7 +2170,7 @@
                         const hasAnyGrading = gradingRecs.some(g => g.assignmentId === id) || (window.__archiveDocsMap && window.__archiveDocsMap[id]);
                         if(!hasAnyGrading) return '';
                         const uncorrected = sortBySeat(st.students).filter(s => {
-                            if(isPulledOut(s, info.subjectName)) return false;
+                            if(isPulledOut(s, info.subjectName, info.name)) return false;
                             const g = gradingRecs.find(x => x.studentId === s.id && x.assignmentId === id);
                             return g && g.correctness === '有錯' && !g.corrected;
                         });
@@ -2167,7 +2194,7 @@
                         });
                     }
                     const blocks = Object.entries(allAssignmentsMap).map(([id, info]) => {
-                        const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName));
+                        const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName, info.name));
                         const unsigned = applicable.filter(s => {
                             const rec = records.find(r => r.studentId === s.id && r.assignmentId === id);
                             const archDoc = window.__archiveDocsMap ? window.__archiveDocsMap[id] : null;
@@ -2770,7 +2797,7 @@
                         status: rec?rec.status:'未繳',
                         correctness: g?g.correctness:'',
                         corrected: g?g.corrected:false,
-                        pulledOut: isPulledOut(s, subj?subj.name:'')
+                        pulledOut: isPulledOut(s, subj?subj.name:'', a.name)
                     };
                     if(rec && rec.signStatus) entry.signStatus = rec.signStatus;
                     return entry;
@@ -2848,7 +2875,10 @@
 
                         box.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;min-width:680px;">` + headerHtml + 
                             (item.records||[]).map((r,i)=>{
+                                const stu = (st.students || []).find(s => s.id === r.studentId || s.name === r.studentName);
                                 const asg = (item.assignments || []).find(x => x.id === r.assignmentId);
+                                const asgSubj = asg ? (asg.subjectName || ((st.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
+                                const isPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
                                 const needsSign = asg && (asg.needsSign || asg.signOnly);
                                 const isSignOnly = asg && asg.signOnly;
                                 const isSigned = r.signStatus === '已簽名';
@@ -2860,14 +2890,14 @@
                                 const makeupBtn = r.status !== '已繳' ? `<button class="btn small outline" data-makeup="${i}">補交</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button>`;
                                 
                                 let statusCol = '';
-                                if (r.pulledOut) {
+                                if (isPull) {
                                     statusCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;"><button type="button" class="cell-status-btn" style="background:transparent; color:var(--muted); font-weight:bold; pointer-events:none; box-shadow:none;">抽離</button><button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button></div>`;
                                 } else {
                                     statusCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;">${statusBtn}${makeupBtn}</div>`;
                                 }
                                 
                                 let signCol = '';
-                                if (needsSign && !r.pulledOut) {
+                                if (needsSign && !isPull) {
                                     const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(r.signStatus||'未簽名')}" data-arch-sign="${i}" style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${signDisplay}</button>`;
                                     const makeupSignBtn = (!isSigned && showSign) ? `<button class="btn small outline" data-makeup-sign="${i}">補簽</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補簽</button>`;
                                     signCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;">${signBtn}${makeupSignBtn}</div>`;
@@ -3171,7 +3201,7 @@
                         signStatus: rec?rec.signStatus:'未簽名',
                         correctness: g?g.correctness:'',
                         corrected: g?g.corrected:false,
-                        pulledOut: isPulledOut(s, dSubj?dSubj.name:'')
+                        pulledOut: isPulledOut(s, dSubj?dSubj.name:'', dailyAsg.name)
                     };
                 });
                 await addDoc(archivesColl, {

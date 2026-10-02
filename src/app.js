@@ -28,6 +28,7 @@ import {
     isSchoolDay,
     sortBySeat,
     isPulledOut,
+    isRecordPulledOut,
     badgeClass,
     signClass,
     escapeHtml,
@@ -143,6 +144,32 @@ export async function autoLoadArchives() {
         appState.extraPastAssignments = appState.extraPastAssignments || {};
         appState.archiveDocsMap = appState.archiveDocsMap || {};
         const currentIds = new Set(settings && settings.assignments ? settings.assignments.map(a => a.id) : []);
+
+        if (isAdmin && settings && Array.isArray(settings.students)) {
+            for (const d of snap.docs) {
+                const data = d.data();
+                let archiveModified = false;
+                if (Array.isArray(data.records)) {
+                    data.records.forEach(r => {
+                        const stu = settings.students.find(s => s.id === r.studentId || s.name === r.studentName);
+                        if (stu && stu.pullout) {
+                            const asg = (data.assignments || []).find(a => a.id === r.assignmentId);
+                            const asgSubj = asg ? (asg.subjectName || ((settings.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
+                            const shouldPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
+                            if (shouldPull && !r.pulledOut) {
+                                r.pulledOut = true;
+                                archiveModified = true;
+                            }
+                        }
+                    });
+                }
+                if (archiveModified) {
+                    data.records = sanitizeArchiveRecords(data.records);
+                    await setDoc(doc(db, 'archives', d.id), { records: data.records }, { merge: true }).catch(e => logger.warn('REPAIR_ARCHIVE_PULLOUT_FAILED', e));
+                }
+            }
+        }
+
         snap.docs.forEach(d => {
             const data = d.data();
             data._id = d.id;
@@ -212,7 +239,10 @@ async function renderArchivesList() {
 
             box.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;min-width:680px;">` + headerHtml +
                 (item.records || []).map((r, i) => {
+                    const stu = (settings.students || []).find(s => s.id === r.studentId || s.name === r.studentName);
                     const asg = (item.assignments || []).find(x => x.id === r.assignmentId);
+                    const asgSubj = asg ? (asg.subjectName || ((settings.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
+                    const isPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
                     const needsSign = asg && (asg.needsSign || asg.signOnly);
                     const isSignOnly = asg && asg.signOnly;
                     const isSigned = r.signStatus === '已簽名';
@@ -224,14 +254,14 @@ async function renderArchivesList() {
                     const makeupBtn = r.status !== '已繳' ? `<button class="btn small outline" data-makeup="${i}">補交</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button>`;
 
                     let statusCol = '';
-                    if (r.pulledOut) {
+                    if (isPull) {
                         statusCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;"><button type="button" class="cell-status-btn" style="background:transparent; color:var(--muted); font-weight:bold; pointer-events:none; box-shadow:none;">抽離</button><button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button></div>`;
                     } else {
                         statusCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;">${statusBtn}${makeupBtn}</div>`;
                     }
 
                     let signCol = '';
-                    if (needsSign && !r.pulledOut) {
+                    if (needsSign && !isPull) {
                         const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(r.signStatus || '未簽名')}" data-arch-sign="${i}" style="visibility:${showSign ? 'visible' : 'hidden'};pointer-events:${showSign ? 'auto' : 'none'}">${escapeHtml(signDisplay)}</button>`;
                         const makeupSignBtn = (!isSigned && showSign) ? `<button class="btn small outline" data-makeup-sign="${i}">補簽</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補簽</button>`;
                         signCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;">${signBtn}${makeupSignBtn}</div>`;
@@ -700,7 +730,7 @@ function loadEditor() {
                 status: rec ? rec.status : '未繳',
                 correctness: g ? g.correctness : '',
                 corrected: g ? g.corrected : false,
-                pulledOut: isPulledOut(s, subj ? subj.name : '')
+                pulledOut: isPulledOut(s, subj ? subj.name : '', a.name)
             };
             if (rec && rec.signStatus) entry.signStatus = rec.signStatus;
             return entry;
@@ -767,7 +797,7 @@ function loadEditor() {
                 signStatus: rec ? rec.signStatus : '未簽名',
                 correctness: g ? g.correctness : '',
                 corrected: g ? g.corrected : false,
-                pulledOut: isPulledOut(s, dSubj ? dSubj.name : '')
+                pulledOut: isPulledOut(s, dSubj ? dSubj.name : '', dailyAsg.name)
             };
         });
         await addDoc(archivesColl, {

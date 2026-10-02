@@ -4,6 +4,7 @@
 import {
     sortBySeat,
     isPulledOut,
+    isRecordPulledOut,
     pulloutLabel,
     nextPullout,
     isExamAssignment,
@@ -54,6 +55,18 @@ export function runAllDomainTests(assert) {
         assert.strictEqual(isPulledOut(s3, '國語'), false, '無抽離設定應為 false');
         assert.strictEqual(pulloutLabel(s1.pullout), '抽離:國');
         assert.strictEqual(pulloutLabel({ chinese: true, math: true }), '抽離:國數');
+        
+        // 抽離判斷支援作業名稱（國/數關鍵字自動識別）
+        assert.strictEqual(isPulledOut(s1, '', '國語習作'), true, '科目為空但作業名稱包含國語應判定抽離');
+        assert.strictEqual(isPulledOut(s1, '未分類', '2026/09/25 國習 p.10'), true, '科目未分類但作業含國習應判定抽離');
+        assert.strictEqual(isPulledOut(s2, '', '數學習作第5頁'), true, '科目為空但作業包含數學習作應判定抽離');
+        assert.strictEqual(isPulledOut(s1, '', '英文作業'), false, '非國數作業不應判定抽離');
+
+        // 綜合紀錄抽離判斷 (isRecordPulledOut)
+        assert.strictEqual(isRecordPulledOut({ pulledOut: true }, s3, '自然'), true, '快照已記錄抽離直接判定為 true');
+        assert.strictEqual(isRecordPulledOut({ pulledOut: false, assignmentName: '國語考卷' }, s1, ''), true, '快照為 false 但學生設定抽離國語應回退為 true');
+        assert.strictEqual(isRecordPulledOut(null, s2, '數學'), true, '無紀錄但學生抽離數學應為 true');
+        assert.strictEqual(isRecordPulledOut(null, s1, '自然', '昆蟲觀察表'), false, '非抽離科目應為 false');
         
         let p = nextPullout(null);
         assert.deepStrictEqual(p, { chinese: true, math: false });
