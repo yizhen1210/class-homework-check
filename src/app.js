@@ -30,7 +30,8 @@ import {
     isPulledOut,
     badgeClass,
     signClass,
-    escapeHtml
+    escapeHtml,
+    sanitizeArchiveRecords
 } from './domain/rules.js';
 
 import { logger, initGlobalErrorMonitoring } from './utils/logger.js';
@@ -145,10 +146,14 @@ export async function autoLoadArchives() {
         snap.docs.forEach(d => {
             const data = d.data();
             data._id = d.id;
-            appState.archiveDocsMap[d.id] = data;
+            if (!appState.archiveDocsMap[d.id]) {
+                appState.archiveDocsMap[d.id] = data;
+            }
             const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
             (data.assignments || []).forEach(a => {
-                appState.archiveDocsMap[a.id] = data;
+                if (!appState.archiveDocsMap[a.id]) {
+                    appState.archiveDocsMap[a.id] = data;
+                }
                 if (!currentIds.has(a.id) && !appState.extraPastAssignments[a.id]) {
                     appState.extraPastAssignments[a.id] = {
                         name: a.name,
@@ -157,6 +162,11 @@ export async function autoLoadArchives() {
                         needsSign: !!a.needsSign,
                         signOnly: !!a.signOnly
                     };
+                }
+            });
+            (data.records || []).forEach(r => {
+                if (r.assignmentId && !appState.archiveDocsMap[r.assignmentId]) {
+                    appState.archiveDocsMap[r.assignmentId] = data;
                 }
             });
         });
@@ -244,10 +254,10 @@ async function renderArchivesList() {
                     const r = item.records[idx];
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                     const remarkText = r.remark ? `${r.remark} / 已補交（${timeStr}）` : `已補交（${timeStr}）`;
-                    const updatedRecords = item.records.map((r2, i2) => i2 === idx ? { ...r2, status: '已繳', remark: remarkText } : r2);
+                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r2, i2) => i2 === idx ? { ...r2, status: '已繳', remark: remarkText } : r2));
                     item.records = updatedRecords;
-                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     renderArchiveDetail(item);
+                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                 };
             });
 
@@ -257,10 +267,10 @@ async function renderArchivesList() {
                     const r = item.records[idx];
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                     const remarkText = r.remark ? `${r.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`;
-                    const updatedRecords = item.records.map((r2, i2) => i2 === idx ? { ...r2, signStatus: '已簽名', remark: remarkText } : r2);
+                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r2, i2) => i2 === idx ? { ...r2, signStatus: '已簽名', remark: remarkText } : r2));
                     item.records = updatedRecords;
-                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     renderArchiveDetail(item);
+                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                 };
             });
 
@@ -271,10 +281,10 @@ async function renderArchivesList() {
                     const nv = cur.status === '已繳' ? '未繳' : '已繳';
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                     const remarkText = nv === '已繳' ? `狀態改已繳（${timeStr}）` : cur.remark;
-                    const updatedRecords = item.records.map((r, i2) => i2 === idx ? { ...r, status: nv, signStatus: nv === '已繳' ? (r.signStatus || '未簽名') : '未簽名', remark: remarkText } : r);
+                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r, i2) => i2 === idx ? { ...r, status: nv, signStatus: nv === '已繳' ? (r.signStatus || '未簽名') : '未簽名', remark: remarkText } : r));
                     item.records = updatedRecords;
-                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     renderArchiveDetail(item);
+                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                 };
             });
 
@@ -285,10 +295,10 @@ async function renderArchivesList() {
                     const nv = (cur.signStatus === '已簽名') ? '未簽名' : '已簽名';
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                     const remarkText = nv === '已簽名' ? (cur.remark ? `${cur.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`) : cur.remark;
-                    const updatedRecords = item.records.map((r, i2) => i2 === idx ? { ...r, signStatus: nv, remark: remarkText } : r);
+                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r, i2) => i2 === idx ? { ...r, signStatus: nv, remark: remarkText } : r));
                     item.records = updatedRecords;
-                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     renderArchiveDetail(item);
+                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                 };
             });
         }
@@ -703,7 +713,7 @@ function loadEditor() {
                 const s = settings.subjects.find(x => x.id === a.subjectId);
                 return { id: a.id, name: a.name, subjectName: s ? s.name : '', needsSign: !!a.needsSign, signOnly: !!a.signOnly };
             }),
-            records: snapshotRecords,
+            records: sanitizeArchiveRecords(snapshotRecords),
             studentCount: settings.students.length,
             assignmentCount: archivableAssignments.length
         }).catch(e => logger.warn('ARCHIVE_WRITE_FAILED', e));
@@ -764,7 +774,7 @@ function loadEditor() {
             timestamp: Date.now(),
             dateLabel: dateLabel || todayStr(),
             assignments: [{ id: dailyAsg.id, name: dailyAsg.name, subjectName: dSubj ? dSubj.name : '', needsSign: true }],
-            records: snapshotRecords,
+            records: sanitizeArchiveRecords(snapshotRecords),
             studentCount: settings.students.length,
             assignmentCount: 1
         }).catch(e => logger.warn('ARCHIVE_CONTACT_FAILED', e));

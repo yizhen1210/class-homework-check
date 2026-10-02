@@ -9,7 +9,9 @@ import {
     isPulledOut,
     escapeHtml,
     todayStr,
-    todayISODate
+    todayISODate,
+    deriveRecordStatus,
+    deriveRecordSign
 } from '../domain/rules.js';
 
 import {
@@ -43,8 +45,8 @@ function renderContactRow(s, dailyAsg, dSubj, recs, gradingRecs) {
     }
 
     const rec = recs.find(r => r.studentId === s.id && r.assignmentId === dailyAsg.id);
-    const dStatus = rec ? rec.status : '未繳';
-    const dSign = (rec && rec.signStatus) ? rec.signStatus : '未簽名';
+    const dStatus = deriveRecordStatus(rec, '未繳');
+    const dSign = deriveRecordSign(rec, '未簽名');
     const dSignDisplay = dSign === '未簽名' ? '未簽' : dSign;
     const g = gradingRecs.find(x => x.studentId === s.id && x.assignmentId === dailyAsg.id);
     const dGrade = g ? g.correctness : '';
@@ -92,9 +94,10 @@ export function renderContactTab(records, gradingRecords, settings, isAdmin = fa
     if (dailyAsg) {
         allStudents.forEach(s => {
             const rec = recs.find(r => r.studentId === s.id && r.assignmentId === dailyAsg.id);
-            const dStatus = rec ? rec.status : '未繳';
+            const dStatus = deriveRecordStatus(rec, '未繳');
+            const dSign = deriveRecordSign(rec, '未簽名');
             if (dStatus !== '已繳') missingList.push(s.name);
-            if (dStatus === '已繳' && (!rec || rec.signStatus !== '已簽名')) unsignedList.push(s.name);
+            if (dStatus === '已繳' && dSign !== '已簽名') unsignedList.push(s.name);
             const g = gradingRecs.find(x => x.studentId === s.id && x.assignmentId === dailyAsg.id);
             if (g && g.correctness === '有錯' && !g.corrected) uncorrectedList.push(s.name);
             if (g && g.correctness === '沒寫任務') notWrittenList.push(s.name);
@@ -151,7 +154,9 @@ export function renderContactTab(records, gradingRecords, settings, isAdmin = fa
                 const stu = st.students.find(x => x.id === sid);
                 const grp = st.groups.find(x => x.id === stu?.groupId);
                 const cur = recs.find(x => x.studentId === sid && x.assignmentId === dailyAsg.id);
-                const nv = (cur && cur.status === '已繳') ? '未繳' : '已繳';
+                const curStatus = deriveRecordStatus(cur, '未繳');
+                const curSign = deriveRecordSign(cur, '未簽名');
+                const nv = (curStatus === '已繳') ? '未繳' : '已繳';
                 const payload = {
                     groupId: grp ? grp.id : '',
                     groupName: grp ? grp.name : '',
@@ -161,12 +166,13 @@ export function renderContactTab(records, gradingRecords, settings, isAdmin = fa
                     subjectName: dSubj ? dSubj.name : '',
                     assignmentId: dailyAsg.id,
                     assignmentName: dailyAsg.name,
-                    status: nv
+                    status: nv,
+                    signStatus: curSign
                 };
-                await adminSetStatus(payload);
                 let r = recs.find(x => x.studentId === sid && x.assignmentId === dailyAsg.id);
                 if (r) Object.assign(r, payload); else recs.push(payload);
                 renderContactTab(recs, gradingRecs, st, isAdmin);
+                await adminSetStatus(payload);
             };
         });
 
@@ -177,9 +183,10 @@ export function renderContactTab(records, gradingRecords, settings, isAdmin = fa
                 const stu = st.students.find(x => x.id === sid);
                 const grp = st.groups.find(x => x.id === stu?.groupId);
                 const cur = recs.find(x => x.studentId === sid && x.assignmentId === dailyAsg.id);
+                const curStatus = deriveRecordStatus(cur, '未繳');
                 const currentText = btn.textContent.trim();
                 const nv = (currentText === '已簽名' || currentText === '已簽') ? '未簽名' : '已簽名';
-                await adminSetStatus({
+                const payload = {
                     groupId: grp ? grp.id : '',
                     groupName: grp ? grp.name : '',
                     studentId: sid,
@@ -188,11 +195,13 @@ export function renderContactTab(records, gradingRecords, settings, isAdmin = fa
                     subjectName: dSubj ? dSubj.name : '',
                     assignmentId: dailyAsg.id,
                     assignmentName: dailyAsg.name,
+                    status: curStatus,
                     signStatus: nv
-                });
+                };
                 let r = recs.find(x => x.studentId === sid && x.assignmentId === dailyAsg.id);
-                if (r) r.signStatus = nv;
+                if (r) Object.assign(r, payload); else recs.push(payload);
                 renderContactTab(recs, gradingRecs, st, isAdmin);
+                await adminSetStatus(payload);
             };
         });
 
@@ -204,14 +213,18 @@ export function renderContactTab(records, gradingRecords, settings, isAdmin = fa
                 const val = btn.getAttribute('data-daily-grade');
                 const g = gradingRecs.find(x => x.studentId === sid && x.assignmentId === dailyAsg.id);
                 const nextVal = (g && g.correctness === val) ? '' : val;
-                await adminSetGrading({
+                const payload = {
                     studentId: sid,
                     studentName: stu ? stu.name : '',
                     assignmentId: dailyAsg.id,
                     assignmentName: dailyAsg.name,
                     correctness: nextVal,
                     corrected: nextVal === '有錯' ? (g ? g.corrected : false) : false
-                });
+                };
+                let existingG = gradingRecs.find(x => x.studentId === sid && x.assignmentId === dailyAsg.id);
+                if (existingG) Object.assign(existingG, payload); else gradingRecs.push(payload);
+                renderContactTab(recs, gradingRecs, st, isAdmin);
+                await adminSetGrading(payload);
             };
         });
 
@@ -221,14 +234,18 @@ export function renderContactTab(records, gradingRecords, settings, isAdmin = fa
                 const sid = row.getAttribute('data-daily-student');
                 const stu = st.students.find(x => x.id === sid);
                 const g = gradingRecs.find(x => x.studentId === sid && x.assignmentId === dailyAsg.id);
-                await adminSetGrading({
+                const payload = {
                     studentId: sid,
                     studentName: stu ? stu.name : '',
                     assignmentId: dailyAsg.id,
                     assignmentName: dailyAsg.name,
                     correctness: '有錯',
                     corrected: !(g && g.corrected)
-                });
+                };
+                let existingG = gradingRecs.find(x => x.studentId === sid && x.assignmentId === dailyAsg.id);
+                if (existingG) Object.assign(existingG, payload); else gradingRecs.push(payload);
+                renderContactTab(recs, gradingRecs, st, isAdmin);
+                await adminSetGrading(payload);
             };
         });
     }

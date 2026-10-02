@@ -45,7 +45,7 @@ export function renderRecordsTab(records, settings, isAdmin, callbacks = {}) {
 
     const statusOf = (studentId, assignmentId) => {
         const r = recs.find(x => x.studentId === studentId && x.assignmentId === assignmentId);
-        return r ? r.status : '未繳';
+        return (r && r.status) ? r.status : '未繳';
     };
     const signOf = (studentId, assignmentId) => {
         const r = recs.find(x => x.studentId === studentId && x.assignmentId === assignmentId);
@@ -271,6 +271,8 @@ export function renderRecordsTab(records, settings, isAdmin, callbacks = {}) {
                 const grp = st.groups.find(x => x.id === stu?.groupId);
                 const a = st.assignments.find(x => x.id === aid);
                 const subj = a ? st.subjects.find(x => x.id === a.subjectId) : null;
+                const curRec = recs.find(r => r.studentId === sid && r.assignmentId === aid);
+                const curSign = (curRec && curRec.signStatus) ? curRec.signStatus : '未簽名';
                 const nv = nextStatus(btn.textContent.trim());
                 const payload = {
                     groupId: grp ? grp.id : '',
@@ -281,12 +283,12 @@ export function renderRecordsTab(records, settings, isAdmin, callbacks = {}) {
                     subjectName: subj ? subj.name : '',
                     assignmentId: aid,
                     assignmentName: a ? a.name : '',
-                    status: nv
+                    status: nv,
+                    signStatus: curSign
                 };
-                await adminSetStatus(payload);
-                let rec = recs.find(r => r.studentId === sid && r.assignmentId === aid);
-                if (rec) Object.assign(rec, payload); else recs.push(payload);
+                if (curRec) Object.assign(curRec, payload); else recs.push(payload);
                 renderRecordsTab(recs, st, isAdmin, callbacks);
+                await adminSetStatus(payload);
             };
         });
 
@@ -297,6 +299,8 @@ export function renderRecordsTab(records, settings, isAdmin, callbacks = {}) {
                 const grp = st.groups.find(x => x.id === stu?.groupId);
                 const a = st.assignments.find(x => x.id === aid);
                 const subj = a ? st.subjects.find(x => x.id === a.subjectId) : null;
+                const curRec = recs.find(r => r.studentId === sid && r.assignmentId === aid);
+                const curStatus = (curRec && curRec.status) ? curRec.status : '未繳';
                 const currentText = btn.textContent.trim();
                 const nv = nextSign(currentText);
                 const payload = {
@@ -308,12 +312,12 @@ export function renderRecordsTab(records, settings, isAdmin, callbacks = {}) {
                     subjectName: subj ? subj.name : '',
                     assignmentId: aid,
                     assignmentName: a ? a.name : '',
+                    status: curStatus,
                     signStatus: nv
                 };
-                await adminSetStatus(payload);
-                let rec = recs.find(r => r.studentId === sid && r.assignmentId === aid);
-                if (rec) rec.signStatus = nv; else recs.push({ ...payload, status: '未繳' });
+                if (curRec) Object.assign(curRec, payload); else recs.push(payload);
                 renderRecordsTab(recs, st, isAdmin, callbacks);
+                await adminSetStatus(payload);
             };
         });
     }

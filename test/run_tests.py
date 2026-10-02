@@ -316,6 +316,52 @@ def run_tests():
     t.assert_equal(get_cell_render_type(False, '未繳', '國語聽考'), 'grading_buttons', '聽考未繳維持顯示批改按鈕')
     t.assert_equal(get_cell_render_type(False, '未繳', '複B卷'), 'grading_buttons', '複B卷未繳維持顯示批改按鈕')
 
+    # 11. 狀態與簽名解析安全防護及封存資料清理
+    def derive_record_status(live_record, archive_record):
+        if live_record and live_record.get('status'):
+            return live_record['status']
+        if archive_record and archive_record.get('status'):
+            return archive_record['status']
+        return '未繳'
+
+    def derive_record_sign(live_record, archive_record):
+        if live_record and live_record.get('signStatus'):
+            return live_record['signStatus']
+        if archive_record and archive_record.get('signStatus'):
+            return archive_record['signStatus']
+        return '未簽名'
+
+    def sanitize_archive_records(records):
+        result = []
+        for r in (records or []):
+            result.append({
+                'studentId': r.get('studentId') or '',
+                'studentName': r.get('studentName') or '',
+                'assignmentId': r.get('assignmentId') or '',
+                'assignmentName': r.get('assignmentName') or '',
+                'status': r.get('status') or '未繳',
+                'signStatus': r.get('signStatus') or '未簽名',
+                'correctness': r.get('correctness') or '',
+                'corrected': bool(r.get('corrected')),
+                'remark': r.get('remark') or '',
+                'pulledOut': bool(r.get('pulledOut'))
+            })
+        return result
+
+    t.assert_equal(derive_record_status({'status': '已繳'}, {'status': '未繳'}), '已繳', '活紀錄有 status 優先')
+    t.assert_equal(derive_record_status({'signStatus': '已簽名'}, {'status': '已繳'}), '已繳', '活紀錄無 status 回退封存')
+    t.assert_equal(derive_record_status(None, None), '未繳', '無紀錄預設未繳')
+    t.assert_equal(derive_record_status({}, {}), '未繳', '空紀錄預設未繳')
+
+    t.assert_equal(derive_record_sign({'signStatus': '已簽名'}, {'signStatus': '未簽名'}), '已簽名', '活紀錄有 signStatus 優先')
+    t.assert_equal(derive_record_sign({'status': '已繳'}, {'signStatus': '已簽名'}), '已簽名', '活紀錄無 signStatus 回退封存')
+    t.assert_equal(derive_record_sign(None, None), '未簽名', '無紀錄預設未簽名')
+
+    sanitized = sanitize_archive_records([{'studentId': 's1', 'status': None, 'signStatus': None}])
+    t.assert_equal(sanitized[0]['status'], '未繳', '清理後 status 不為 None/undefined')
+    t.assert_equal(sanitized[0]['signStatus'], '未簽名', '清理後 signStatus 不為 None/undefined')
+    t.assert_equal(sanitized[0]['correctness'], '', '清理後 correctness 為空字串')
+
     print(f"✓ 恭喜！全數 {t.passes} 項領域業務測試斷言通過！")
 
 if __name__ == '__main__':

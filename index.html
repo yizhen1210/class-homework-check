@@ -583,10 +583,14 @@
                 snap.docs.forEach(d => {
                     const data = d.data();
                     data._id = d.id;
-                    window.__archiveDocsMap[d.id] = data;
+                    if (!window.__archiveDocsMap[d.id]) {
+                        window.__archiveDocsMap[d.id] = data;
+                    }
                     const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
                     (data.assignments||[]).forEach(a => {
-                        window.__archiveDocsMap[a.id] = data;
+                        if (!window.__archiveDocsMap[a.id]) {
+                            window.__archiveDocsMap[a.id] = data;
+                        }
                         if(!currentIds.has(a.id)) {
                             if (!window.__extraPastAssignments[a.id]) {
                                 window.__extraPastAssignments[a.id] = { name: a.name, dateLabel, timestamp: data.timestamp, subjectName: a.subjectName || '未分類', needsSign: !!a.needsSign, signOnly: !!a.signOnly };
@@ -595,6 +599,11 @@
                                 window.__extraPastAssignments[a.id].dateLabel = dateLabel;
                                 window.__extraPastAssignments[a.id].subjectName = a.subjectName || '未分類';
                             }
+                        }
+                    });
+                    (data.records || []).forEach(r => {
+                        if (r.assignmentId && !window.__archiveDocsMap[r.assignmentId]) {
+                            window.__archiveDocsMap[r.assignmentId] = data;
                         }
                     });
                 });
@@ -753,18 +762,71 @@
             return batch.commit().catch(e=>{ console.warn(e); window.showAlert('送出失敗，請檢查網路後重試'); });
         }
         function adminSetStatus(item){
+            const clean = {
+                groupId: item.groupId || '',
+                groupName: item.groupName || '',
+                studentId: item.studentId || '',
+                studentName: item.studentName || '',
+                subjectId: item.subjectId || '',
+                subjectName: item.subjectName || '',
+                assignmentId: item.assignmentId || '',
+                assignmentName: item.assignmentName || '',
+                status: item.status || '未繳',
+                signStatus: item.signStatus || '未簽名',
+                remark: item.remark || '',
+                [ORDER_FIELD]: Date.now()
+            };
             const ref = doc(coll, recordDocId(item.studentId, item.assignmentId));
-            return setDoc(ref, { ...item, [ORDER_FIELD]: Date.now() }, { merge: true }).catch(e=>{ console.warn(e); window.showAlert('操作失敗，請檢查網路後重試'); });
+            return setDoc(ref, clean, { merge: true }).catch(e=>{ console.warn(e); window.showAlert('操作失敗，請檢查網路後重試'); });
         }
         function adminSetGrading(item){
+            const clean = {
+                studentId: item.studentId || '',
+                studentName: item.studentName || '',
+                assignmentId: item.assignmentId || '',
+                assignmentName: item.assignmentName || '',
+                correctness: item.correctness || '',
+                corrected: Boolean(item.corrected),
+                updatedAt: Date.now()
+            };
             const ref = doc(gradingColl, recordDocId(item.studentId, item.assignmentId));
-            return setDoc(ref, { ...item, updatedAt: Date.now() }, { merge: true }).catch(e=>{ console.warn(e); window.showAlert('操作失敗，請檢查網路後重試'); });
+            return setDoc(ref, clean, { merge: true }).catch(e=>{ console.warn(e); window.showAlert('操作失敗，請檢查網路後重試'); });
         }
 
         const STATUS_LIST = ['已繳','未繳'];
         const badgeClass = s => s === '已繳' ? 'submitted' : 'missing';
         const SIGN_LIST = ['已簽名','未簽名'];
         const signClass = s => s === '已簽名' ? 'submitted' : 'unsigned';
+
+        function deriveRecordStatus(rec, fallback = '未繳') {
+            if (!rec) return fallback;
+            return rec.status || fallback;
+        }
+
+        function deriveRecordSign(rec, fallback = '未簽名') {
+            if (!rec) return fallback;
+            return rec.signStatus || fallback;
+        }
+
+        function sanitizeArchiveRecords(records) {
+            if (!Array.isArray(records)) return [];
+            return records.map(r => ({
+                groupId: r.groupId || '',
+                groupName: r.groupName || '',
+                studentId: r.studentId || '',
+                studentName: r.studentName || '',
+                subjectId: r.subjectId || '',
+                subjectName: r.subjectName || '',
+                assignmentId: r.assignmentId || '',
+                assignmentName: r.assignmentName || '',
+                status: r.status || '未繳',
+                signStatus: r.signStatus || '未簽名',
+                remark: r.remark || '',
+                correctness: r.correctness || '',
+                corrected: Boolean(r.corrected),
+                pointsGiven: Boolean(r.pointsGiven)
+            }));
+        }
         
         function sortBySeat(list){
             return [...list].sort((a,b) => {
@@ -1117,11 +1179,11 @@
 
             const statusOf = (studentId, assignmentId) => {
                 const r = recs.find(x=>x.studentId===studentId && x.assignmentId===assignmentId);
-                return r ? r.status : '未繳';
+                return deriveRecordStatus(r, '未繳');
             };
             const signOf = (studentId, assignmentId) => {
                 const r = recs.find(x=>x.studentId===studentId && x.assignmentId===assignmentId);
-                return (r && r.signStatus) ? r.signStatus : '未簽名';
+                return deriveRecordSign(r, '未簽名');
             };
 
             const quickSubjSel = $('quickAssignmentSubject');
@@ -1300,18 +1362,21 @@
                 const grp = st.groups.find(x=>x.id===stu?.groupId);
                 const a = st.assignments.find(x=>x.id===aid);
                 const subj = a ? st.subjects.find(x=>x.id===a.subjectId) : null;
+                const cur = recs.find(r=>r.studentId===sid && r.assignmentId===aid);
+                const curSign = deriveRecordSign(cur, '未簽名');
                 const nv = nextStatus(btn.textContent.trim());
                 const payload = {
                     groupId: grp?grp.id:'', groupName: grp?grp.name:'',
                     studentId: sid, studentName: stu?stu.name:'',
                     subjectId: a?a.subjectId||'':'', subjectName: subj?subj.name:'',
                     assignmentId: aid, assignmentName: a?a.name:'',
-                    status: nv
+                    status: nv,
+                    signStatus: curSign
                 };
-                await adminSetStatus(payload);
                 let rec = recs.find(r=>r.studentId===sid && r.assignmentId===aid);
                 if(rec) Object.assign(rec, payload); else recs.push(payload);
                 renderRecordsTab(recs, st);
+                await adminSetStatus(payload);
             });
             tbody.querySelectorAll('.cell-sign-btn').forEach(btn => btn.onclick = async () => {
                 const sid = btn.getAttribute('data-sign-student'), aid = btn.getAttribute('data-sign-assignment');
@@ -1319,6 +1384,8 @@
                 const grp = st.groups.find(x=>x.id===stu?.groupId);
                 const a = st.assignments.find(x=>x.id===aid);
                 const subj = a ? st.subjects.find(x=>x.id===a.subjectId) : null;
+                const cur = recs.find(r=>r.studentId===sid && r.assignmentId===aid);
+                const curStatus = deriveRecordStatus(cur, '未繳');
                 const currentText = btn.textContent.trim();
                 const nv = currentText === '已簽名' || currentText === '已簽' ? '未簽名' : '已簽名';
                 const payload = {
@@ -1326,12 +1393,13 @@
                     studentId: sid, studentName: stu?stu.name:'',
                     subjectId: a?a.subjectId||'':'', subjectName: subj?subj.name:'',
                     assignmentId: aid, assignmentName: a?a.name:'',
+                    status: curStatus,
                     signStatus: nv
                 };
-                await adminSetStatus(payload);
                 let rec = recs.find(r=>r.studentId===sid && r.assignmentId===aid);
-                if(rec) rec.signStatus = nv; else recs.push({ ...payload, status: '未繳' });
+                if(rec) Object.assign(rec, payload); else recs.push(payload);
                 renderRecordsTab(recs, st);
+                await adminSetStatus(payload);
             });
         }
 
@@ -1346,8 +1414,8 @@
                 <span class="row-slot-icon"></span>
             </div>`;
             const rec = recs.find(r=>r.studentId===s.id && r.assignmentId===dailyAsg.id);
-            const dStatus = rec ? rec.status : '未繳';
-            const dSign = (rec && rec.signStatus) ? rec.signStatus : '未簽名';
+            const dStatus = deriveRecordStatus(rec, '未繳');
+            const dSign = deriveRecordSign(rec, '未簽名');
             const dSignDisplay = dSign === '未簽名' ? '未簽' : dSign;
             const g = gradingRecs.find(x=>x.studentId===s.id && x.assignmentId===dailyAsg.id);
             const dGrade = g ? g.correctness : '';
@@ -1379,9 +1447,10 @@
             if(dailyAsg){
                 allStudents.forEach(s => {
                     const rec = recs.find(r=>r.studentId===s.id && r.assignmentId===dailyAsg.id);
-                    const dStatus = rec ? rec.status : '未繳';
+                    const dStatus = deriveRecordStatus(rec, '未繳');
+                    const dSign = deriveRecordSign(rec, '未簽名');
                     if(dStatus !== '已繳') missingList.push(s.name);
-                    if(dStatus === '已繳' && (!rec || rec.signStatus !== '已簽名')) unsignedList.push(s.name);
+                    if(dStatus === '已繳' && dSign !== '已簽名') unsignedList.push(s.name);
                     const g = gradingRecs.find(x=>x.studentId===s.id && x.assignmentId===dailyAsg.id);
                     if(g && g.correctness === '有錯' && !g.corrected) uncorrectedList.push(s.name);
                     if(g && g.correctness === '沒寫任務') notWrittenList.push(s.name);
@@ -1427,18 +1496,21 @@
                     const stu = st.students.find(x=>x.id===sid);
                     const grp = st.groups.find(x=>x.id===stu?.groupId);
                     const cur = recs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
-                    const nv = (cur && cur.status === '已繳') ? '未繳' : '已繳';
+                    const curStatus = deriveRecordStatus(cur, '未繳');
+                    const curSign = deriveRecordSign(cur, '未簽名');
+                    const nv = (curStatus === '已繳') ? '未繳' : '已繳';
                     const payload = {
                         groupId: grp?grp.id:'', groupName: grp?grp.name:'',
                         studentId: sid, studentName: stu?stu.name:'',
                         subjectId: dailyAsg.subjectId||'', subjectName: dSubj?dSubj.name:'',
                         assignmentId: dailyAsg.id, assignmentName: dailyAsg.name,
-                        status: nv
+                        status: nv,
+                        signStatus: curSign
                     };
-                    await adminSetStatus(payload);
                     let r = recs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
                     if(r) Object.assign(r, payload); else recs.push(payload);
                     renderContactTab(recs, gradingRecs, st);
+                    await adminSetStatus(payload);
                 });
                 dailyBox.querySelectorAll('[data-daily-sign-toggle]').forEach(btn => btn.onclick = async () => {
                     const row = btn.closest('.daily-row');
@@ -1446,18 +1518,21 @@
                     const stu = st.students.find(x=>x.id===sid);
                     const grp = st.groups.find(x=>x.id===stu?.groupId);
                     const cur = recs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
+                    const curStatus = deriveRecordStatus(cur, '未繳');
                     const currentText = btn.textContent.trim();
                     const nv = (currentText === '已簽名' || currentText === '已簽') ? '未簽名' : '已簽名';
-                    await adminSetStatus({
+                    const payload = {
                         groupId: grp?grp.id:'', groupName: grp?grp.name:'',
                         studentId: sid, studentName: stu?stu.name:'',
                         subjectId: dailyAsg.subjectId||'', subjectName: dSubj?dSubj.name:'',
                         assignmentId: dailyAsg.id, assignmentName: dailyAsg.name,
+                        status: curStatus,
                         signStatus: nv
-                    });
+                    };
                     let r = recs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
-                    if(r) r.signStatus = nv;
+                    if(r) Object.assign(r, payload); else recs.push(payload);
                     renderContactTab(recs, gradingRecs, st);
+                    await adminSetStatus(payload);
                 });
                 dailyBox.querySelectorAll('[data-daily-grade]').forEach(btn => btn.onclick = async () => {
                     const row = btn.closest('.daily-row');
@@ -1466,24 +1541,32 @@
                     const val = btn.getAttribute('data-daily-grade');
                     const g = gradingRecs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
                     const nextVal = (g && g.correctness === val) ? '' : val;
-                    await adminSetGrading({
+                    const payload = {
                         studentId: sid, studentName: stu?stu.name:'',
                         assignmentId: dailyAsg.id, assignmentName: dailyAsg.name,
                         correctness: nextVal,
                         corrected: nextVal === '有錯' ? (g?g.corrected:false) : false
-                    });
+                    };
+                    let existingG = gradingRecs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
+                    if(existingG) Object.assign(existingG, payload); else gradingRecs.push(payload);
+                    renderContactTab(recs, gradingRecs, st);
+                    await adminSetGrading(payload);
                 });
                 dailyBox.querySelectorAll('[data-daily-corrected]').forEach(btn => btn.onclick = async () => {
                     const row = btn.closest('.daily-row');
                     const sid = row.getAttribute('data-daily-student');
                     const stu = st.students.find(x=>x.id===sid);
                     const g = gradingRecs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
-                    await adminSetGrading({
+                    const payload = {
                         studentId: sid, studentName: stu?stu.name:'',
                         assignmentId: dailyAsg.id, assignmentName: dailyAsg.name,
                         correctness: '有錯',
                         corrected: !(g && g.corrected)
-                    });
+                    };
+                    let existingG = gradingRecs.find(x=>x.studentId===sid && x.assignmentId===dailyAsg.id);
+                    if(existingG) Object.assign(existingG, payload); else gradingRecs.push(payload);
+                    renderContactTab(recs, gradingRecs, st);
+                    await adminSetGrading(payload);
                 });
             }
         }
@@ -1527,7 +1610,7 @@
             const students = sortBySeat(st.students);
             const assignments = st.assignments.filter(a => a.name !== '聯絡簿每日任務' && !a.signOnly);
             const subjNameOf = a => { const s = st.subjects.find(x=>x.id===a.subjectId); return s ? s.name : ''; };
-            const statusOf = (sid, aid) => { const r = recs.find(x=>x.studentId===sid && x.assignmentId===aid); return r ? r.status : '未繳'; };
+            const statusOf = (sid, aid) => { const r = recs.find(x=>x.studentId===sid && x.assignmentId===aid); return deriveRecordStatus(r, '未繳'); };
             const gradeOf = (sid, aid) => gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
 
             const archivedBox = $('pastAssignmentSelect');
@@ -1568,13 +1651,28 @@
                         }
                         return (infoB.name || '').localeCompare(infoA.name || '', 'zh-Hant');
                     });
-                    selPast.innerHTML = '<option value="">請選擇作業</option>' + opts.map(([id,info])=>`<option value="${id}">${info.dateLabel ? info.dateLabel+' ' : ''}${info.name}</option>`).join('');
-                    selPast.value = opts.some(([id])=>id===curPastSel) ? curPastSel : '';
+                    const newHtml = '<option value="">請選擇作業</option>' + opts.map(([id,info])=>`<option value="${id}">${info.dateLabel ? info.dateLabel+' ' : ''}${info.name}</option>`).join('');
+                    if(selPast.innerHTML !== newHtml){
+                        selPast.innerHTML = newHtml;
+                    }
+                    if(opts.some(([id])=>id===curPastSel)){
+                        if(selPast.value !== curPastSel) selPast.value = curPastSel;
+                    } else if(selPast.value !== ''){
+                        selPast.value = '';
+                    }
                 }
                 if(selSubj){
                     const curSubjSel = selSubj.value;
-                    selSubj.innerHTML = '<option value="">請先選擇科目</option>' + Object.keys(bySubject).map(subjName=>`<option value="${subjName}">${subjName}</option>`).join('');
-                    selSubj.value = Object.keys(bySubject).includes(curSubjSel) ? curSubjSel : '';
+                    const subjKeys = Object.keys(bySubject);
+                    const newSubjHtml = '<option value="">請先選擇科目</option>' + subjKeys.map(subjName=>`<option value="${subjName}">${subjName}</option>`).join('');
+                    if(selSubj.innerHTML !== newSubjHtml){
+                        selSubj.innerHTML = newSubjHtml;
+                    }
+                    if(subjKeys.includes(curSubjSel)){
+                        if(selSubj.value !== curSubjSel) selSubj.value = curSubjSel;
+                    } else if(selSubj.value !== ''){
+                        selSubj.value = '';
+                    }
                     selSubj.onchange = () => { refreshPastAssignmentOptions(); renderPastAssignmentGrader(); };
                     refreshPastAssignmentOptions();
                 }
@@ -1626,8 +1724,8 @@
                         const thirdIcon = isPastDaily ? '－' : '✗';
                         const rec = records.find(r=>r.studentId===s.id && r.assignmentId===aid);
                         const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === s.id && r.assignmentId === aid);
-                        const dStatus = rec ? rec.status : (archRec ? archRec.status : '未繳');
-                        const dSign = rec && rec.signStatus ? rec.signStatus : (archRec && archRec.signStatus ? archRec.signStatus : '未簽名');
+                        const dStatus = deriveRecordStatus(rec, archRec ? archRec.status : '未繳');
+                        const dSign = deriveRecordSign(rec, archRec ? archRec.signStatus : '未簽名');
                         const dSignDisplay = dSign === '未簽名' ? '未簽' : (dSign === '已簽名' ? '已簽' : dSign);
                         const isSigned = dSign === '已簽名';
                         const showCorrected = cur==='有錯';
@@ -1660,8 +1758,9 @@
                         const grp = st.groups.find(x=>x.id===stu?.groupId);
                         const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
                         const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && r.assignmentId === aid);
-                        const curStatus = cur2 ? cur2.status : (archRec ? archRec.status : '未繳');
-                        const curRemark = cur2 ? cur2.remark : (archRec ? archRec.remark : '');
+                        const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
+                        const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
+                        const curRemark = (cur2 && cur2.remark) ? cur2.remark : (archRec ? archRec.remark || '' : '');
                         const nv = curStatus === '已繳' ? '未繳' : '已繳';
                         const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                         const remarkText = nv === '已繳' ? `已補交（${timeStr}）` : curRemark;
@@ -1671,26 +1770,37 @@
                             subjectId: dSubj?dSubj.id:'', subjectName: dSubj?dSubj.name:'',
                             assignmentId: aid, assignmentName: aName,
                             status: nv,
+                            signStatus: curSignStatus,
                             remark: remarkText
                         };
-                        await adminSetStatus(payload);
                         let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
                         if(r) Object.assign(r, payload); else records.push(payload);
-                        if (archiveDoc && archiveDoc._id) {
-                            const archIdx = (archiveDoc.records || []).findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        if (archiveDoc) {
+                            if (!archiveDoc.records) archiveDoc.records = [];
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
                             if (archIdx !== -1) {
                                 archiveDoc.records[archIdx].status = nv;
+                                archiveDoc.records[archIdx].signStatus = curSignStatus;
                                 archiveDoc.records[archIdx].remark = remarkText;
-                                setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            } else {
+                                archiveDoc.records.push({ ...payload });
                             }
                         }
                         renderPastAssignmentGrader();
+                        await adminSetStatus(payload);
+                        if (archiveDoc && archiveDoc._id) {
+                            archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
+                            await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                        }
                     });
                     box.querySelectorAll('[data-past-makeup]').forEach(btn => btn.onclick = async () => {
                         const row = btn.closest('.daily-row');
                         const sid = row.getAttribute('data-past-student');
                         const stu = st.students.find(x=>x.id===sid);
                         const grp = st.groups.find(x=>x.id===stu?.groupId);
+                        const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && r.assignmentId === aid);
+                        const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
                         const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                         const payload = {
                             groupId: grp?grp.id:'', groupName: grp?grp.name:'',
@@ -1698,20 +1808,28 @@
                             subjectId: dSubj?dSubj.id:'', subjectName: dSubj?dSubj.name:'',
                             assignmentId: aid, assignmentName: aName,
                             status: '已繳',
+                            signStatus: curSignStatus,
                             remark: `已補交（${timeStr}）`
                         };
-                        await adminSetStatus(payload);
                         let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
                         if(r) Object.assign(r, payload); else records.push(payload);
-                        if (archiveDoc && archiveDoc._id) {
-                            const archIdx = (archiveDoc.records || []).findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        if (archiveDoc) {
+                            if (!archiveDoc.records) archiveDoc.records = [];
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
                             if (archIdx !== -1) {
                                 archiveDoc.records[archIdx].status = '已繳';
+                                archiveDoc.records[archIdx].signStatus = curSignStatus;
                                 archiveDoc.records[archIdx].remark = payload.remark;
-                                setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            } else {
+                                archiveDoc.records.push({ ...payload });
                             }
                         }
                         renderPastAssignmentGrader();
+                        await adminSetStatus(payload);
+                        if (archiveDoc && archiveDoc._id) {
+                            archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
+                            await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                        }
                     });
                     box.querySelectorAll('[data-past-sign-toggle]').forEach(btn => btn.onclick = async () => {
                         const row = btn.closest('.daily-row');
@@ -1720,8 +1838,9 @@
                         const grp = st.groups.find(x=>x.id===stu?.groupId);
                         const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
                         const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && r.assignmentId === aid);
-                        const curSignStatus = cur2 && cur2.signStatus ? cur2.signStatus : (archRec && archRec.signStatus ? archRec.signStatus : '未簽名');
-                        const curRemark = cur2 ? cur2.remark : (archRec ? archRec.remark : '');
+                        const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
+                        const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
+                        const curRemark = (cur2 && cur2.remark) ? cur2.remark : (archRec ? archRec.remark || '' : '');
                         const nv = (curSignStatus === '已簽名' || curSignStatus === '已簽') ? '未簽名' : '已簽名';
                         const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                         const remarkText = nv === '已簽名' ? (curRemark ? `${curRemark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`) : curRemark;
@@ -1730,21 +1849,29 @@
                             studentId: sid, studentName: stu?stu.name:'',
                             subjectId: dSubj?dSubj.id:'', subjectName: dSubj?dSubj.name:'',
                             assignmentId: aid, assignmentName: aName,
+                            status: curStatus,
                             signStatus: nv,
                             remark: remarkText
                         };
-                        await adminSetStatus(payload);
                         let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
                         if(r) { r.signStatus = nv; r.remark = remarkText; } else records.push(payload);
-                        if (archiveDoc && archiveDoc._id) {
-                            const archIdx = (archiveDoc.records || []).findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        if (archiveDoc) {
+                            if (!archiveDoc.records) archiveDoc.records = [];
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
                             if (archIdx !== -1) {
+                                archiveDoc.records[archIdx].status = curStatus;
                                 archiveDoc.records[archIdx].signStatus = nv;
                                 archiveDoc.records[archIdx].remark = remarkText;
-                                setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            } else {
+                                archiveDoc.records.push({ ...payload });
                             }
                         }
                         renderPastAssignmentGrader();
+                        await adminSetStatus(payload);
+                        if (archiveDoc && archiveDoc._id) {
+                            archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
+                            await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                        }
                     });
                     box.querySelectorAll('[data-past-makeup-sign]').forEach(btn => btn.onclick = async () => {
                         const row = btn.closest('.daily-row');
@@ -1754,8 +1881,8 @@
                         const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                         const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
                         const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && r.assignmentId === aid);
-                        const curStatus = cur2 ? cur2.status : (archRec ? archRec.status : '未繳');
-                        const curRemark = cur2 ? cur2.remark : (archRec ? archRec.remark : '');
+                        const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
+                        const curRemark = (cur2 && cur2.remark) ? cur2.remark : (archRec ? archRec.remark || '' : '');
                         const remarkText = curRemark ? `${curRemark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`;
                         const payload = {
                             groupId: grp?grp.id:'', groupName: grp?grp.name:'',
@@ -1766,18 +1893,25 @@
                             signStatus: '已簽名',
                             remark: remarkText
                         };
-                        await adminSetStatus(payload);
                         let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
                         if(r) { r.signStatus = '已簽名'; r.remark = remarkText; } else records.push(payload);
-                        if (archiveDoc && archiveDoc._id) {
-                            const archIdx = (archiveDoc.records || []).findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        if (archiveDoc) {
+                            if (!archiveDoc.records) archiveDoc.records = [];
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
                             if (archIdx !== -1) {
+                                archiveDoc.records[archIdx].status = curStatus;
                                 archiveDoc.records[archIdx].signStatus = '已簽名';
                                 archiveDoc.records[archIdx].remark = remarkText;
-                                setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            } else {
+                                archiveDoc.records.push({ ...payload });
                             }
                         }
                         renderPastAssignmentGrader();
+                        await adminSetStatus(payload);
+                        if (archiveDoc && archiveDoc._id) {
+                            archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
+                            await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                        }
                     });
                     box.querySelectorAll('[data-past-grade]').forEach(btn => btn.onclick = async () => {
                         const row = btn.closest('.daily-row');
@@ -1787,19 +1921,33 @@
                         const g = gradeOfPast(sid);
                         const nextVal = (g && g.correctness === val) ? '' : val;
                         const nextCorrected = nextVal === '有錯' ? (g?g.corrected:false) : false;
-                        await adminSetGrading({
+                        const payload = {
                             studentId: sid, studentName: stu?stu.name:'',
                             assignmentId: aid, assignmentName: aName,
                             correctness: nextVal,
                             corrected: nextCorrected
-                        });
-                        if (archiveDoc && archiveDoc._id) {
-                            const archIdx = (archiveDoc.records || []).findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        };
+                        let gItem = gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
+                        if(gItem) Object.assign(gItem, payload); else gradingRecs.push(payload);
+                        if (archiveDoc) {
+                            if (!archiveDoc.records) archiveDoc.records = [];
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
                             if (archIdx !== -1) {
                                 archiveDoc.records[archIdx].correctness = nextVal;
                                 archiveDoc.records[archIdx].corrected = nextCorrected;
-                                setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            } else {
+                                archiveDoc.records.push({
+                                    studentId: sid, studentName: stu?stu.name:'',
+                                    assignmentId: aid, assignmentName: aName,
+                                    correctness: nextVal, corrected: nextCorrected
+                                });
                             }
+                        }
+                        renderPastAssignmentGrader();
+                        await adminSetGrading(payload);
+                        if (archiveDoc && archiveDoc._id) {
+                            archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
+                            await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
                         }
                     });
                     box.querySelectorAll('[data-past-corrected]').forEach(btn => btn.onclick = async () => {
@@ -1808,19 +1956,33 @@
                         const stu = st.students.find(x=>x.id===sid);
                         const g = gradeOfPast(sid);
                         const nextCorrected = !(g && g.corrected);
-                        await adminSetGrading({
+                        const payload = {
                             studentId: sid, studentName: stu?stu.name:'',
                             assignmentId: aid, assignmentName: aName,
                             correctness: '有錯',
                             corrected: nextCorrected
-                        });
-                        if (archiveDoc && archiveDoc._id) {
-                            const archIdx = (archiveDoc.records || []).findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        };
+                        let gItem = gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
+                        if(gItem) Object.assign(gItem, payload); else gradingRecs.push(payload);
+                        if (archiveDoc) {
+                            if (!archiveDoc.records) archiveDoc.records = [];
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
                             if (archIdx !== -1) {
                                 archiveDoc.records[archIdx].correctness = '有錯';
                                 archiveDoc.records[archIdx].corrected = nextCorrected;
-                                setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            } else {
+                                archiveDoc.records.push({
+                                    studentId: sid, studentName: stu?stu.name:'',
+                                    assignmentId: aid, assignmentName: aName,
+                                    correctness: '有錯', corrected: nextCorrected
+                                });
                             }
+                        }
+                        renderPastAssignmentGrader();
+                        await adminSetGrading(payload);
+                        if (archiveDoc && archiveDoc._id) {
+                            archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
+                            await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
                         }
                     });
                 }
@@ -2146,24 +2308,32 @@
                 const a = st.assignments.find(x=>x.id===aid);
                 const g = gradeOf(sid, aid);
                 const nextVal = (g && g.correctness === val) ? '' : val;
-                await adminSetGrading({
+                const payload = {
                     studentId: sid, studentName: stu?stu.name:'',
                     assignmentId: aid, assignmentName: a?a.name:'',
                     correctness: nextVal,
                     corrected: nextVal === '有錯' ? (g?g.corrected:false) : false
-                });
+                };
+                let existing = gradingRecs.find(x => x.studentId === sid && x.assignmentId === aid);
+                if (existing) Object.assign(existing, payload); else gradingRecs.push(payload);
+                renderGradingTab(gradingRecs, recs, st);
+                await adminSetGrading(payload);
             });
             document.querySelectorAll('[data-corrected-student]').forEach(btn => btn.onclick = async () => {
                 const sid = btn.getAttribute('data-corrected-student'), aid = btn.getAttribute('data-corrected-assignment');
                 const stu = st.students.find(x=>x.id===sid);
                 const a = st.assignments.find(x=>x.id===aid);
                 const g = gradeOf(sid, aid);
-                await adminSetGrading({
+                const payload = {
                     studentId: sid, studentName: stu?stu.name:'',
                     assignmentId: aid, assignmentName: a?a.name:'',
                     correctness: '有錯',
                     corrected: !(g && g.corrected)
-                });
+                };
+                let existing = gradingRecs.find(x => x.studentId === sid && x.assignmentId === aid);
+                if (existing) Object.assign(existing, payload); else gradingRecs.push(payload);
+                renderGradingTab(gradingRecs, recs, st);
+                await adminSetGrading(payload);
             });
 
             const sel = $('pointsStudentSelect');
@@ -2611,7 +2781,7 @@
                     timestamp: Date.now(),
                     dateLabel: dateLabel,
                     assignments: archivableAssignments.map(a=>{ const s=st.subjects.find(x=>x.id===a.subjectId); return { id:a.id, name:a.name, subjectName: s?s.name:'', needsSign: !!a.needsSign, signOnly: !!a.signOnly }; }),
-                    records: snapshotRecords,
+                    records: sanitizeArchiveRecords(snapshotRecords),
                     studentCount: st.students.length,
                     assignmentCount: archivableAssignments.length
                 }).catch(e=>console.warn(e));
@@ -2721,8 +2891,9 @@
                             const r = item.records[idx];
                             const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                             const remarkText = r.remark ? `${r.remark} / 已補交（${timeStr}）` : `已補交（${timeStr}）`;
-                            const updatedRecords = item.records.map((r2,i2) => i2===idx ? { ...r2, status: '已繳', remark: remarkText } : r2);
+                            const updatedRecords = sanitizeArchiveRecords(item.records.map((r2,i2) => i2===idx ? { ...r2, status: '已繳', remark: remarkText } : r2));
                             item.records = updatedRecords;
+                            renderArchiveDetail(item);
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
                             const stu = st.students.find(x=>x.id===r.studentId);
                             const grp = st.groups.find(x=>x.id===stu?.groupId);
@@ -2737,18 +2908,18 @@
                                 remark: remarkText,
                                 ...((a && (a.needsSign || a.signOnly)) ? { signStatus: r.signStatus || '未簽名' } : {})
                             };
-                            await adminSetStatus(payload);
                             let rLive = records.find(rx=>rx.studentId===r.studentId && rx.assignmentId===r.assignmentId);
                             if(rLive) Object.assign(rLive, payload); else records.push(payload);
-                            renderArchiveDetail(item);
+                            await adminSetStatus(payload);
                         });
                         box.querySelectorAll('[data-makeup-sign]').forEach(btn => btn.onclick = async () => {
                             const idx = Number(btn.getAttribute('data-makeup-sign'));
                             const r = item.records[idx];
                             const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                             const remarkText = r.remark ? `${r.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`;
-                            const updatedRecords = item.records.map((r2,i2) => i2===idx ? { ...r2, signStatus: '已簽名', remark: remarkText } : r2);
+                            const updatedRecords = sanitizeArchiveRecords(item.records.map((r2,i2) => i2===idx ? { ...r2, signStatus: '已簽名', remark: remarkText } : r2));
                             item.records = updatedRecords;
+                            renderArchiveDetail(item);
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
                             const stu = st.students.find(x=>x.id===r.studentId);
                             const grp = st.groups.find(x=>x.id===stu?.groupId);
@@ -2763,10 +2934,9 @@
                                 signStatus: '已簽名',
                                 remark: remarkText
                             };
-                            await adminSetStatus(payload);
                             let rLive = records.find(rx=>rx.studentId===r.studentId && rx.assignmentId===r.assignmentId);
                             if(rLive) Object.assign(rLive, payload); else records.push(payload);
-                            renderArchiveDetail(item);
+                            await adminSetStatus(payload);
                         });
                         box.querySelectorAll('[data-arch-status]').forEach(btn => btn.onclick = async () => {
                             const idx = Number(btn.getAttribute('data-arch-status'));
@@ -2774,8 +2944,9 @@
                             const nv = cur.status === '已繳' ? '未繳' : '已繳';
                             const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                             const remarkText = nv === '已繳' ? `狀態改已繳（${timeStr}）` : cur.remark;
-                            const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, status: nv, signStatus: nv==='已繳' ? (r.signStatus||'未簽名') : '未簽名', remark: remarkText } : r);
+                            const updatedRecords = sanitizeArchiveRecords(item.records.map((r,i2) => i2===idx ? { ...r, status: nv, signStatus: nv==='已繳' ? (r.signStatus||'未簽名') : '未簽名', remark: remarkText } : r));
                             item.records = updatedRecords;
+                            renderArchiveDetail(item);
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
                             
                             const stu = st.students.find(x=>x.id===cur.studentId);
@@ -2791,11 +2962,9 @@
                                 signStatus: nv==='已繳' ? (cur.signStatus||'未簽名') : '未簽名',
                                 remark: remarkText
                             };
-                            await adminSetStatus(payload);
                             let rLive = records.find(rx=>rx.studentId===cur.studentId && rx.assignmentId===cur.assignmentId);
                             if(rLive) Object.assign(rLive, payload); else records.push(payload);
-                            
-                            renderArchiveDetail(item);
+                            await adminSetStatus(payload);
                         });
                         box.querySelectorAll('[data-arch-sign]').forEach(btn => btn.onclick = async () => {
                             const idx = Number(btn.getAttribute('data-arch-sign'));
@@ -2803,8 +2972,9 @@
                             const nv = (cur.signStatus === '已簽名') ? '未簽名' : '已簽名';
                             const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                             const remarkText = nv === '已簽名' ? (cur.remark ? `${cur.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`) : cur.remark;
-                            const updatedRecords = item.records.map((r,i2) => i2===idx ? { ...r, signStatus: nv, remark: remarkText } : r);
+                            const updatedRecords = sanitizeArchiveRecords(item.records.map((r,i2) => i2===idx ? { ...r, signStatus: nv, remark: remarkText } : r));
                             item.records = updatedRecords;
+                            renderArchiveDetail(item);
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
                             
                             const stu = st.students.find(x=>x.id===cur.studentId);
@@ -2819,11 +2989,9 @@
                                 signStatus: nv,
                                 remark: remarkText
                             };
-                            await adminSetStatus(payload);
                             let rLive = records.find(rx=>rx.studentId===cur.studentId && rx.assignmentId===cur.assignmentId);
                             if(rLive) Object.assign(rLive, payload); else records.push({ ...payload, status: cur.status || '未繳' });
-                            
-                            renderArchiveDetail(item);
+                            await adminSetStatus(payload);
                         });
                     }
 
@@ -3010,7 +3178,7 @@
                     timestamp: Date.now(),
                     dateLabel: dateLabel || todayStr(),
                     assignments: [{ id: dailyAsg.id, name: dailyAsg.name, subjectName: dSubj?dSubj.name:'', needsSign: true }],
-                    records: snapshotRecords,
+                    records: sanitizeArchiveRecords(snapshotRecords),
                     studentCount: st.students.length,
                     assignmentCount: 1
                 }).catch(e=>console.warn(e));

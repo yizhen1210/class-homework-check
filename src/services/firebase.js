@@ -170,7 +170,21 @@ export function submitGroupRecords(items) {
 
 export function adminSetStatus(item) {
     const ref = doc(coll, recordDocId(item.studentId, item.assignmentId));
-    return setDoc(ref, { ...item, [ORDER_FIELD]: Date.now() }, { merge: true }).catch(e => {
+    const safeItem = {
+        groupId: item.groupId || '',
+        groupName: item.groupName || '',
+        studentId: item.studentId,
+        studentName: item.studentName || '',
+        subjectId: item.subjectId || '',
+        subjectName: item.subjectName || '',
+        assignmentId: item.assignmentId,
+        assignmentName: item.assignmentName || '',
+        status: item.status || '未繳',
+        signStatus: item.signStatus || '未簽名',
+        remark: item.remark || '',
+        [ORDER_FIELD]: Date.now()
+    };
+    return setDoc(ref, safeItem, { merge: true }).catch(e => {
         logger.error('ADMIN_SET_STATUS_FAILED', e);
         showAlert('操作失敗，請檢查網路後重試');
     });
@@ -178,7 +192,16 @@ export function adminSetStatus(item) {
 
 export function adminSetGrading(item) {
     const ref = doc(gradingColl, recordDocId(item.studentId, item.assignmentId));
-    return setDoc(ref, { ...item, updatedAt: Date.now() }, { merge: true }).catch(e => {
+    const safeItem = {
+        studentId: item.studentId,
+        studentName: item.studentName || '',
+        assignmentId: item.assignmentId,
+        assignmentName: item.assignmentName || '',
+        correctness: item.correctness || '',
+        corrected: !!item.corrected,
+        updatedAt: Date.now()
+    };
+    return setDoc(ref, safeItem, { merge: true }).catch(e => {
         logger.error('ADMIN_SET_GRADING_FAILED', e);
         showAlert('操作失敗，請檢查網路後重試');
     });

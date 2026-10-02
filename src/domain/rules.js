@@ -383,3 +383,39 @@ export function isGradingMissingExempt(assignmentName) {
     return /(?:聽考|複[AaＡａ]卷|複[BbＢｂ]卷)/.test(n);
 }
 
+/**
+ * 安全解析繳交狀態（優先活紀錄狀態，其次封存紀錄狀態，預設為「未繳」）
+ */
+export function deriveRecordStatus(liveRecord, archiveRecord) {
+    if (liveRecord && liveRecord.status) return liveRecord.status;
+    if (archiveRecord && archiveRecord.status) return archiveRecord.status;
+    return '未繳';
+}
+
+/**
+ * 安全解析簽名狀態（優先活紀錄狀態，其次封存紀錄狀態，預設為「未簽名」）
+ */
+export function deriveRecordSign(liveRecord, archiveRecord) {
+    if (liveRecord && liveRecord.signStatus) return liveRecord.signStatus;
+    if (archiveRecord && archiveRecord.signStatus) return archiveRecord.signStatus;
+    return '未簽名';
+}
+
+/**
+ * 清理並標準化封存紀錄陣列，消除所有 undefined 欄位避免 Firestore setDoc 拒絕寫入
+ */
+export function sanitizeArchiveRecords(records) {
+    return (records || []).map(r => ({
+        studentId: r.studentId || '',
+        studentName: r.studentName || '',
+        assignmentId: r.assignmentId || '',
+        assignmentName: r.assignmentName || '',
+        status: r.status || '未繳',
+        signStatus: r.signStatus || '未簽名',
+        correctness: r.correctness || '',
+        corrected: !!r.corrected,
+        remark: r.remark || '',
+        pulledOut: !!r.pulledOut
+    }));
+}
+

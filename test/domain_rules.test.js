@@ -16,7 +16,10 @@ import {
     sortArchivedAssignments,
     resolveLostAssignments,
     getLatestEligibleAssignmentDate,
-    isGradingMissingExempt
+    isGradingMissingExempt,
+    deriveRecordStatus,
+    deriveRecordSign,
+    sanitizeArchiveRecords
 } from '../src/domain/rules.js';
 
 export function runAllDomainTests(assert) {
@@ -192,6 +195,32 @@ export function runAllDomainTests(assert) {
         assert.strictEqual(isGradingMissingExempt('複b卷'), true, '複b卷小寫應豁免缺交限制');
         assert.strictEqual(isGradingMissingExempt('數學習作'), false, '數學習作不應豁免');
         assert.strictEqual(isGradingMissingExempt('2026/09/14 L3預習單'), false, '預習單不應豁免');
+    }
+
+    // 12. 狀態與簽名解析安全防護及封存資料清理
+    {
+        // 活紀錄有 status 優先
+        assert.strictEqual(deriveRecordStatus({ status: '已繳' }, { status: '未繳' }), '已繳');
+        // 活紀錄 status 為空/undefined，回退至封存紀錄
+        assert.strictEqual(deriveRecordStatus({ signStatus: '已簽名' }, { status: '已繳' }), '已繳', '活紀錄缺少 status 時應回退至封存紀錄 status');
+        // 兩者皆無時預設為「未繳」
+        assert.strictEqual(deriveRecordStatus(null, null), '未繳');
+        assert.strictEqual(deriveRecordStatus({}, {}), '未繳');
+
+        // 簽名狀態同理
+        assert.strictEqual(deriveRecordSign({ signStatus: '已簽名' }, { signStatus: '未簽名' }), '已簽名');
+        assert.strictEqual(deriveRecordSign({ status: '已繳' }, { signStatus: '已簽名' }), '已簽名', '活紀錄缺少 signStatus 時應回退至封存紀錄 signStatus');
+        assert.strictEqual(deriveRecordSign(null, null), '未簽名');
+
+        // 封存紀錄清理測試（確保無 undefined 欄位避免 Firestore setDoc 報錯）
+        const sanitized = sanitizeArchiveRecords([
+            { studentId: 's1', status: undefined, signStatus: undefined, correctness: undefined, corrected: undefined }
+        ]);
+        assert.strictEqual(sanitized[0].status, '未繳');
+        assert.strictEqual(sanitized[0].signStatus, '未簽名');
+        assert.strictEqual(sanitized[0].correctness, '');
+        assert.strictEqual(sanitized[0].corrected, false);
+        assert.strictEqual(Object.values(sanitized[0]).includes(undefined), false, '不得包含 undefined 欄位');
     }
 }
 
