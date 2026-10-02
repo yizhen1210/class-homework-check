@@ -145,31 +145,6 @@ export async function autoLoadArchives() {
         appState.archiveDocsMap = appState.archiveDocsMap || {};
         const currentIds = new Set(settings && settings.assignments ? settings.assignments.map(a => a.id) : []);
 
-        if (isAdmin && settings && Array.isArray(settings.students)) {
-            for (const d of snap.docs) {
-                const data = d.data();
-                let archiveModified = false;
-                if (Array.isArray(data.records)) {
-                    data.records.forEach(r => {
-                        const stu = settings.students.find(s => s.id === r.studentId || s.name === r.studentName);
-                        if (stu && stu.pullout) {
-                            const asg = (data.assignments || []).find(a => a.id === r.assignmentId);
-                            const asgSubj = asg ? (asg.subjectName || ((settings.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
-                            const shouldPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
-                            if (shouldPull && !r.pulledOut) {
-                                r.pulledOut = true;
-                                archiveModified = true;
-                            }
-                        }
-                    });
-                }
-                if (archiveModified) {
-                    data.records = sanitizeArchiveRecords(data.records);
-                    await setDoc(doc(db, 'archives', d.id), { records: data.records }, { merge: true }).catch(e => logger.warn('REPAIR_ARCHIVE_PULLOUT_FAILED', e));
-                }
-            }
-        }
-
         snap.docs.forEach(d => {
             const data = d.data();
             data._id = d.id;
@@ -197,6 +172,31 @@ export async function autoLoadArchives() {
                 }
             });
         });
+
+        if (isAdmin && settings && Array.isArray(settings.students)) {
+            for (const d of snap.docs) {
+                const data = appState.archiveDocsMap[d.id] || d.data();
+                let archiveModified = false;
+                if (Array.isArray(data.records)) {
+                    data.records.forEach(r => {
+                        const stu = settings.students.find(s => s.id === r.studentId || s.name === r.studentName);
+                        if (stu && stu.pullout) {
+                            const asg = (data.assignments || []).find(a => a.id === r.assignmentId);
+                            const asgSubj = asg ? (asg.subjectName || ((settings.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
+                            const shouldPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
+                            if (shouldPull && !r.pulledOut) {
+                                r.pulledOut = true;
+                                archiveModified = true;
+                            }
+                        }
+                    });
+                }
+                if (archiveModified) {
+                    data.records = sanitizeArchiveRecords(data.records);
+                    await setDoc(doc(db, 'archives', d.id), { records: data.records }, { merge: true }).catch(e => logger.warn('REPAIR_ARCHIVE_PULLOUT_FAILED', e));
+                }
+            }
+        }
         renderGradingTab(gradingRecords, records, settings, appState);
         renderArchivesList();
     } catch (e) {

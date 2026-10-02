@@ -521,10 +521,39 @@
                 window.__archiveDocsMap = window.__archiveDocsMap || {};
                 const currentIds = new Set(settings && settings.assignments ? settings.assignments.map(a=>a.id) : []);
 
-                // 自動遷移更名：將 2026/09/14 國語 L2預習單 名稱更正為 2026/09/14 L3預習單
+                snap.docs.forEach(d => {
+                    const data = d.data();
+                    data._id = d.id;
+                    if (!window.__archiveDocsMap[d.id]) {
+                        window.__archiveDocsMap[d.id] = data;
+                    }
+                    const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
+                    (data.assignments||[]).forEach(a => {
+                        if (!window.__archiveDocsMap[a.id]) {
+                            window.__archiveDocsMap[a.id] = data;
+                        }
+                        if(!currentIds.has(a.id)) {
+                            if (!window.__extraPastAssignments[a.id]) {
+                                window.__extraPastAssignments[a.id] = { name: a.name, dateLabel, timestamp: data.timestamp, subjectName: a.subjectName || '未分類', needsSign: !!a.needsSign, signOnly: !!a.signOnly };
+                            } else {
+                                window.__extraPastAssignments[a.id].name = a.name;
+                                window.__extraPastAssignments[a.id].dateLabel = dateLabel;
+                                window.__extraPastAssignments[a.id].subjectName = a.subjectName || '未分類';
+                            }
+                        }
+                    });
+                    (data.records || []).forEach(r => {
+                        if (r.assignmentId && !window.__archiveDocsMap[r.assignmentId]) {
+                            window.__archiveDocsMap[r.assignmentId] = data;
+                        }
+                    });
+                });
+                renderGradingTab(gradingRecords, records, settings);
+
+                // 自動遷移更名與修復歷史抽離：在背景執行以確保 UI 立即呈現
                 if (isAdmin) {
                     for (const d of snap.docs) {
-                        const data = d.data();
+                        const data = window.__archiveDocsMap[d.id] || d.data();
                         const dDate = data.dateLabel || (data.timestamp ? new Date(data.timestamp).toLocaleDateString('zh-TW') : '');
                         let modified = false;
                         (data.assignments || []).forEach(a => {
@@ -594,35 +623,6 @@
                         }
                     }
                 }
-
-                snap.docs.forEach(d => {
-                    const data = d.data();
-                    data._id = d.id;
-                    if (!window.__archiveDocsMap[d.id]) {
-                        window.__archiveDocsMap[d.id] = data;
-                    }
-                    const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
-                    (data.assignments||[]).forEach(a => {
-                        if (!window.__archiveDocsMap[a.id]) {
-                            window.__archiveDocsMap[a.id] = data;
-                        }
-                        if(!currentIds.has(a.id)) {
-                            if (!window.__extraPastAssignments[a.id]) {
-                                window.__extraPastAssignments[a.id] = { name: a.name, dateLabel, timestamp: data.timestamp, subjectName: a.subjectName || '未分類', needsSign: !!a.needsSign, signOnly: !!a.signOnly };
-                            } else {
-                                window.__extraPastAssignments[a.id].name = a.name;
-                                window.__extraPastAssignments[a.id].dateLabel = dateLabel;
-                                window.__extraPastAssignments[a.id].subjectName = a.subjectName || '未分類';
-                            }
-                        }
-                    });
-                    (data.records || []).forEach(r => {
-                        if (r.assignmentId && !window.__archiveDocsMap[r.assignmentId]) {
-                            window.__archiveDocsMap[r.assignmentId] = data;
-                        }
-                    });
-                });
-                renderGradingTab(gradingRecords, records, settings);
             } catch(e){ console.warn(e); }
         }
 
@@ -1750,7 +1750,6 @@
                         const thirdVal = isPastDaily ? '沒寫任務' : '遺失';
                         const thirdIcon = isPastDaily ? '－' : '✗';
                         const rec = records.find(r=>r.studentId===s.id && r.assignmentId===aid);
-                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === s.id && r.assignmentId === aid);
                         const dStatus = deriveRecordStatus(rec, archRec ? archRec.status : '未繳');
                         const dSign = deriveRecordSign(rec, archRec ? archRec.signStatus : '未簽名');
                         const dSignDisplay = dSign === '未簽名' ? '未簽' : (dSign === '已簽名' ? '已簽' : dSign);

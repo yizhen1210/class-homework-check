@@ -185,7 +185,6 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 const thirdVal = isPastDaily ? '沒寫任務' : '遺失';
                 const thirdIcon = isPastDaily ? '－' : '✗';
                 const rec = recs.find(r => r.studentId === s.id && r.assignmentId === aid);
-                const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === aid);
                 const dStatus = deriveRecordStatus(rec, archRec ? archRec.status : '未繳');
                 const dSign = deriveRecordSign(rec, archRec ? archRec.signStatus : '未簽名');
                 const dSignDisplay = dSign === '未簽名' ? '未簽' : (dSign === '已簽名' ? '已簽' : dSign);
