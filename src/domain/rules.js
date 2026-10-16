@@ -397,20 +397,26 @@ export function isGradingMissingExempt(assignmentName) {
 }
 
 /**
- * 安全解析繳交狀態（優先活紀錄狀態，其次封存紀錄狀態，預設為「未繳」）
+ * 安全解析繳交狀態（活紀錄或封存紀錄任一為已繳則判定為已繳，避免補繳被未繳覆蓋）
  */
 export function deriveRecordStatus(liveRecord, archiveRecord) {
-    if (liveRecord && liveRecord.status) return liveRecord.status;
-    if (archiveRecord && archiveRecord.status) return archiveRecord.status;
+    const lStatus = (typeof liveRecord === 'string') ? liveRecord : (liveRecord ? liveRecord.status : '');
+    const aStatus = (typeof archiveRecord === 'string') ? archiveRecord : (archiveRecord ? archiveRecord.status : '');
+    if (lStatus === '已繳' || aStatus === '已繳') return '已繳';
+    if (lStatus) return lStatus;
+    if (aStatus) return aStatus;
     return '未繳';
 }
 
 /**
- * 安全解析簽名狀態（優先活紀錄狀態，其次封存紀錄狀態，預設為「未簽名」）
+ * 安全解析簽名狀態（活紀錄或封存紀錄任一為已簽則判定為已簽名，避免補簽被未簽覆蓋）
  */
 export function deriveRecordSign(liveRecord, archiveRecord) {
-    if (liveRecord && liveRecord.signStatus) return liveRecord.signStatus;
-    if (archiveRecord && archiveRecord.signStatus) return archiveRecord.signStatus;
+    const lSign = (typeof liveRecord === 'string') ? liveRecord : (liveRecord ? liveRecord.signStatus : '');
+    const aSign = (typeof archiveRecord === 'string') ? archiveRecord : (archiveRecord ? archiveRecord.signStatus : '');
+    if (lSign === '已簽名' || lSign === '已簽' || aSign === '已簽名' || aSign === '已簽') return '已簽名';
+    if (lSign) return lSign;
+    if (aSign) return aSign;
     return '未簽名';
 }
 
@@ -419,8 +425,12 @@ export function deriveRecordSign(liveRecord, archiveRecord) {
  */
 export function sanitizeArchiveRecords(records) {
     return (records || []).map(r => ({
+        groupId: r.groupId || '',
+        groupName: r.groupName || '',
         studentId: r.studentId || '',
         studentName: r.studentName || '',
+        subjectId: r.subjectId || '',
+        subjectName: r.subjectName || '',
         assignmentId: r.assignmentId || '',
         assignmentName: r.assignmentName || '',
         status: r.status || '未繳',
@@ -428,6 +438,7 @@ export function sanitizeArchiveRecords(records) {
         correctness: r.correctness || '',
         corrected: !!r.corrected,
         remark: r.remark || '',
+        pointsGiven: !!r.pointsGiven,
         pulledOut: !!r.pulledOut
     }));
 }

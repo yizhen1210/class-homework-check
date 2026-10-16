@@ -257,9 +257,14 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     renderPastAssignmentGrader();
 
                     await adminSetStatus(payload);
-                    if (archiveDoc && archiveDoc._id) {
+                    const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                    if (archiveDoc && docId) {
                         archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                        await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                        if (state.archiveDocsMap) {
+                            if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
+                            if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
+                        }
+                        await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     }
                 };
             });
@@ -304,9 +309,14 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     renderPastAssignmentGrader();
 
                     await adminSetStatus(payload);
-                    if (archiveDoc && archiveDoc._id) {
+                    const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                    if (archiveDoc && docId) {
                         archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                        await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                        if (state.archiveDocsMap) {
+                            if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
+                            if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
+                        }
+                        await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     }
                 };
             });
@@ -355,9 +365,14 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     renderPastAssignmentGrader();
 
                     await adminSetStatus(payload);
-                    if (archiveDoc && archiveDoc._id) {
+                    const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                    if (archiveDoc && docId) {
                         archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                        await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                        if (state.archiveDocsMap) {
+                            if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
+                            if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
+                        }
+                        await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     }
                 };
             });
@@ -404,9 +419,14 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     renderPastAssignmentGrader();
 
                     await adminSetStatus(payload);
-                    if (archiveDoc && archiveDoc._id) {
+                    const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                    if (archiveDoc && docId) {
                         archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                        await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                        if (state.archiveDocsMap) {
+                            if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
+                            if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
+                        }
+                        await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     }
                 };
             });
@@ -451,9 +471,14 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     renderPastAssignmentGrader();
 
                     await adminSetGrading(payload);
-                    if (archiveDoc && archiveDoc._id) {
+                    const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                    if (archiveDoc && docId) {
                         archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                        await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                        if (state.archiveDocsMap) {
+                            if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
+                            if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
+                        }
+                        await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     }
                 };
             });
@@ -496,9 +521,14 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     renderPastAssignmentGrader();
 
                     await adminSetGrading(payload);
-                    if (archiveDoc && archiveDoc._id) {
+                    const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                    if (archiveDoc && docId) {
                         archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                        await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                        if (state.archiveDocsMap) {
+                            if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
+                            if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
+                        }
+                        await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     }
                 };
             });
@@ -636,7 +666,7 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     if (g && (g.correctness === '遺失' || g.correctness === '沒寫任務')) return false;
                     const rec = recs.find(r => r.studentId === s.id && r.assignmentId === id);
                     const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === id);
-                    const status = rec ? rec.status : (archRec ? archRec.status : '未繳');
+                    const status = deriveRecordStatus(rec, archRec ? archRec.status : '未繳');
                     return status !== '已繳';
                 });
                 if (!missing.length) return '';
@@ -693,8 +723,8 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     const rec = recs.find(r => r.studentId === s.id && r.assignmentId === id);
                     const archDoc = state.archiveDocsMap ? state.archiveDocsMap[id] : null;
                     const archRec = archDoc && (archDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === id);
-                    const status = rec ? rec.status : (archRec ? archRec.status : '未繳');
-                    const signStatus = rec ? rec.signStatus : (archRec ? archRec.signStatus : '未簽名');
+                    const status = deriveRecordStatus(rec, archRec ? archRec.status : '未繳');
+                    const signStatus = deriveRecordSign(rec, archRec ? archRec.signStatus : '未簽名');
                     if (info.name === '聯絡簿每日任務') {
                         if (status !== '已繳') return false;
                         return signStatus !== '已簽名';

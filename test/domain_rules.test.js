@@ -216,6 +216,9 @@ export function runAllDomainTests(assert) {
         assert.strictEqual(deriveRecordStatus({ status: '已繳' }, { status: '未繳' }), '已繳');
         // 活紀錄 status 為空/undefined，回退至封存紀錄
         assert.strictEqual(deriveRecordStatus({ signStatus: '已簽名' }, { status: '已繳' }), '已繳', '活紀錄缺少 status 時應回退至封存紀錄 status');
+        // 封存紀錄已補交，活紀錄即使殘留「未繳」亦判定為「已繳」
+        assert.strictEqual(deriveRecordStatus({ status: '未繳' }, { status: '已繳' }), '已繳', '封存紀錄已補交時不應被未繳覆蓋');
+        assert.strictEqual(deriveRecordStatus({ status: '未繳' }, '已繳'), '已繳', '支援字串 fallback 解析已繳');
         // 兩者皆無時預設為「未繳」
         assert.strictEqual(deriveRecordStatus(null, null), '未繳');
         assert.strictEqual(deriveRecordStatus({}, {}), '未繳');
@@ -223,16 +226,19 @@ export function runAllDomainTests(assert) {
         // 簽名狀態同理
         assert.strictEqual(deriveRecordSign({ signStatus: '已簽名' }, { signStatus: '未簽名' }), '已簽名');
         assert.strictEqual(deriveRecordSign({ status: '已繳' }, { signStatus: '已簽名' }), '已簽名', '活紀錄缺少 signStatus 時應回退至封存紀錄 signStatus');
+        assert.strictEqual(deriveRecordSign({ signStatus: '未簽名' }, { signStatus: '已簽名' }), '已簽名', '封存紀錄已補簽時不應被未簽覆蓋');
+        assert.strictEqual(deriveRecordSign({ signStatus: '未簽名' }, '已簽名'), '已簽名', '支援字串 fallback 解析已簽');
         assert.strictEqual(deriveRecordSign(null, null), '未簽名');
 
-        // 封存紀錄清理測試（確保無 undefined 欄位避免 Firestore setDoc 報錯）
+        // 封存紀錄清理測試（確保無 undefined 欄位且保留 pulledOut 避免 Firestore setDoc 報錯或丟失抽離狀態）
         const sanitized = sanitizeArchiveRecords([
-            { studentId: 's1', status: undefined, signStatus: undefined, correctness: undefined, corrected: undefined }
+            { studentId: 's1', status: undefined, signStatus: undefined, correctness: undefined, corrected: undefined, pulledOut: true }
         ]);
         assert.strictEqual(sanitized[0].status, '未繳');
         assert.strictEqual(sanitized[0].signStatus, '未簽名');
         assert.strictEqual(sanitized[0].correctness, '');
         assert.strictEqual(sanitized[0].corrected, false);
+        assert.strictEqual(sanitized[0].pulledOut, true, '應正確保留 pulledOut 狀態');
         assert.strictEqual(Object.values(sanitized[0]).includes(undefined), false, '不得包含 undefined 欄位');
     }
 }

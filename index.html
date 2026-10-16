@@ -524,14 +524,11 @@
                 snap.docs.forEach(d => {
                     const data = d.data();
                     data._id = d.id;
-                    if (!window.__archiveDocsMap[d.id]) {
-                        window.__archiveDocsMap[d.id] = data;
-                    }
+                    data.id = d.id;
+                    window.__archiveDocsMap[d.id] = data;
                     const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
                     (data.assignments||[]).forEach(a => {
-                        if (!window.__archiveDocsMap[a.id]) {
-                            window.__archiveDocsMap[a.id] = data;
-                        }
+                        window.__archiveDocsMap[a.id] = data;
                         if(!currentIds.has(a.id)) {
                             if (!window.__extraPastAssignments[a.id]) {
                                 window.__extraPastAssignments[a.id] = { name: a.name, dateLabel, timestamp: data.timestamp, subjectName: a.subjectName || '未分類', needsSign: !!a.needsSign, signOnly: !!a.signOnly };
@@ -543,7 +540,7 @@
                         }
                     });
                     (data.records || []).forEach(r => {
-                        if (r.assignmentId && !window.__archiveDocsMap[r.assignmentId]) {
+                        if (r.assignmentId) {
                             window.__archiveDocsMap[r.assignmentId] = data;
                         }
                     });
@@ -813,14 +810,22 @@
         const SIGN_LIST = ['已簽名','未簽名'];
         const signClass = s => s === '已簽名' ? 'submitted' : 'unsigned';
 
-        function deriveRecordStatus(rec, fallback = '未繳') {
-            if (!rec) return fallback;
-            return rec.status || fallback;
+        function deriveRecordStatus(liveRecord, archiveRecord) {
+            const lStatus = (typeof liveRecord === 'string') ? liveRecord : (liveRecord ? liveRecord.status : '');
+            const aStatus = (typeof archiveRecord === 'string') ? archiveRecord : (archiveRecord ? archiveRecord.status : '');
+            if (lStatus === '已繳' || aStatus === '已繳') return '已繳';
+            if (lStatus) return lStatus;
+            if (aStatus) return aStatus;
+            return '未繳';
         }
 
-        function deriveRecordSign(rec, fallback = '未簽名') {
-            if (!rec) return fallback;
-            return rec.signStatus || fallback;
+        function deriveRecordSign(liveRecord, archiveRecord) {
+            const lSign = (typeof liveRecord === 'string') ? liveRecord : (liveRecord ? liveRecord.signStatus : '');
+            const aSign = (typeof archiveRecord === 'string') ? archiveRecord : (archiveRecord ? archiveRecord.signStatus : '');
+            if (lSign === '已簽名' || lSign === '已簽' || aSign === '已簽名' || aSign === '已簽') return '已簽名';
+            if (lSign) return lSign;
+            if (aSign) return aSign;
+            return '未簽名';
         }
 
         function sanitizeArchiveRecords(records) {
@@ -839,7 +844,8 @@
                 remark: r.remark || '',
                 correctness: r.correctness || '',
                 corrected: Boolean(r.corrected),
-                pointsGiven: Boolean(r.pointsGiven)
+                pointsGiven: Boolean(r.pointsGiven),
+                pulledOut: Boolean(r.pulledOut)
             }));
         }
         
@@ -1814,9 +1820,14 @@
                         }
                         renderPastAssignmentGrader();
                         await adminSetStatus(payload);
-                        if (archiveDoc && archiveDoc._id) {
+                        const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                        if (archiveDoc && docId) {
                             archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                            await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            if (window.__archiveDocsMap) {
+                                if (window.__archiveDocsMap[docId]) window.__archiveDocsMap[docId].records = archiveDoc.records;
+                                if (window.__archiveDocsMap[aid]) window.__archiveDocsMap[aid].records = archiveDoc.records;
+                            }
+                            await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
                         }
                     });
                     box.querySelectorAll('[data-past-makeup]').forEach(btn => btn.onclick = async () => {
@@ -1852,9 +1863,14 @@
                         }
                         renderPastAssignmentGrader();
                         await adminSetStatus(payload);
-                        if (archiveDoc && archiveDoc._id) {
+                        const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                        if (archiveDoc && docId) {
                             archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                            await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            if (window.__archiveDocsMap) {
+                                if (window.__archiveDocsMap[docId]) window.__archiveDocsMap[docId].records = archiveDoc.records;
+                                if (window.__archiveDocsMap[aid]) window.__archiveDocsMap[aid].records = archiveDoc.records;
+                            }
+                            await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
                         }
                     });
                     box.querySelectorAll('[data-past-sign-toggle]').forEach(btn => btn.onclick = async () => {
@@ -1894,9 +1910,14 @@
                         }
                         renderPastAssignmentGrader();
                         await adminSetStatus(payload);
-                        if (archiveDoc && archiveDoc._id) {
+                        const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                        if (archiveDoc && docId) {
                             archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                            await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            if (window.__archiveDocsMap) {
+                                if (window.__archiveDocsMap[docId]) window.__archiveDocsMap[docId].records = archiveDoc.records;
+                                if (window.__archiveDocsMap[aid]) window.__archiveDocsMap[aid].records = archiveDoc.records;
+                            }
+                            await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
                         }
                     });
                     box.querySelectorAll('[data-past-makeup-sign]').forEach(btn => btn.onclick = async () => {
@@ -1934,9 +1955,14 @@
                         }
                         renderPastAssignmentGrader();
                         await adminSetStatus(payload);
-                        if (archiveDoc && archiveDoc._id) {
+                        const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                        if (archiveDoc && docId) {
                             archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                            await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            if (window.__archiveDocsMap) {
+                                if (window.__archiveDocsMap[docId]) window.__archiveDocsMap[docId].records = archiveDoc.records;
+                                if (window.__archiveDocsMap[aid]) window.__archiveDocsMap[aid].records = archiveDoc.records;
+                            }
+                            await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
                         }
                     });
                     box.querySelectorAll('[data-past-grade]').forEach(btn => btn.onclick = async () => {
@@ -1971,9 +1997,14 @@
                         }
                         renderPastAssignmentGrader();
                         await adminSetGrading(payload);
-                        if (archiveDoc && archiveDoc._id) {
+                        const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                        if (archiveDoc && docId) {
                             archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                            await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            if (window.__archiveDocsMap) {
+                                if (window.__archiveDocsMap[docId]) window.__archiveDocsMap[docId].records = archiveDoc.records;
+                                if (window.__archiveDocsMap[aid]) window.__archiveDocsMap[aid].records = archiveDoc.records;
+                            }
+                            await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
                         }
                     });
                     box.querySelectorAll('[data-past-corrected]').forEach(btn => btn.onclick = async () => {
@@ -2006,15 +2037,23 @@
                         }
                         renderPastAssignmentGrader();
                         await adminSetGrading(payload);
-                        if (archiveDoc && archiveDoc._id) {
+                        const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                        if (archiveDoc && docId) {
                             archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                            await setDoc(doc(db, 'archives', archiveDoc._id), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                            if (window.__archiveDocsMap) {
+                                if (window.__archiveDocsMap[docId]) window.__archiveDocsMap[docId].records = archiveDoc.records;
+                                if (window.__archiveDocsMap[aid]) window.__archiveDocsMap[aid].records = archiveDoc.records;
+                            }
+                            await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
                         }
                     });
                 }
                 if(selPast){ selPast.onchange = renderPastAssignmentGrader; renderPastAssignmentGrader(); }
 
-                $('loadPastArchivesBtn').onclick = autoLoadArchives;
+                $('loadPastArchivesBtn').onclick = async () => {
+                    await autoLoadArchives();
+                    renderPastAssignmentGrader();
+                };
                 const renamePastBtn = $('renameSelectedPastBtn');
                 if (renamePastBtn) {
                     renamePastBtn.onclick = async () => {
@@ -2143,7 +2182,7 @@
                             if(g && (g.correctness === '遺失' || g.correctness === '沒寫任務')) return false;
                             const rec = records.find(r => r.studentId === s.id && r.assignmentId === id);
                             const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === s.id && r.assignmentId === id);
-                            const status = rec ? rec.status : (archRec ? archRec.status : '未繳');
+                            const status = deriveRecordStatus(rec, archRec ? archRec.status : '未繳');
                             return status !== '已繳';
                         });
                         if(!missing.length) return '';
@@ -2198,8 +2237,8 @@
                             const rec = records.find(r => r.studentId === s.id && r.assignmentId === id);
                             const archDoc = window.__archiveDocsMap ? window.__archiveDocsMap[id] : null;
                             const archRec = archDoc && (archDoc.records||[]).find(r => r.studentId === s.id && r.assignmentId === id);
-                            const status = rec ? rec.status : (archRec ? archRec.status : '未繳');
-                            const signStatus = rec ? rec.signStatus : (archRec ? archRec.signStatus : '未簽名');
+                            const status = deriveRecordStatus(rec, archRec ? archRec.status : '未繳');
+                            const signStatus = deriveRecordSign(rec, archRec ? archRec.signStatus : '未簽名');
                             if(info.name === '聯絡簿每日任務'){
                                 if(status !== '已繳') return false;
                                 return signStatus !== '已簽名';
@@ -2838,7 +2877,10 @@
                 saveSettings({ assignments: st.assignments });
                 ensureDailyAssignments(st);
             };
-            $('loadArchivesBtn').onclick = autoLoadArchives;
+            $('loadArchivesBtn').onclick = async () => {
+                await autoLoadArchives();
+                await renderArchivesList();
+            };
 
             async function renderArchivesList(){
                 const archivesListEl = $('archivesList');
@@ -2878,15 +2920,18 @@
                                 const asg = (item.assignments || []).find(x => x.id === r.assignmentId);
                                 const asgSubj = asg ? (asg.subjectName || ((st.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
                                 const isPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
+                                const liveRec = records.find(rx => rx.studentId === r.studentId && rx.assignmentId === r.assignmentId);
+                                const effStatus = deriveRecordStatus(liveRec, r);
+                                const effSign = deriveRecordSign(liveRec, r);
                                 const needsSign = asg && (asg.needsSign || asg.signOnly);
                                 const isSignOnly = asg && asg.signOnly;
-                                const isSigned = r.signStatus === '已簽名';
+                                const isSigned = effSign === '已簽名';
                                 const isExamOrTest = asg && (asg.name.includes('卷') || asg.name.includes('考') || asg.name.includes('聽') || asg.name.includes('測驗'));
-                                const showSign = needsSign && (isSignOnly || isExamOrTest || r.status === '已繳');
-                                const signDisplay = (r.signStatus||'未簽名') === '未簽名' ? '未簽' : ((r.signStatus||'已簽名') === '已簽名' ? '已簽' : r.signStatus);
+                                const showSign = needsSign && (isSignOnly || isExamOrTest || effStatus === '已繳');
+                                const signDisplay = (effSign||'未簽名') === '未簽名' ? '未簽' : ((effSign||'已簽名') === '已簽名' ? '已簽' : effSign);
                                 
-                                const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(r.status)}" data-arch-status="${i}">${r.status}</button>`;
-                                const makeupBtn = r.status !== '已繳' ? `<button class="btn small outline" data-makeup="${i}">補交</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button>`;
+                                const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(effStatus)}" data-arch-status="${i}">${effStatus}</button>`;
+                                const makeupBtn = effStatus !== '已繳' ? `<button class="btn small outline" data-makeup="${i}">補交</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button>`;
                                 
                                 let statusCol = '';
                                 if (isPull) {
@@ -2897,7 +2942,7 @@
                                 
                                 let signCol = '';
                                 if (needsSign && !isPull) {
-                                    const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(r.signStatus||'未簽名')}" data-arch-sign="${i}" style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${signDisplay}</button>`;
+                                    const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(effSign)}" data-arch-sign="${i}" style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${signDisplay}</button>`;
                                     const makeupSignBtn = (!isSigned && showSign) ? `<button class="btn small outline" data-makeup-sign="${i}">補簽</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補簽</button>`;
                                     signCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;">${signBtn}${makeupSignBtn}</div>`;
                                 } else {
@@ -2922,7 +2967,14 @@
                             const remarkText = r.remark ? `${r.remark} / 已補交（${timeStr}）` : `已補交（${timeStr}）`;
                             const updatedRecords = sanitizeArchiveRecords(item.records.map((r2,i2) => i2===idx ? { ...r2, status: '已繳', remark: remarkText } : r2));
                             item.records = updatedRecords;
+                            if (window.__archiveDocsMap) {
+                                if (window.__archiveDocsMap[item.id]) window.__archiveDocsMap[item.id].records = updatedRecords;
+                                (item.assignments || []).forEach(a => {
+                                    if (window.__archiveDocsMap[a.id]) window.__archiveDocsMap[a.id].records = updatedRecords;
+                                });
+                            }
                             renderArchiveDetail(item);
+                            renderGradingTab(gradingRecords, records, settings);
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
                             const stu = st.students.find(x=>x.id===r.studentId);
                             const grp = st.groups.find(x=>x.id===stu?.groupId);
@@ -2948,7 +3000,14 @@
                             const remarkText = r.remark ? `${r.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`;
                             const updatedRecords = sanitizeArchiveRecords(item.records.map((r2,i2) => i2===idx ? { ...r2, signStatus: '已簽名', remark: remarkText } : r2));
                             item.records = updatedRecords;
+                            if (window.__archiveDocsMap) {
+                                if (window.__archiveDocsMap[item.id]) window.__archiveDocsMap[item.id].records = updatedRecords;
+                                (item.assignments || []).forEach(a => {
+                                    if (window.__archiveDocsMap[a.id]) window.__archiveDocsMap[a.id].records = updatedRecords;
+                                });
+                            }
                             renderArchiveDetail(item);
+                            renderGradingTab(gradingRecords, records, settings);
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
                             const stu = st.students.find(x=>x.id===r.studentId);
                             const grp = st.groups.find(x=>x.id===stu?.groupId);
@@ -2975,7 +3034,14 @@
                             const remarkText = nv === '已繳' ? `狀態改已繳（${timeStr}）` : cur.remark;
                             const updatedRecords = sanitizeArchiveRecords(item.records.map((r,i2) => i2===idx ? { ...r, status: nv, signStatus: nv==='已繳' ? (r.signStatus||'未簽名') : '未簽名', remark: remarkText } : r));
                             item.records = updatedRecords;
+                            if (window.__archiveDocsMap) {
+                                if (window.__archiveDocsMap[item.id]) window.__archiveDocsMap[item.id].records = updatedRecords;
+                                (item.assignments || []).forEach(a => {
+                                    if (window.__archiveDocsMap[a.id]) window.__archiveDocsMap[a.id].records = updatedRecords;
+                                });
+                            }
                             renderArchiveDetail(item);
+                            renderGradingTab(gradingRecords, records, settings);
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
                             
                             const stu = st.students.find(x=>x.id===cur.studentId);
@@ -3003,7 +3069,14 @@
                             const remarkText = nv === '已簽名' ? (cur.remark ? `${cur.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`) : cur.remark;
                             const updatedRecords = sanitizeArchiveRecords(item.records.map((r,i2) => i2===idx ? { ...r, signStatus: nv, remark: remarkText } : r));
                             item.records = updatedRecords;
+                            if (window.__archiveDocsMap) {
+                                if (window.__archiveDocsMap[item.id]) window.__archiveDocsMap[item.id].records = updatedRecords;
+                                (item.assignments || []).forEach(a => {
+                                    if (window.__archiveDocsMap[a.id]) window.__archiveDocsMap[a.id].records = updatedRecords;
+                                });
+                            }
                             renderArchiveDetail(item);
+                            renderGradingTab(gradingRecords, records, settings);
                             await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e=>console.warn(e));
                             
                             const stu = st.students.find(x=>x.id===cur.studentId);

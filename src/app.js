@@ -148,26 +148,29 @@ export async function autoLoadArchives() {
         snap.docs.forEach(d => {
             const data = d.data();
             data._id = d.id;
-            if (!appState.archiveDocsMap[d.id]) {
-                appState.archiveDocsMap[d.id] = data;
-            }
+            data.id = d.id;
+            appState.archiveDocsMap[d.id] = data;
             const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
             (data.assignments || []).forEach(a => {
-                if (!appState.archiveDocsMap[a.id]) {
-                    appState.archiveDocsMap[a.id] = data;
-                }
-                if (!currentIds.has(a.id) && !appState.extraPastAssignments[a.id]) {
-                    appState.extraPastAssignments[a.id] = {
-                        name: a.name,
-                        dateLabel,
-                        subjectName: a.subjectName || '未分類',
-                        needsSign: !!a.needsSign,
-                        signOnly: !!a.signOnly
-                    };
+                appState.archiveDocsMap[a.id] = data;
+                if (!currentIds.has(a.id)) {
+                    if (!appState.extraPastAssignments[a.id]) {
+                        appState.extraPastAssignments[a.id] = {
+                            name: a.name,
+                            dateLabel,
+                            subjectName: a.subjectName || '未分類',
+                            needsSign: !!a.needsSign,
+                            signOnly: !!a.signOnly
+                        };
+                    } else {
+                        appState.extraPastAssignments[a.id].name = a.name;
+                        appState.extraPastAssignments[a.id].dateLabel = dateLabel;
+                        appState.extraPastAssignments[a.id].subjectName = a.subjectName || '未分類';
+                    }
                 }
             });
             (data.records || []).forEach(r => {
-                if (r.assignmentId && !appState.archiveDocsMap[r.assignmentId]) {
+                if (r.assignmentId) {
                     appState.archiveDocsMap[r.assignmentId] = data;
                 }
             });
@@ -243,15 +246,18 @@ async function renderArchivesList() {
                     const asg = (item.assignments || []).find(x => x.id === r.assignmentId);
                     const asgSubj = asg ? (asg.subjectName || ((settings.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
                     const isPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
+                    const liveRec = (records || []).find(x => x.studentId === r.studentId && x.assignmentId === r.assignmentId);
+                    const effStatus = deriveRecordStatus(liveRec, r);
+                    const effSign = deriveRecordSign(liveRec, r);
                     const needsSign = asg && (asg.needsSign || asg.signOnly);
                     const isSignOnly = asg && asg.signOnly;
-                    const isSigned = r.signStatus === '已簽名';
+                    const isSigned = effSign === '已簽名';
                     const isExamOrTest = asg && (asg.name.includes('卷') || asg.name.includes('考') || asg.name.includes('聽') || asg.name.includes('測驗'));
-                    const showSign = needsSign && (isSignOnly || isExamOrTest || r.status === '已繳');
-                    const signDisplay = (r.signStatus || '未簽名') === '未簽名' ? '未簽' : ((r.signStatus || '已簽名') === '已簽名' ? '已簽' : r.signStatus);
+                    const showSign = needsSign && (isSignOnly || isExamOrTest || effStatus === '已繳');
+                    const signDisplay = effSign === '未簽名' ? '未簽' : (effSign === '已簽名' ? '已簽' : effSign);
 
-                    const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(r.status)}" data-arch-status="${i}">${escapeHtml(r.status)}</button>`;
-                    const makeupBtn = r.status !== '已繳' ? `<button class="btn small outline" data-makeup="${i}">補交</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button>`;
+                    const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(effStatus)}" data-arch-status="${i}">${escapeHtml(effStatus)}</button>`;
+                    const makeupBtn = effStatus !== '已繳' ? `<button class="btn small outline" data-makeup="${i}">補交</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button>`;
 
                     let statusCol = '';
                     if (isPull) {
@@ -262,7 +268,7 @@ async function renderArchivesList() {
 
                     let signCol = '';
                     if (needsSign && !isPull) {
-                        const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(r.signStatus || '未簽名')}" data-arch-sign="${i}" style="visibility:${showSign ? 'visible' : 'hidden'};pointer-events:${showSign ? 'auto' : 'none'}">${escapeHtml(signDisplay)}</button>`;
+                        const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(effSign)}" data-arch-sign="${i}" style="visibility:${showSign ? 'visible' : 'hidden'};pointer-events:${showSign ? 'auto' : 'none'}">${escapeHtml(signDisplay)}</button>`;
                         const makeupSignBtn = (!isSigned && showSign) ? `<button class="btn small outline" data-makeup-sign="${i}">補簽</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補簽</button>`;
                         signCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;">${signBtn}${makeupSignBtn}</div>`;
                     } else {
@@ -286,8 +292,27 @@ async function renderArchivesList() {
                     const remarkText = r.remark ? `${r.remark} / 已補交（${timeStr}）` : `已補交（${timeStr}）`;
                     const updatedRecords = sanitizeArchiveRecords(item.records.map((r2, i2) => i2 === idx ? { ...r2, status: '已繳', remark: remarkText } : r2));
                     item.records = updatedRecords;
+                    if (appState.archiveDocsMap) {
+                        if (appState.archiveDocsMap[item.id]) appState.archiveDocsMap[item.id].records = updatedRecords;
+                        (item.assignments || []).forEach(a => {
+                            if (appState.archiveDocsMap[a.id]) appState.archiveDocsMap[a.id].records = updatedRecords;
+                        });
+                    }
                     renderArchiveDetail(item);
+                    renderGradingTab(gradingRecords, records, settings, appState);
                     await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    const payload = {
+                        studentId: r.studentId,
+                        studentName: r.studentName,
+                        assignmentId: r.assignmentId,
+                        assignmentName: r.assignmentName,
+                        status: '已繳',
+                        signStatus: r.signStatus || '未簽名',
+                        remark: remarkText
+                    };
+                    let rLive = records.find(rx => rx.studentId === r.studentId && rx.assignmentId === r.assignmentId);
+                    if (rLive) Object.assign(rLive, payload); else records.push(payload);
+                    await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
                 };
             });
 
@@ -299,8 +324,27 @@ async function renderArchivesList() {
                     const remarkText = r.remark ? `${r.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`;
                     const updatedRecords = sanitizeArchiveRecords(item.records.map((r2, i2) => i2 === idx ? { ...r2, signStatus: '已簽名', remark: remarkText } : r2));
                     item.records = updatedRecords;
+                    if (appState.archiveDocsMap) {
+                        if (appState.archiveDocsMap[item.id]) appState.archiveDocsMap[item.id].records = updatedRecords;
+                        (item.assignments || []).forEach(a => {
+                            if (appState.archiveDocsMap[a.id]) appState.archiveDocsMap[a.id].records = updatedRecords;
+                        });
+                    }
                     renderArchiveDetail(item);
+                    renderGradingTab(gradingRecords, records, settings, appState);
                     await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    const payload = {
+                        studentId: r.studentId,
+                        studentName: r.studentName,
+                        assignmentId: r.assignmentId,
+                        assignmentName: r.assignmentName,
+                        status: r.status || '未繳',
+                        signStatus: '已簽名',
+                        remark: remarkText
+                    };
+                    let rLive = records.find(rx => rx.studentId === r.studentId && rx.assignmentId === r.assignmentId);
+                    if (rLive) Object.assign(rLive, payload); else records.push(payload);
+                    await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
                 };
             });
 
@@ -311,10 +355,30 @@ async function renderArchivesList() {
                     const nv = cur.status === '已繳' ? '未繳' : '已繳';
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
                     const remarkText = nv === '已繳' ? `狀態改已繳（${timeStr}）` : cur.remark;
-                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r, i2) => i2 === idx ? { ...r, status: nv, signStatus: nv === '已繳' ? (r.signStatus || '未簽名') : '未簽名', remark: remarkText } : r));
+                    const nextSign = nv === '已繳' ? (cur.signStatus || '未簽名') : '未簽名';
+                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r, i2) => i2 === idx ? { ...r, status: nv, signStatus: nextSign, remark: remarkText } : r));
                     item.records = updatedRecords;
+                    if (appState.archiveDocsMap) {
+                        if (appState.archiveDocsMap[item.id]) appState.archiveDocsMap[item.id].records = updatedRecords;
+                        (item.assignments || []).forEach(a => {
+                            if (appState.archiveDocsMap[a.id]) appState.archiveDocsMap[a.id].records = updatedRecords;
+                        });
+                    }
                     renderArchiveDetail(item);
+                    renderGradingTab(gradingRecords, records, settings, appState);
                     await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    const payload = {
+                        studentId: cur.studentId,
+                        studentName: cur.studentName,
+                        assignmentId: cur.assignmentId,
+                        assignmentName: cur.assignmentName,
+                        status: nv,
+                        signStatus: nextSign,
+                        remark: remarkText
+                    };
+                    let rLive = records.find(rx => rx.studentId === cur.studentId && rx.assignmentId === cur.assignmentId);
+                    if (rLive) Object.assign(rLive, payload); else records.push(payload);
+                    await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
                 };
             });
 
@@ -327,8 +391,27 @@ async function renderArchivesList() {
                     const remarkText = nv === '已簽名' ? (cur.remark ? `${cur.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`) : cur.remark;
                     const updatedRecords = sanitizeArchiveRecords(item.records.map((r, i2) => i2 === idx ? { ...r, signStatus: nv, remark: remarkText } : r));
                     item.records = updatedRecords;
+                    if (appState.archiveDocsMap) {
+                        if (appState.archiveDocsMap[item.id]) appState.archiveDocsMap[item.id].records = updatedRecords;
+                        (item.assignments || []).forEach(a => {
+                            if (appState.archiveDocsMap[a.id]) appState.archiveDocsMap[a.id].records = updatedRecords;
+                        });
+                    }
                     renderArchiveDetail(item);
+                    renderGradingTab(gradingRecords, records, settings, appState);
                     await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    const payload = {
+                        studentId: cur.studentId,
+                        studentName: cur.studentName,
+                        assignmentId: cur.assignmentId,
+                        assignmentName: cur.assignmentName,
+                        status: cur.status || '未繳',
+                        signStatus: nv,
+                        remark: remarkText
+                    };
+                    let rLive = records.find(rx => rx.studentId === cur.studentId && rx.assignmentId === cur.assignmentId);
+                    if (rLive) Object.assign(rLive, payload); else records.push(payload);
+                    await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
                 };
             });
         }
@@ -774,8 +857,14 @@ function loadEditor() {
         ensureDailyAssignments(settings);
     };
 
-    $('loadArchivesBtn').onclick = autoLoadArchives;
-    $('loadPastArchivesBtn').onclick = autoLoadArchives;
+    $('loadArchivesBtn').onclick = async () => {
+        await autoLoadArchives();
+        await renderArchivesList();
+    };
+    $('loadPastArchivesBtn').onclick = async () => {
+        await autoLoadArchives();
+        renderGradingTab(gradingRecords, records, settings, appState);
+    };
 
     // 聯絡簿封存
     $('archiveContactBtn').onclick = async () => {

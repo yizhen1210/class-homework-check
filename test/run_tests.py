@@ -336,25 +336,37 @@ def run_tests():
 
     # 11. 狀態與簽名解析安全防護及封存資料清理
     def derive_record_status(live_record, archive_record):
-        if live_record and live_record.get('status'):
-            return live_record['status']
-        if archive_record and archive_record.get('status'):
-            return archive_record['status']
+        l_status = live_record if isinstance(live_record, str) else (live_record.get('status') if isinstance(live_record, dict) else '')
+        a_status = archive_record if isinstance(archive_record, str) else (archive_record.get('status') if isinstance(archive_record, dict) else '')
+        if l_status == '已繳' or a_status == '已繳':
+            return '已繳'
+        if l_status:
+            return l_status
+        if a_status:
+            return a_status
         return '未繳'
 
     def derive_record_sign(live_record, archive_record):
-        if live_record and live_record.get('signStatus'):
-            return live_record['signStatus']
-        if archive_record and archive_record.get('signStatus'):
-            return archive_record['signStatus']
+        l_sign = live_record if isinstance(live_record, str) else (live_record.get('signStatus') if isinstance(live_record, dict) else '')
+        a_sign = archive_record if isinstance(archive_record, str) else (archive_record.get('signStatus') if isinstance(archive_record, dict) else '')
+        if l_sign in ('已簽名', '已簽') or a_sign in ('已簽名', '已簽'):
+            return '已簽名'
+        if l_sign:
+            return l_sign
+        if a_sign:
+            return a_sign
         return '未簽名'
 
     def sanitize_archive_records(records):
         result = []
         for r in (records or []):
             result.append({
+                'groupId': r.get('groupId') or '',
+                'groupName': r.get('groupName') or '',
                 'studentId': r.get('studentId') or '',
                 'studentName': r.get('studentName') or '',
+                'subjectId': r.get('subjectId') or '',
+                'subjectName': r.get('subjectName') or '',
                 'assignmentId': r.get('assignmentId') or '',
                 'assignmentName': r.get('assignmentName') or '',
                 'status': r.get('status') or '未繳',
@@ -362,23 +374,29 @@ def run_tests():
                 'correctness': r.get('correctness') or '',
                 'corrected': bool(r.get('corrected')),
                 'remark': r.get('remark') or '',
+                'pointsGiven': bool(r.get('pointsGiven')),
                 'pulledOut': bool(r.get('pulledOut'))
             })
         return result
 
     t.assert_equal(derive_record_status({'status': '已繳'}, {'status': '未繳'}), '已繳', '活紀錄有 status 優先')
     t.assert_equal(derive_record_status({'signStatus': '已簽名'}, {'status': '已繳'}), '已繳', '活紀錄無 status 回退封存')
+    t.assert_equal(derive_record_status({'status': '未繳'}, {'status': '已繳'}), '已繳', '封存紀錄已補交時不應被未繳覆蓋')
+    t.assert_equal(derive_record_status({'status': '未繳'}, '已繳'), '已繳', '支援字串 fallback 解析已繳')
     t.assert_equal(derive_record_status(None, None), '未繳', '無紀錄預設未繳')
     t.assert_equal(derive_record_status({}, {}), '未繳', '空紀錄預設未繳')
 
     t.assert_equal(derive_record_sign({'signStatus': '已簽名'}, {'signStatus': '未簽名'}), '已簽名', '活紀錄有 signStatus 優先')
     t.assert_equal(derive_record_sign({'status': '已繳'}, {'signStatus': '已簽名'}), '已簽名', '活紀錄無 signStatus 回退封存')
+    t.assert_equal(derive_record_sign({'signStatus': '未簽名'}, {'signStatus': '已簽名'}), '已簽名', '封存紀錄已補簽時不應被未簽覆蓋')
+    t.assert_equal(derive_record_sign({'signStatus': '未簽名'}, '已簽名'), '已簽名', '支援字串 fallback 解析已簽')
     t.assert_equal(derive_record_sign(None, None), '未簽名', '無紀錄預設未簽名')
 
-    sanitized = sanitize_archive_records([{'studentId': 's1', 'status': None, 'signStatus': None}])
+    sanitized = sanitize_archive_records([{'studentId': 's1', 'status': None, 'signStatus': None, 'pulledOut': True}])
     t.assert_equal(sanitized[0]['status'], '未繳', '清理後 status 不為 None/undefined')
     t.assert_equal(sanitized[0]['signStatus'], '未簽名', '清理後 signStatus 不為 None/undefined')
     t.assert_equal(sanitized[0]['correctness'], '', '清理後 correctness 為空字串')
+    t.assert_equal(sanitized[0]['pulledOut'], True, '清理後正確保留 pulledOut')
 
     print(f"✓ 恭喜！全數 {t.passes} 項領域業務測試斷言通過！")
 
