@@ -729,7 +729,7 @@ function openTodayLeaveModal() {
             <div class="modal-content" style="width:min(580px, 92vw); max-width:580px; text-align:left; padding:26px 28px;">
                 <p class="modal-title" style="text-align:center; margin-bottom:8px;">今日請假登記</p>
                 <p id="todayLeaveSubtitle" style="margin:0 0 14px; font-size:0.88em; color:var(--muted); text-align:center; line-height:1.45;"></p>
-                <div id="todayLeaveStudentsBox" style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-height:50vh; overflow-y:auto; margin-bottom:20px; padding:12px; background:var(--bg); border-radius:14px; border:1px solid var(--line);"></div>
+                <div id="todayLeaveStudentsBox" style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-height:50vh; overflow-y:auto; margin-bottom:20px; padding:12px; background:transparent; border-radius:14px; border:2.5px dashed var(--line);"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-ok" id="todayLeaveCloseBtn">完成</button>
                 </div>

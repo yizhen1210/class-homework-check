@@ -76,10 +76,10 @@
         .btn.danger:hover { background: color-mix(in srgb, var(--danger) 82%, #000); border-color: color-mix(in srgb, var(--danger) 82%, #000); }
         .btn.outline.danger { background: transparent; color: var(--danger); }
         .btn.outline.danger:hover { background: var(--danger); color: #fff; }
-        .btn.btn-stats { border-color: #d6b38a; background: #f2dec4; color: #593b18; }
-        .btn.btn-stats:hover { background: #e8cda9; border-color: #c59d6f; color: #422b10; }
-        .btn.btn-leave { border-color: #dfd5b5; background: #fbf7ee; color: #473d21; }
-        .btn.btn-leave:hover { background: #f4ecda; border-color: #cbbd92; color: #332b15; }
+        .btn.btn-stats { border-color: #e6cfb8; background: #fbf1e6; color: #5c3917; }
+        .btn.btn-stats:hover { background: #f5e4d3; border-color: #d7b799; color: #46280d; }
+        .btn.btn-leave { border-color: #d5c38d; background: #fbf7ee; color: #5e4a1a; }
+        .btn.btn-leave:hover { background: #f4ecd6; border-color: #bfa96d; color: #4b3b13; }
 
         .admin-only.hidden { display: none !important; }
 
@@ -197,11 +197,11 @@
         .corrected-btn:hover { background: rgba(123,94,167,0.12); }
         .corrected-btn.active { background: #7b5ea7; color: #fff; }
 
-        .leave-btn { padding: 4px 8px; border-radius: 16px; border: 2px solid #dfd5b5; background: #ffffff; color: #473d21; font-family: inherit; font-size: 0.75em; cursor: pointer; transition: background .15s, color .15s, border-color .15s, transform 0.1s; white-space: nowrap; text-align: center; }
-        .leave-btn:hover { background: #fbf7ee; border-color: #cbbd92; }
-        .leave-btn.active { background: #fbf7ee; border-color: #cbbd92; color: #473d21; font-weight: bold; }
+        .leave-btn { padding: 4px 8px; border-radius: 16px; border: 2px solid #d5c38d; background: #ffffff; color: #5e4a1a; font-family: inherit; font-size: 0.75em; cursor: pointer; transition: background .15s, color .15s, border-color .15s, transform 0.1s; white-space: nowrap; text-align: center; }
+        .leave-btn:hover { background: #fbf7ee; border-color: #c4b077; }
+        .leave-btn.active { background: #fbf7ee; border-color: #c4b077; color: #5e4a1a; font-weight: bold; }
         .leave-btn.large { padding: 7px 14px; font-size: 0.9em; border-radius: 20px; }
-        .leave-tag { display: inline-block; padding: 1px 7px; border-radius: 10px; background: #fbf7ee; border: 1px solid #dfd5b5; color: #473d21; font-size: 0.72em; white-space: nowrap; vertical-align: middle; }
+        .leave-tag { display: inline-block; padding: 1px 7px; border-radius: 10px; background: #fbf7ee; border: 1px solid #d5c38d; color: #5e4a1a; font-size: 0.72em; font-weight: bold; white-space: nowrap; vertical-align: middle; }
         .stats-pill { display: inline-block; padding: 2px 10px; border-radius: 14px; font-size: 0.82em; white-space: nowrap; }
         .stats-pill.makeup { background: rgba(47,111,176,0.14); color: #2f6fb0; border: 1px solid #2f6fb0; }
         .stats-pill.missing { background: rgba(196,103,79,0.14); color: var(--danger); border: 1px solid var(--danger); }
@@ -3054,8 +3054,11 @@
                         if(isPulledOut(s, subjNameOf(a))) return `<td${cellStyle}><span class="cell-pulled-out">抽離</span></td>`;
                         const isExempt = /(?:聽考|複[AaＡａ]卷|複[BbＢｂ]卷)/.test(a.name || '');
                         const isSubmitted = statusOf(s.id, a.id) === '已繳';
+                        const rec = recs.find(x => x.studentId === s.id && x.assignmentId === a.id);
+                        const isLeave = isRecordLeave(rec, null);
+                        const leaveTag = isLeave ? '<span class="leave-tag">請假</span>' : '';
                         if(!isSubmitted && !isExempt){
-                            return `<td${cellStyle}><div class="cell-stack" style="min-height:70px;justify-content:center;"><span class="grade-missing">缺交</span></div></td>`;
+                            return `<td${cellStyle}><div class="cell-stack" style="min-height:70px;justify-content:center;"><span class="grade-missing">缺交</span>${leaveTag}</div></td>`;
                         }
 
                         const gRecord = gradeOf(s.id, a.id);
@@ -3072,9 +3075,11 @@
                                 ${thirdBtn}
                             </div>`;
                         const correctedBtn = `<button type="button" class="corrected-btn ${gRecord&&gRecord.corrected?'active':''}" data-corrected-student="${s.id}" data-corrected-assignment="${a.id}" style="visibility:${showCorrected?'visible':'hidden'};pointer-events:${showCorrected?'auto':'none'}">${gRecord&&gRecord.corrected?'✓訂正':'訂正'}</button>`;
-                        return `<td${cellStyle}><div class="cell-stack">${btns}<div class="corrected-slot">${correctedBtn}</div></div></td>`;
+                        return `<td${cellStyle}><div class="cell-stack">${btns}<div class="corrected-slot">${correctedBtn}</div>${leaveTag}</div></td>`;
                     }).join('');
-                    return `<tr><td${firstCellStyle}>${s.name}</td>${cells}</tr>`;
+                    const anyLeave = assignments.some(a => isRecordLeave(recs.find(x => x.studentId === s.id && x.assignmentId === a.id), null));
+                    const studentLeaveBadge = anyLeave ? '<span class="leave-tag" style="margin-left:6px;vertical-align:middle;">請假</span>' : '';
+                    return `<tr><td${firstCellStyle}>${s.name}${studentLeaveBadge}</td>${cells}</tr>`;
                 };
 
                 if(gradingViewMode === 'group'){
@@ -3611,7 +3616,7 @@
                     <div class="modal-content" style="width:min(580px, 92vw); max-width:580px; text-align:left; padding:26px 28px;">
                         <p class="modal-title" style="text-align:center; margin-bottom:8px;">今日請假登記</p>
                         <p id="todayLeaveSubtitle" style="margin:0 0 14px; font-size:0.88em; color:var(--muted); text-align:center; line-height:1.45;"></p>
-                        <div id="todayLeaveStudentsBox" style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-height:50vh; overflow-y:auto; margin-bottom:20px; padding:12px; background:var(--bg); border-radius:14px; border:1px solid var(--line);"></div>
+                        <div id="todayLeaveStudentsBox" style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-height:50vh; overflow-y:auto; margin-bottom:20px; padding:12px; background:transparent; border-radius:14px; border:2.5px dashed var(--line);"></div>
                         <div class="modal-actions">
                             <button type="button" class="btn-ok" id="todayLeaveCloseBtn">完成</button>
                         </div>

@@ -853,8 +853,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
 
                 const isExempt = isGradingMissingExempt(a.name);
                 const isSubmitted = statusOf(s.id, a.id) === '已繳';
+                const rec = recs.find(x => x.studentId === s.id && x.assignmentId === a.id);
+                const isLeave = isRecordLeave(rec, null);
+                const leaveTag = isLeave ? `<span class="leave-tag">請假</span>` : '';
+
                 if (!isSubmitted && !isExempt) {
-                    return `<td${cellStyle}><div class="cell-stack" style="min-height:70px;justify-content:center;"><span class="grade-missing">缺交</span></div></td>`;
+                    return `<td${cellStyle}><div class="cell-stack" style="min-height:70px;justify-content:center;"><span class="grade-missing">缺交</span>${leaveTag}</div></td>`;
                 }
 
                 const gRecord = gradeOf(s.id, a.id);
@@ -871,9 +875,11 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         ${thirdBtn}
                     </div>`;
                 const correctedBtn = `<button type="button" class="corrected-btn ${gRecord && gRecord.corrected ? 'active' : ''}" data-corrected-student="${escapeHtml(s.id)}" data-corrected-assignment="${escapeHtml(a.id)}" style="visibility:${showCorrected ? 'visible' : 'hidden'};pointer-events:${showCorrected ? 'auto' : 'none'}">${gRecord && gRecord.corrected ? '✓訂正' : '訂正'}</button>`;
-                return `<td${cellStyle}><div class="cell-stack">${btns}<div class="corrected-slot">${correctedBtn}</div></div></td>`;
+                return `<td${cellStyle}><div class="cell-stack">${btns}<div class="corrected-slot">${correctedBtn}</div>${leaveTag}</div></td>`;
             }).join('');
-            return `<tr><td${firstCellStyle}>${escapeHtml(s.name)}</td>${cells}</tr>`;
+            const anyLeave = assignments.some(a => isRecordLeave(recs.find(x => x.studentId === s.id && x.assignmentId === a.id), null));
+            const studentLeaveBadge = anyLeave ? `<span class="leave-tag" style="margin-left:6px;vertical-align:middle;">請假</span>` : '';
+            return `<tr><td${firstCellStyle}>${escapeHtml(s.name)}${studentLeaveBadge}</td>${cells}</tr>`;
         };
 
         if (gradingViewMode === 'group') {
