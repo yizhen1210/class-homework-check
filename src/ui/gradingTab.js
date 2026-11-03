@@ -732,8 +732,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
     const globalLostBtn = $('globalLostListBtn');
     const globalMakeupStatsBtn = $('globalMakeupStatsBtn');
 
+    const isArchivesReady = () => {
+        return (state.archiveDocsList && state.archiveDocsList.length > 0) || state.archivesLoaded === true;
+    };
+
     const ensureArchivesReady = async () => {
-        if ((!state.archiveDocsList || !state.archiveDocsList.length) && typeof state.ensureArchivesLoaded === 'function') {
+        if (!isArchivesReady() && typeof state.ensureArchivesLoaded === 'function') {
             await state.ensureArchivesLoaded();
         }
     };
@@ -765,28 +769,29 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
         }
     };
 
+    const openPopupImmediately = (type, title) => {
+        $('missingListTitle').textContent = title;
+        renderGlobalPopupByType(type);
+        $('missingListModal').style.display = 'flex';
+        if (!isArchivesReady()) {
+            ensureArchivesReady().then(() => {
+                if ($('missingListModal') && $('missingListModal').style.display === 'flex' && $('missingListTitle').textContent === title) {
+                    renderGlobalPopupByType(type);
+                }
+            });
+        }
+    };
+
     if (globalMissingBtn) {
-        globalMissingBtn.onclick = async () => {
-            await ensureArchivesReady();
-            renderGlobalPopupByType('missing');
-            $('missingListModal').style.display = 'flex';
-        };
+        globalMissingBtn.onclick = () => openPopupImmediately('missing', '未繳清單');
     }
 
     if (globalUncorrectedBtn) {
-        globalUncorrectedBtn.onclick = async () => {
-            await ensureArchivesReady();
-            renderGlobalPopupByType('uncorrected');
-            $('missingListModal').style.display = 'flex';
-        };
+        globalUncorrectedBtn.onclick = () => openPopupImmediately('uncorrected', '未訂正清單');
     }
 
     if (globalUnsignedBtn) {
-        globalUnsignedBtn.onclick = async () => {
-            await ensureArchivesReady();
-            renderGlobalPopupByType('unsigned');
-            $('missingListModal').style.display = 'flex';
-        };
+        globalUnsignedBtn.onclick = () => openPopupImmediately('unsigned', '未簽名清單');
     }
 
     function renderMissingLostList() {
@@ -814,17 +819,30 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
     }
 
     if (globalLostBtn) {
-        globalLostBtn.onclick = async () => {
-            await ensureArchivesReady();
+        globalLostBtn.onclick = () => {
+            $('missingListTitle').textContent = '遺失作業清單';
             renderMissingLostList();
             $('missingListModal').style.display = 'flex';
+            if (!isArchivesReady()) {
+                ensureArchivesReady().then(() => {
+                    if ($('missingListModal') && $('missingListModal').style.display === 'flex' && $('missingListTitle').textContent === '遺失作業清單') {
+                        renderMissingLostList();
+                    }
+                });
+            }
         };
     }
 
     if (globalMakeupStatsBtn) {
-        globalMakeupStatsBtn.onclick = async () => {
-            await ensureArchivesReady();
+        globalMakeupStatsBtn.onclick = () => {
             openMakeupStatsModal({ settings: st, records: recs, gradingRecords: gradingRecs, state });
+            if (!isArchivesReady()) {
+                ensureArchivesReady().then(() => {
+                    if ($('makeupStatsModal') && $('makeupStatsModal').style.display === 'flex') {
+                        openMakeupStatsModal({ settings: st, records: recs, gradingRecords: gradingRecs, state });
+                    }
+                });
+            }
         };
     }
 
@@ -1171,7 +1189,7 @@ export function openMakeupStatsModal({ settings, records, gradingRecords, state 
         const leaveBtnLabel = item.isLeave ? '✓請假' : '請假';
         const remarkSpan = item.remark ? `<span style="font-size:0.82em; color:var(--muted); margin-left:6px;">（${escapeHtml(item.remark)}）</span>` : '';
         return `
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed #e4e6e0; font-size:0.92em;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed #c8ccc5; font-size:0.92em;">
                 <div style="flex:1; min-width:0; line-height:1.4;">
                     <span style="display:inline-block; padding:1px 8px; border-radius:10px; font-size:0.8em; margin-right:6px; ${categoryStyle}">${categoryLabel}</span>
                     <strong>${escapeHtml(item.displayName)}</strong>${remarkSpan}
@@ -1237,8 +1255,8 @@ export function openMakeupStatsModal({ settings, records, gradingRecords, state 
                     ...sg.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;'))
                 ].join('');
                 return `
-                    <div style="margin-top:8px; background:#f7f7f4; border:1px solid #dcded8; border-radius:10px; padding:8px 12px;">
-                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-bottom:5px; margin-bottom:2px; border-bottom:1px solid #e4e6e0;">
+                    <div style="margin-top:8px; background:#f7f7f4; border:1px solid #d2d6cf; border-radius:10px; padding:8px 12px;">
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-bottom:5px; margin-bottom:2px; border-bottom:1px solid #c8ccc5;">
                             <strong style="font-size:0.92em; color:var(--text);">【${escapeHtml(sg.subjectName)}】</strong>
                             ${sgBadges.join('')}
                         </div>

@@ -76,8 +76,8 @@
         .btn.danger:hover { background: color-mix(in srgb, var(--danger) 82%, #000); border-color: color-mix(in srgb, var(--danger) 82%, #000); }
         .btn.outline.danger { background: transparent; color: var(--danger); }
         .btn.outline.danger:hover { background: var(--danger); color: #fff; }
-        .btn.btn-stats { border-color: #b4bab2; background: #e8e8e2; color: #2e3a35; }
-        .btn.btn-stats:hover { background: #deded7; border-color: #9fa69d; color: #1c2521; }
+        .btn.btn-stats { border-color: #b4bab2; background: #e8e8e2; color: #4e564c; }
+        .btn.btn-stats:hover { background: #deded7; border-color: #9fa69d; color: #384036; }
         .btn.btn-leave { border-color: #d5c38d; background: #fbf7ee; color: #5e4a1a; }
         .btn.btn-leave:hover { background: #f4ecd6; border-color: #bfa96d; color: #4b3b13; }
 
@@ -531,9 +531,14 @@
             gradingRecords = [];
         }
 
-        async function autoLoadArchives(){
-            try {
-                const snap = await getDocs(query(archivesColl, orderBy('timestamp','desc')));
+        let archivesLoadingPromise = null;
+        let archivesLoaded = false;
+
+        function autoLoadArchives(){
+            if (archivesLoadingPromise) return archivesLoadingPromise;
+            archivesLoadingPromise = (async () => {
+                try {
+                    const snap = await getDocs(query(archivesColl, orderBy('timestamp','desc')));
                 const nextExtra = {};
                 const nextMap = {};
                 const nextList = [];
@@ -600,6 +605,8 @@
                 window.__archiveDocsList = nextList;
                 window.__archiveDocsMap = nextMap;
                 window.__extraPastAssignments = nextExtra;
+                archivesLoaded = true;
+                window.__archivesLoaded = true;
                 renderGradingTab(gradingRecords, records, settings);
                 if (typeof window.__renderArchivesListFromAuto === 'function') {
                     window.__renderArchivesListFromAuto(nextList);
@@ -607,79 +614,86 @@
 
                 // 自動遷移更名與修復歷史抽離：在背景執行以確保 UI 立即呈現
                 if (isAdmin) {
-                    for (const d of snap.docs) {
-                        const data = window.__archiveDocsMap[d.id] || d.data();
-                        const dDate = data.dateLabel || (data.timestamp ? new Date(data.timestamp).toLocaleDateString('zh-TW') : '');
-                        let modified = false;
-                        (data.assignments || []).forEach(a => {
-                            const isL2 = a.name && (a.name.includes('L2預習單') || a.name.includes('L2 預習單'));
-                            const isTargetDateOrSubj = dDate.includes('2026/09/14') || dDate.includes('2026/9/14') || (a.name && (a.name.includes('2026/09/14') || a.name.includes('2026/9/14'))) || a.subjectName === '國語';
-                            if (isL2 && isTargetDateOrSubj) {
-                                const oldName = a.name;
-                                let newName = oldName.replace(/L2\s*預習單/g, 'L3預習單');
-                                if (dDate) {
-                                    newName = newName.replace(/^2026[/-]0?9[/-]14\s*/, '').trim();
-                                }
-                                a.name = newName;
-                                modified = true;
-                                (data.records || []).forEach(r => {
-                                    if (r.assignmentId === a.id) {
-                                        r.assignmentName = newName;
+                    (async () => {
+                        for (const d of snap.docs) {
+                            const data = window.__archiveDocsMap[d.id] || d.data();
+                            const dDate = data.dateLabel || (data.timestamp ? new Date(data.timestamp).toLocaleDateString('zh-TW') : '');
+                            let modified = false;
+                            (data.assignments || []).forEach(a => {
+                                const isL2 = a.name && (a.name.includes('L2預習單') || a.name.includes('L2 預習單'));
+                                const isTargetDateOrSubj = dDate.includes('2026/09/14') || dDate.includes('2026/9/14') || (a.name && (a.name.includes('2026/09/14') || a.name.includes('2026/9/14'))) || a.subjectName === '國語';
+                                if (isL2 && isTargetDateOrSubj) {
+                                    const oldName = a.name;
+                                    let newName = oldName.replace(/L2\s*預習單/g, 'L3預習單');
+                                    if (dDate) {
+                                        newName = newName.replace(/^2026[/-]0?9[/-]14\s*/, '').trim();
                                     }
-                                });
-                                // 同步更新 gradingColl 中的 assignmentName
-                                getDocs(query(gradingColl, where('assignmentId', '==', a.id))).then(gSnap => {
-                                    if (!gSnap.empty) {
-                                        const b = writeBatch(db);
-                                        gSnap.docs.forEach(gd => b.update(gd.ref, { assignmentName: newName }));
-                                        b.commit().catch(e => console.warn(e));
-                                    }
-                                }).catch(e => console.warn(e));
-                                gradingRecords.forEach(g => {
-                                    if (g.assignmentId === a.id) g.assignmentName = newName;
-                                });
-                                console.log(`[Auto-Migration] 成功將「${oldName}」更新為「${newName}」`);
-                            }
-                        });
-                        // 自動修復歷史封存抽離狀態（針對 9/23 ~ 10/1 或任何歷史紀錄）
-                        if (Array.isArray(data.records) && settings && Array.isArray(settings.students)) {
-                            data.records.forEach(r => {
-                                const stu = settings.students.find(s => s.id === r.studentId || s.name === r.studentName);
-                                if (stu && stu.pullout) {
-                                    const asg = (data.assignments || []).find(a => a.id === r.assignmentId);
-                                    const asgSubj = asg ? (asg.subjectName || ((settings.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
-                                    const shouldPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
-                                    if (shouldPull && !r.pulledOut) {
-                                        r.pulledOut = true;
-                                        modified = true;
-                                    }
+                                    a.name = newName;
+                                    modified = true;
+                                    (data.records || []).forEach(r => {
+                                        if (r.assignmentId === a.id) {
+                                            r.assignmentName = newName;
+                                        }
+                                    });
+                                    // 同步更新 gradingColl 中的 assignmentName
+                                    getDocs(query(gradingColl, where('assignmentId', '==', a.id))).then(gSnap => {
+                                        if (!gSnap.empty) {
+                                            const b = writeBatch(db);
+                                            gSnap.docs.forEach(gd => b.update(gd.ref, { assignmentName: newName }));
+                                            b.commit().catch(e => console.warn(e));
+                                        }
+                                    }).catch(e => console.warn(e));
+                                    gradingRecords.forEach(g => {
+                                        if (g.assignmentId === a.id) g.assignmentName = newName;
+                                    });
+                                    console.log(`[Auto-Migration] 成功將「${oldName}」更新為「${newName}」`);
                                 }
                             });
-                        }
-                        if (modified) {
-                            await setDoc(doc(db, 'archives', d.id), {
-                                assignments: data.assignments,
-                                records: sanitizeArchiveRecords(data.records)
-                            }, { merge: true }).catch(e => console.warn(e));
-                        }
-                    }
-
-                    // 同步檢查 settings.assignments 是否有需更名的項目
-                    if (settings && Array.isArray(settings.assignments)) {
-                        let settingsChanged = false;
-                        settings.assignments.forEach(a => {
-                            if (a.name && (a.name.includes('L2預習單') || a.name.includes('L2 預習單'))) {
-                                a.name = a.name.replace(/L2\s*預習單/g, 'L3預習單');
-                                settingsChanged = true;
+                            // 自動修復歷史封存抽離狀態（針對 9/23 ~ 10/1 或任何歷史紀錄）
+                            if (Array.isArray(data.records) && settings && Array.isArray(settings.students)) {
+                                data.records.forEach(r => {
+                                    const stu = settings.students.find(s => s.id === r.studentId || s.name === r.studentName);
+                                    if (stu && stu.pullout) {
+                                        const asg = (data.assignments || []).find(a => a.id === r.assignmentId);
+                                        const asgSubj = asg ? (asg.subjectName || ((settings.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
+                                        const shouldPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
+                                        if (shouldPull && !r.pulledOut) {
+                                            r.pulledOut = true;
+                                            modified = true;
+                                        }
+                                    }
+                                });
                             }
-                        });
-                        if (settingsChanged) {
-                            saveSettings({ assignments: settings.assignments });
+                            if (modified) {
+                                await setDoc(doc(db, 'archives', d.id), {
+                                    assignments: data.assignments,
+                                    records: sanitizeArchiveRecords(data.records)
+                                }, { merge: true }).catch(e => console.warn(e));
+                            }
                         }
-                    }
+
+                        // 同步檢查 settings.assignments 是否有需更名的項目
+                        if (settings && Array.isArray(settings.assignments)) {
+                            let settingsChanged = false;
+                            settings.assignments.forEach(a => {
+                                if (a.name && (a.name.includes('L2預習單') || a.name.includes('L2 預習單'))) {
+                                    a.name = a.name.replace(/L2\s*預習單/g, 'L3預習單');
+                                    settingsChanged = true;
+                                }
+                            });
+                            if (settingsChanged) {
+                                saveSettings({ assignments: settings.assignments });
+                            }
+                        }
+                    })().catch(e => console.warn(e));
                 }
             } catch(e){ console.warn(e); }
-        }
+            finally {
+                archivesLoadingPromise = null;
+            }
+        })();
+        return archivesLoadingPromise;
+    }
 
         onSnapshot(settingsRef, snap => {
             settingsArrived = true;
@@ -2944,8 +2958,12 @@
             const globalLostBtn = $('globalLostListBtn');
             const globalMakeupStatsBtn = $('globalMakeupStatsBtn');
 
+            const isArchivesReady = () => {
+                return (window.__archiveDocsList && window.__archiveDocsList.length > 0) || window.__archivesLoaded === true;
+            };
+
             const ensureArchivesReady = async () => {
-                if (!window.__archiveDocsList || !window.__archiveDocsList.length) {
+                if (!isArchivesReady()) {
                     await autoLoadArchives();
                 }
             };
@@ -2977,26 +2995,27 @@
                 }
             };
 
+            const openPopupImmediately = (type, title) => {
+                $('missingListTitle').textContent = title;
+                renderGlobalPopupByType(type);
+                $('missingListModal').style.display = 'flex';
+                if (!isArchivesReady()) {
+                    ensureArchivesReady().then(() => {
+                        if ($('missingListModal') && $('missingListModal').style.display === 'flex' && $('missingListTitle').textContent === title) {
+                            renderGlobalPopupByType(type);
+                        }
+                    });
+                }
+            };
+
             if(globalMissingBtn){
-                globalMissingBtn.onclick = async () => {
-                    await ensureArchivesReady();
-                    renderGlobalPopupByType('missing');
-                    $('missingListModal').style.display = 'flex';
-                };
+                globalMissingBtn.onclick = () => openPopupImmediately('missing', '未繳清單');
             }
             if(globalUncorrectedBtn){
-                globalUncorrectedBtn.onclick = async () => {
-                    await ensureArchivesReady();
-                    renderGlobalPopupByType('uncorrected');
-                    $('missingListModal').style.display = 'flex';
-                };
+                globalUncorrectedBtn.onclick = () => openPopupImmediately('uncorrected', '未訂正清單');
             }
             if(globalUnsignedBtn){
-                globalUnsignedBtn.onclick = async () => {
-                    await ensureArchivesReady();
-                    renderGlobalPopupByType('unsigned');
-                    $('missingListModal').style.display = 'flex';
-                };
+                globalUnsignedBtn.onclick = () => openPopupImmediately('unsigned', '未簽名清單');
             }
             function renderMissingLostList() {
                 $('missingListTitle').textContent = '遺失作業清單';
@@ -3022,16 +3041,29 @@
                 });
             }
             if(globalLostBtn){
-                globalLostBtn.onclick = async () => {
-                    await ensureArchivesReady();
+                globalLostBtn.onclick = () => {
+                    $('missingListTitle').textContent = '遺失作業清單';
                     renderMissingLostList();
                     $('missingListModal').style.display = 'flex';
+                    if (!isArchivesReady()) {
+                        ensureArchivesReady().then(() => {
+                            if ($('missingListModal') && $('missingListModal').style.display === 'flex' && $('missingListTitle').textContent === '遺失作業清單') {
+                                renderMissingLostList();
+                            }
+                        });
+                    }
                 };
             }
             if(globalMakeupStatsBtn){
-                globalMakeupStatsBtn.onclick = async () => {
-                    await ensureArchivesReady();
+                globalMakeupStatsBtn.onclick = () => {
                     openMakeupStatsModal();
+                    if (!isArchivesReady()) {
+                        ensureArchivesReady().then(() => {
+                            if ($('makeupStatsModal') && $('makeupStatsModal').style.display === 'flex') {
+                                openMakeupStatsModal();
+                            }
+                        });
+                    }
                 };
             }
             if($('missingListModal') && $('missingListModal').style.display === 'flex' && $('missingListTitle')){
@@ -3368,7 +3400,7 @@
                 const leaveBtnLabel = item.isLeave ? '✓請假' : '請假';
                 const remarkSpan = item.remark ? `<span style="font-size:0.82em; color:var(--muted); margin-left:6px;">（${escapeHtml(item.remark)}）</span>` : '';
                 return `
-                    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed #e4e6e0; font-size:0.92em;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed #c8ccc5; font-size:0.92em;">
                         <div style="flex:1; min-width:0; line-height:1.4;">
                             <span style="display:inline-block; padding:1px 8px; border-radius:10px; font-size:0.8em; margin-right:6px; ${categoryStyle}">${categoryLabel}</span>
                             <strong>${escapeHtml(item.displayName)}</strong>${remarkSpan}
@@ -3423,8 +3455,8 @@
                             ...sg.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;'))
                         ].join('');
                         return `
-                            <div style="margin-top:8px; background:#f7f7f4; border:1px solid #dcded8; border-radius:10px; padding:8px 12px;">
-                                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-bottom:5px; margin-bottom:2px; border-bottom:1px solid #e4e6e0;">
+                            <div style="margin-top:8px; background:#f7f7f4; border:1px solid #d2d6cf; border-radius:10px; padding:8px 12px;">
+                                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-bottom:5px; margin-bottom:2px; border-bottom:1px solid #c8ccc5;">
                                     <strong style="font-size:0.92em; color:var(--text);">【${escapeHtml(sg.subjectName)}】</strong>
                                     ${sgBadges.join('')}
                                 </div>
@@ -4090,11 +4122,15 @@
             $('loadArchivesBtn').onclick = async () => {
                 await autoLoadArchives();
             };
-            $('recordsMakeupStatsBtn').onclick = async () => {
-                if (!window.__archiveDocsList || !window.__archiveDocsList.length) {
-                    await autoLoadArchives();
-                }
+            $('recordsMakeupStatsBtn').onclick = () => {
                 openMakeupStatsModal();
+                if (!window.__archivesLoaded && (!window.__archiveDocsList || !window.__archiveDocsList.length)) {
+                    autoLoadArchives().then(() => {
+                        if ($('makeupStatsModal') && $('makeupStatsModal').style.display === 'flex') {
+                            openMakeupStatsModal();
+                        }
+                    });
+                }
             };
 
             async function renderArchivesList(prefetchedList){

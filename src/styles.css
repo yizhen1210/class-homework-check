@@ -58,8 +58,8 @@ body:not(.ready) [data-gated] { visibility: hidden; }
 .btn.danger:hover { background: color-mix(in srgb, var(--danger) 82%, #000); border-color: color-mix(in srgb, var(--danger) 82%, #000); }
 .btn.outline.danger { background: transparent; color: var(--danger); }
 .btn.outline.danger:hover { background: var(--danger); color: #fff; }
-.btn.btn-stats { border-color: #b4bab2; background: #e8e8e2; color: #2e3a35; }
-.btn.btn-stats:hover { background: #deded7; border-color: #9fa69d; color: #1c2521; }
+.btn.btn-stats { border-color: #b4bab2; background: #e8e8e2; color: #4e564c; }
+.btn.btn-stats:hover { background: #deded7; border-color: #9fa69d; color: #384036; }
 .btn.btn-leave { border-color: #d5c38d; background: #fbf7ee; color: #5e4a1a; }
 .btn.btn-leave:hover { background: #f4ecd6; border-color: #bfa96d; color: #4b3b13; }
 

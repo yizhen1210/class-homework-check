@@ -88,6 +88,7 @@ const appState = {
     archiveDocsList: [],
     archiveDocsMap: {},
     extraPastAssignments: {},
+    archivesLoaded: false,
     ensureArchivesLoaded: () => autoLoadArchives()
 };
 
@@ -151,108 +152,120 @@ function ensureDailyAssignments(st) {
     }
 }
 
-export async function autoLoadArchives() {
-    try {
-        const snap = await getDocs(query(archivesColl, orderBy('timestamp', 'desc')));
-        const nextExtra = {};
-        const nextMap = {};
-        const nextList = [];
-        const activeNonContactIds = new Set(
-            (settings && settings.assignments ? settings.assignments : [])
-                .filter(a => a.name !== '聯絡簿每日任務')
-                .map(a => a.id)
-        );
-        const activeContactIds = new Set(
-            (settings && settings.assignments ? settings.assignments : [])
-                .filter(a => a.name === '聯絡簿每日任務')
-                .map(a => a.id)
-        );
+let archivesLoadingPromise = null;
 
-        snap.docs.forEach(d => {
-            const data = d.data();
-            data._id = d.id;
-            data.id = d.id;
-            nextList.push(data);
-            nextMap[d.id] = data;
-            const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
-            (data.assignments || []).forEach(a => {
-                if (!nextMap[a.id]) nextMap[a.id] = data;
-                const isContact = a.name === '聯絡簿每日任務';
-                const isCurrentlyActive = isContact ? activeContactIds.has(a.id) : activeNonContactIds.has(a.id);
-                if (!isCurrentlyActive) {
-                    if (!nextExtra[a.id]) {
-                        nextExtra[a.id] = {
-                            name: a.name,
-                            dateLabel,
-                            timestamp: data.timestamp,
-                            subjectName: a.subjectName || (isContact ? '聯絡簿' : '未分類'),
-                            needsSign: !!(a.needsSign || isContact),
-                            signOnly: !!a.signOnly
-                        };
-                    }
-                }
-            });
-            if ((!data.assignments || !data.assignments.length) && Array.isArray(data.records)) {
-                const uniqueAids = new Set();
-                data.records.forEach(r => {
-                    if (r.assignmentId && !uniqueAids.has(r.assignmentId)) {
-                        uniqueAids.add(r.assignmentId);
-                        const aName = r.assignmentName || '未命名作業';
-                        const isContact = aName === '聯絡簿每日任務';
-                        const isCurrentlyActive = isContact ? activeContactIds.has(r.assignmentId) : activeNonContactIds.has(r.assignmentId);
-                        if (!isCurrentlyActive && !nextExtra[r.assignmentId]) {
-                            nextExtra[r.assignmentId] = {
-                                name: aName,
+export function autoLoadArchives() {
+    if (archivesLoadingPromise) return archivesLoadingPromise;
+    archivesLoadingPromise = (async () => {
+        try {
+            const snap = await getDocs(query(archivesColl, orderBy('timestamp', 'desc')));
+            const nextExtra = {};
+            const nextMap = {};
+            const nextList = [];
+            const activeNonContactIds = new Set(
+                (settings && settings.assignments ? settings.assignments : [])
+                    .filter(a => a.name !== '聯絡簿每日任務')
+                    .map(a => a.id)
+            );
+            const activeContactIds = new Set(
+                (settings && settings.assignments ? settings.assignments : [])
+                    .filter(a => a.name === '聯絡簿每日任務')
+                    .map(a => a.id)
+            );
+
+            snap.docs.forEach(d => {
+                const data = d.data();
+                data._id = d.id;
+                data.id = d.id;
+                nextList.push(data);
+                nextMap[d.id] = data;
+                const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
+                (data.assignments || []).forEach(a => {
+                    if (!nextMap[a.id]) nextMap[a.id] = data;
+                    const isContact = a.name === '聯絡簿每日任務';
+                    const isCurrentlyActive = isContact ? activeContactIds.has(a.id) : activeNonContactIds.has(a.id);
+                    if (!isCurrentlyActive) {
+                        if (!nextExtra[a.id]) {
+                            nextExtra[a.id] = {
+                                name: a.name,
                                 dateLabel,
                                 timestamp: data.timestamp,
-                                subjectName: isContact ? '聯絡簿' : '未分類',
-                                needsSign: isContact,
-                                signOnly: false
+                                subjectName: a.subjectName || (isContact ? '聯絡簿' : '未分類'),
+                                needsSign: !!(a.needsSign || isContact),
+                                signOnly: !!a.signOnly
                             };
                         }
                     }
                 });
-            }
-            (data.records || []).forEach(r => {
-                if (r.assignmentId && !nextMap[r.assignmentId]) {
-                    nextMap[r.assignmentId] = data;
-                }
-            });
-        });
-
-        appState.archiveDocsList = nextList;
-        appState.archiveDocsMap = nextMap;
-        appState.extraPastAssignments = nextExtra;
-
-        if (isAdmin && settings && Array.isArray(settings.students)) {
-            for (const d of snap.docs) {
-                const data = appState.archiveDocsMap[d.id] || d.data();
-                let archiveModified = false;
-                if (Array.isArray(data.records)) {
+                if ((!data.assignments || !data.assignments.length) && Array.isArray(data.records)) {
+                    const uniqueAids = new Set();
                     data.records.forEach(r => {
-                        const stu = settings.students.find(s => s.id === r.studentId || s.name === r.studentName);
-                        if (stu && stu.pullout) {
-                            const asg = (data.assignments || []).find(a => a.id === r.assignmentId);
-                            const asgSubj = asg ? (asg.subjectName || ((settings.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
-                            const shouldPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
-                            if (shouldPull && !r.pulledOut) {
-                                r.pulledOut = true;
-                                archiveModified = true;
+                        if (r.assignmentId && !uniqueAids.has(r.assignmentId)) {
+                            uniqueAids.add(r.assignmentId);
+                            const aName = r.assignmentName || '未命名作業';
+                            const isContact = aName === '聯絡簿每日任務';
+                            const isCurrentlyActive = isContact ? activeContactIds.has(r.assignmentId) : activeNonContactIds.has(r.assignmentId);
+                            if (!isCurrentlyActive && !nextExtra[r.assignmentId]) {
+                                nextExtra[r.assignmentId] = {
+                                    name: aName,
+                                    dateLabel,
+                                    timestamp: data.timestamp,
+                                    subjectName: isContact ? '聯絡簿' : '未分類',
+                                    needsSign: isContact,
+                                    signOnly: false
+                                };
                             }
                         }
                     });
                 }
-                if (archiveModified) {
-                    data.records = sanitizeArchiveRecords(data.records);
-                    await setDoc(doc(db, 'archives', d.id), { records: data.records }, { merge: true }).catch(e => logger.warn('REPAIR_ARCHIVE_PULLOUT_FAILED', e));
-                }
+                (data.records || []).forEach(r => {
+                    if (r.assignmentId && !nextMap[r.assignmentId]) {
+                        nextMap[r.assignmentId] = data;
+                    }
+                });
+            });
+
+            appState.archiveDocsList = nextList;
+            appState.archiveDocsMap = nextMap;
+            appState.extraPastAssignments = nextExtra;
+            appState.archivesLoaded = true;
+
+            renderGradingTab(gradingRecords, records, settings, appState);
+            renderArchivesList(nextList);
+
+            if (isAdmin && settings && Array.isArray(settings.students)) {
+                (async () => {
+                    for (const d of snap.docs) {
+                        const data = appState.archiveDocsMap[d.id] || d.data();
+                        let archiveModified = false;
+                        if (Array.isArray(data.records)) {
+                            data.records.forEach(r => {
+                                const stu = settings.students.find(s => s.id === r.studentId || s.name === r.studentName);
+                                if (stu && stu.pullout) {
+                                    const asg = (data.assignments || []).find(a => a.id === r.assignmentId);
+                                    const asgSubj = asg ? (asg.subjectName || ((settings.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
+                                    const shouldPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
+                                    if (shouldPull && !r.pulledOut) {
+                                        r.pulledOut = true;
+                                        archiveModified = true;
+                                    }
+                                }
+                            });
+                        }
+                        if (archiveModified) {
+                            data.records = sanitizeArchiveRecords(data.records);
+                            await setDoc(doc(db, 'archives', d.id), { records: data.records }, { merge: true }).catch(e => logger.warn('REPAIR_ARCHIVE_PULLOUT_FAILED', e));
+                        }
+                    }
+                })().catch(e => logger.warn('REPAIR_ARCHIVE_PULLOUT_BACKGROUND_FAILED', e));
             }
+        } catch (e) {
+            logger.warn('AUTO_LOAD_ARCHIVES_FAILED', e);
+        } finally {
+            archivesLoadingPromise = null;
         }
-        renderGradingTab(gradingRecords, records, settings, appState);
-        await renderArchivesList(nextList);
-    } catch (e) {
-        logger.warn('AUTO_LOAD_ARCHIVES_FAILED', e);
-    }
+    })();
+    return archivesLoadingPromise;
 }
 
 async function renderArchivesList(prefetchedList = null) {
@@ -1012,11 +1025,15 @@ function loadEditor() {
     // 今日請假登記與補繳統計按鈕
     $('markTodayLeaveBtn').onclick = () => openTodayLeaveModal();
     $('contactLeaveBtn').onclick = () => openTodayLeaveModal();
-    $('recordsMakeupStatsBtn').onclick = async () => {
-        if (!appState.archiveDocsList || !appState.archiveDocsList.length) {
-            await autoLoadArchives();
-        }
+    $('recordsMakeupStatsBtn').onclick = () => {
         openMakeupStatsModal({ settings, records, gradingRecords, state: appState });
+        if (!appState.archivesLoaded && (!appState.archiveDocsList || !appState.archiveDocsList.length)) {
+            autoLoadArchives().then(() => {
+                if ($('makeupStatsModal') && $('makeupStatsModal').style.display === 'flex') {
+                    openMakeupStatsModal({ settings, records, gradingRecords, state: appState });
+                }
+            });
+        }
     };
 
     // 折疊按鈕
