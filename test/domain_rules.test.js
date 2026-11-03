@@ -20,7 +20,19 @@ import {
     isGradingMissingExempt,
     deriveRecordStatus,
     deriveRecordSign,
-    sanitizeArchiveRecords
+    appendMakeupSubmitRemark,
+    removeMakeupSubmitRemark,
+    appendMakeupSignRemark,
+    removeMakeupSignRemark,
+    toggleLeaveRemark,
+    isRecordLeave,
+    isRecordMakeup,
+    deriveRecordRemark,
+    sanitizeArchiveRecords,
+    resolveAssignmentISODate,
+    computeGlobalPopupLists,
+    computeMakeupAndLeaveStats,
+    formatMakeupAndLeaveReport
 } from '../src/domain/rules.js';
 
 export function runAllDomainTests(assert) {
@@ -240,6 +252,185 @@ export function runAllDomainTests(assert) {
         assert.strictEqual(sanitized[0].corrected, false);
         assert.strictEqual(sanitized[0].pulledOut, true, '應正確保留 pulledOut 狀態');
         assert.strictEqual(Object.values(sanitized[0]).includes(undefined), false, '不得包含 undefined 欄位');
+    }
+
+    // 13. 全域統計清單（未繳、未訂正、未簽名）包含歷史聯絡簿與封存作業邏輯驗證
+    {
+        const testStudents = [
+            { id: 's1', name: '學生甲', seat: '1', pullout: null },
+            { id: 's2', name: '學生乙', seat: '2', pullout: null },
+            { id: 's3', name: '學生丙', seat: '3', pullout: { chinese: true, math: false } },
+            { id: 's4', name: '學生丁', seat: '4', pullout: null },
+            { id: 's5', name: '學生戊', seat: '5', pullout: null }
+        ];
+        const pastContactId = 'daily-聯絡簿每日任務-2026-11-03-test';
+        const testExtraPast = {
+            [pastContactId]: {
+                name: '聯絡簿每日任務',
+                dateLabel: '2026/11/03',
+                subjectName: '聯絡簿',
+                needsSign: true,
+                signOnly: false
+            }
+        };
+        const testArchiveDoc = {
+            id: 'arc_1103',
+            dateLabel: '2026/11/03',
+            assignments: [{ id: pastContactId, name: '聯絡簿每日任務', subjectName: '聯絡簿', needsSign: true }],
+            records: [
+                { studentId: 's1', assignmentId: pastContactId, status: '已繳', signStatus: '未簽名', correctness: '有錯', corrected: false },
+                { studentId: 's2', assignmentId: pastContactId, status: '未繳', signStatus: '未簽名', correctness: '', corrected: false },
+                { studentId: 's3', assignmentId: pastContactId, status: '未繳', signStatus: '未簽名', correctness: '', corrected: false, pulledOut: true },
+                { studentId: 's4', assignmentId: pastContactId, status: '已繳', signStatus: '已簽名', correctness: '全對', corrected: false },
+                { studentId: 's5', assignmentId: pastContactId, status: '已繳', signStatus: '已簽名', correctness: '沒寫任務', corrected: false }
+            ]
+        };
+        const testArchiveDocsMap = {
+            [pastContactId]: testArchiveDoc,
+            'arc_1103': testArchiveDoc
+        };
+
+        // 驗證未訂正判斷：學生甲有錯未訂正
+        const archRec1 = testArchiveDoc.records.find(r => r.studentId === 's1');
+        const correctness1 = archRec1.correctness;
+        const isCorrected1 = !!archRec1.corrected;
+        assert.strictEqual(correctness1 === '有錯' && !isCorrected1, true, '學生甲應列入未訂正');
+
+        // 驗證未簽名判斷：學生甲已繳未簽
+        const status1 = deriveRecordStatus(null, archRec1.status);
+        const signStatus1 = deriveRecordSign(null, archRec1.signStatus);
+        assert.strictEqual(status1 === '已繳' && signStatus1 !== '已簽名', true, '學生甲應列入未簽名');
+
+        // 驗證未繳判斷：學生乙未繳，學生丙抽離，學生戊沒寫任務
+        const archRec2 = testArchiveDoc.records.find(r => r.studentId === 's2');
+        const status2 = deriveRecordStatus(null, archRec2.status);
+        assert.strictEqual(status2 !== '已繳', true, '學生乙應列入未繳');
+
+        const archRec3 = testArchiveDoc.records.find(r => r.studentId === 's3');
+        assert.strictEqual(archRec3.pulledOut, true, '學生丙抽離應被排除');
+
+        const archRec5 = testArchiveDoc.records.find(r => r.studentId === 's5');
+        assert.strictEqual(archRec5.correctness === '沒寫任務', true, '學生戊沒寫任務應被豁免排除於未繳');
+
+        // 完整驗證 computeGlobalPopupLists（即使多個聯絡簿封存、同 ID 碰撞亦全部正確列出）
+        const activeContactId = 'daily-聯絡簿每日任務-2026-11-04';
+        const olderArchiveDoc = {
+            id: 'arc_1102',
+            timestamp: 1762070400000,
+            dateLabel: '2026/11/02',
+            assignments: [{ id: activeContactId, name: '聯絡簿每日任務', subjectName: '聯絡簿', needsSign: true }],
+            records: [
+                { studentId: 's4', assignmentId: activeContactId, status: '未繳', signStatus: '未簽名', correctness: '', corrected: false }
+            ]
+        };
+        const popupLists = computeGlobalPopupLists({
+            settings: {
+                students: testStudents,
+                subjects: [{ id: 'subj_c', name: '聯絡簿' }],
+                assignments: [{ id: activeContactId, name: '聯絡簿每日任務', subjectId: 'subj_c', needsSign: true }]
+            },
+            records: [{ studentId: 's4', assignmentId: activeContactId, status: '已繳', signStatus: '已簽名' }], // 今日已繳不應覆蓋 11/02 同 ID 封存快照
+            gradingRecords: [],
+            archiveDocsList: [
+                { ...testArchiveDoc, timestamp: 1762156800000 },
+                olderArchiveDoc
+            ],
+            archiveDocsMap: testArchiveDocsMap,
+            extraPastAssignments: testExtraPast
+        });
+        assert.strictEqual(popupLists.missingBlocks.length, 2, '兩個日期的聯絡簿封存未繳皆應完整呈現');
+        assert.strictEqual(popupLists.missingBlocks[0].displayName, '2026/11/03 聯絡簿每日任務');
+        assert.deepStrictEqual(popupLists.missingBlocks[0].studentNames, ['學生乙']);
+        assert.strictEqual(popupLists.missingBlocks[1].displayName, '2026/11/02 聯絡簿每日任務');
+        assert.deepStrictEqual(popupLists.missingBlocks[1].studentNames, ['學生丁']);
+        assert.strictEqual(popupLists.uncorrectedBlocks.length, 1);
+        assert.deepStrictEqual(popupLists.uncorrectedBlocks[0].studentNames, ['學生甲']);
+        assert.strictEqual(popupLists.unsignedBlocks.length, 1);
+        assert.deepStrictEqual(popupLists.unsignedBlocks[0].studentNames, ['學生甲']);
+    }
+
+    // 14. 補繳／補簽／請假備註同步與標準化驗證
+    {
+        let rmk = '';
+        rmk = appendMakeupSubmitRemark(rmk, '2026/11/03 16:00:00');
+        assert.strictEqual(rmk, '已補繳（2026/11/03 16:00:00）', '補繳應寫入已補繳文字');
+        rmk = appendMakeupSignRemark(rmk, '2026/11/03 16:05:00');
+        assert.strictEqual(rmk, '已補繳（2026/11/03 16:00:00） / 已補簽（2026/11/03 16:05:00）', '補簽應保留既有已補繳文字');
+        rmk = toggleLeaveRemark(rmk, true);
+        assert.strictEqual(rmk, '請假 / 已補繳（2026/11/03 16:00:00） / 已補簽（2026/11/03 16:05:00）', '標記請假應保留補繳與補簽紀錄');
+        rmk = removeMakeupSignRemark(rmk);
+        assert.strictEqual(rmk, '請假 / 已補繳（2026/11/03 16:00:00）', '取消補簽僅移除補簽段落');
+        rmk = removeMakeupSubmitRemark(rmk);
+        assert.strictEqual(rmk, '請假', '改回未繳仍保留請假標記');
+
+        // 舊格式「已補交 / 補簽」自動標準化為「已補繳 / 已補簽」
+        const derived = deriveRecordRemark(
+            { status: '已繳', signStatus: '已簽名', remark: '補簽（11/03）' },
+            { status: '已繳', signStatus: '未簽名', remark: '已補交（11/02）', isLeave: true }
+        );
+        assert.strictEqual(derived, '請假 / 已補繳（11/02） / 已補簽（11/03）');
+    }
+
+    // 15. 期中／期末補繳與請假（另外算）統計驗證
+    {
+        const students = [
+            { id: 's1', name: '王小明', seat: '1' },
+            { id: 's2', name: '李小華', seat: '2' },
+            { id: 's3', name: '張全勤', seat: '3' }
+        ];
+        const archSep = {
+            id: 'arc_0925',
+            timestamp: new Date('2026-09-25T16:00:00').getTime(),
+            dateLabel: '9/25',
+            assignments: [{ id: 'hw_sep', name: '數習 P.10', subjectName: '數學' }],
+            records: [
+                { studentId: 's1', assignmentId: 'hw_sep', assignmentName: '數習 P.10', status: '已繳', remark: '已補繳（9/26）', isMakeup: true, isLeave: false },
+                { studentId: 's2', assignmentId: 'hw_sep', assignmentName: '數習 P.10', status: '已繳', remark: '請假 / 已補繳（9/26）', isMakeup: true, isLeave: true },
+                { studentId: 's3', assignmentId: 'hw_sep', assignmentName: '數習 P.10', status: '已繳', remark: '', isMakeup: false, isLeave: false }
+            ]
+        };
+        const archOct = {
+            id: 'arc_1020',
+            timestamp: new Date('2026-10-20T16:00:00').getTime(),
+            dateLabel: '2026/10/20',
+            assignments: [{ id: 'hw_oct', name: '國習 L5', subjectName: '國語' }],
+            records: [
+                { studentId: 's1', assignmentId: 'hw_oct', assignmentName: '國習 L5', status: '未繳', remark: '', isMakeup: false, isLeave: false },
+                { studentId: 's2', assignmentId: 'hw_oct', assignmentName: '國習 L5', status: '未繳', remark: '請假', isMakeup: false, isLeave: true },
+                { studentId: 's3', assignmentId: 'hw_oct', assignmentName: '國習 L5', status: '已繳', remark: '', isMakeup: false, isLeave: false }
+            ]
+        };
+
+        assert.strictEqual(resolveAssignmentISODate({ dateLabel: '9/25', timestamp: archSep.timestamp }, 'hw_sep'), '2026-09-25');
+
+        const stats = computeMakeupAndLeaveStats({
+            settings: { className: '608', students, assignments: [] },
+            records: [],
+            gradingRecords: [],
+            archiveDocsList: [archOct, archSep],
+            startDate: '2026-09-01',
+            endDate: '2026-11-05',
+            includeContactBook: true,
+            includeActive: false,
+            includeCleanStudents: false
+        });
+
+        assert.strictEqual(stats.assignmentCount, 2);
+        assert.strictEqual(stats.students.length, 2, '全勤無補繳請假者預設不顯示');
+        const st1 = stats.students.find(x => x.studentId === 's1');
+        const st2 = stats.students.find(x => x.studentId === 's2');
+        assert.strictEqual(st1.regularMakeup.length, 1, '王小明一般補繳 1 件');
+        assert.strictEqual(st1.regularMissing.length, 1, '王小明一般未繳 1 件');
+        assert.strictEqual(st1.totalLeaveCount, 0);
+
+        assert.strictEqual(st2.regularMakeup.length, 0, '李小華因請假補繳不計入一般補繳');
+        assert.strictEqual(st2.regularMissing.length, 0, '李小華因請假未繳不計入一般未繳');
+        assert.strictEqual(st2.leaveMakeup.length, 1, '李小華因請假已補繳另外算 1 件');
+        assert.strictEqual(st2.leaveMissing.length, 1, '李小華因請假未繳另外算 1 件');
+
+        const report = formatMakeupAndLeaveReport(stats, { className: '608', startDate: '2026-09-01', endDate: '2026-11-05' });
+        assert.strictEqual(report.includes('因請假已補繳（另外算）'), true);
+        assert.strictEqual(report.includes('因請假未繳（另外算）'), true);
     }
 }
 

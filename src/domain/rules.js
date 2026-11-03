@@ -420,26 +420,683 @@ export function deriveRecordSign(liveRecord, archiveRecord) {
     return '未簽名';
 }
 
+const LEAVE_SEGMENT_RE = /(?:請假|病假|事假|公假|喪假)/;
+const MAKEUP_SUBMIT_SEGMENT_RE = /(?:已補繳|已補交|補繳|補交|狀態改已繳)/;
+const MAKEUP_SIGN_SEGMENT_RE = /(?:已補簽|補簽)/;
+
+function normalizeRemarkSegment(seg) {
+    const s = String(seg || '').trim();
+    if (!s) return '';
+    if (s === '已補交' || s === '補交') return '已補繳';
+    if (s.startsWith('已補交（') || s.startsWith('已補交(')) return '已補繳' + s.slice(3);
+    if (s.startsWith('補交（') || s.startsWith('補交(')) return '已補繳' + s.slice(2);
+    if (s === '補簽') return '已補簽';
+    if (s.startsWith('補簽（') || s.startsWith('補簽(')) return '已補簽' + s.slice(2);
+    return s;
+}
+
+function splitRemarkSegments(remark) {
+    if (!remark) return [];
+    const str = String(remark);
+    const out = [];
+    let buf = '';
+    let depth = 0;
+    for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        if (ch === '(' || ch === '（') {
+            depth++;
+            buf += ch;
+        } else if (ch === ')' || ch === '）') {
+            if (depth > 0) depth--;
+            buf += ch;
+        } else if (depth === 0 && ch === '/') {
+            const prev = i > 0 ? str[i - 1] : '';
+            const next = i + 1 < str.length ? str[i + 1] : '';
+            if (/\d/.test(prev) && /\d/.test(next)) {
+                buf += ch;
+            } else {
+                const norm = normalizeRemarkSegment(buf);
+                if (norm) out.push(norm);
+                buf = '';
+            }
+        } else {
+            buf += ch;
+        }
+    }
+    const last = normalizeRemarkSegment(buf);
+    if (last) out.push(last);
+    return out;
+}
+
+/**
+ * 新增或更新「已補繳」備註標籤（保留請假與已補簽等既有紀錄，不互相覆蓋）
+ */
+export function appendMakeupSubmitRemark(existingRemark, timeStr) {
+    const segs = splitRemarkSegments(existingRemark).filter(s => !MAKEUP_SUBMIT_SEGMENT_RE.test(s));
+    const tag = timeStr ? `已補繳（${timeStr}）` : '已補繳';
+    const signIdx = segs.findIndex(s => MAKEUP_SIGN_SEGMENT_RE.test(s));
+    if (signIdx !== -1) {
+        segs.splice(signIdx, 0, tag);
+    } else {
+        segs.push(tag);
+    }
+    return segs.join(' / ');
+}
+
+/**
+ * 移除「已補繳」備註標籤（當狀態改回未繳時，保留請假等其他備註）
+ */
+export function removeMakeupSubmitRemark(existingRemark) {
+    return splitRemarkSegments(existingRemark)
+        .filter(s => !MAKEUP_SUBMIT_SEGMENT_RE.test(s))
+        .join(' / ');
+}
+
+/**
+ * 新增或更新「已補簽」備註標籤（保留請假與已補繳等既有紀錄，不互相覆蓋）
+ */
+export function appendMakeupSignRemark(existingRemark, timeStr) {
+    const segs = splitRemarkSegments(existingRemark).filter(s => !MAKEUP_SIGN_SEGMENT_RE.test(s));
+    segs.push(timeStr ? `已補簽（${timeStr}）` : '已補簽');
+    return segs.join(' / ');
+}
+
+/**
+ * 移除「已補簽」備註標籤（當簽名改回未簽名時，保留請假與已補繳等備註）
+ */
+export function removeMakeupSignRemark(existingRemark) {
+    return splitRemarkSegments(existingRemark)
+        .filter(s => !MAKEUP_SIGN_SEGMENT_RE.test(s))
+        .join(' / ');
+}
+
+/**
+ * 切換「請假」備註標籤（保留已補繳、已補簽等其他備註）
+ */
+export function toggleLeaveRemark(existingRemark, shouldBeLeave) {
+    const segs = splitRemarkSegments(existingRemark).filter(s => !LEAVE_SEGMENT_RE.test(s));
+    if (shouldBeLeave) {
+        segs.unshift('請假');
+    }
+    return segs.join(' / ');
+}
+
+/**
+ * 判斷該筆紀錄是否屬於「請假」
+ */
+export function isRecordLeave(liveRecord, archiveRecord) {
+    const lObj = (liveRecord && typeof liveRecord === 'object') ? liveRecord : null;
+    const aObj = (archiveRecord && typeof archiveRecord === 'object') ? archiveRecord : null;
+    const lLeave = !!(lObj && (lObj.isLeave || LEAVE_SEGMENT_RE.test(lObj.remark || '')));
+    const aLeave = !!(aObj && (aObj.isLeave || LEAVE_SEGMENT_RE.test(aObj.remark || '')));
+    return lLeave || aLeave;
+}
+
+/**
+ * 判斷該筆紀錄是否屬於「補繳」（需目前已繳，且具備補繳標記或補繳備註）
+ */
+export function isRecordMakeup(liveRecord, archiveRecord, effStatus = null) {
+    const resolvedStatus = effStatus || deriveRecordStatus(liveRecord, archiveRecord);
+    if (resolvedStatus !== '已繳') return false;
+    const lObj = (liveRecord && typeof liveRecord === 'object') ? liveRecord : null;
+    const aObj = (archiveRecord && typeof archiveRecord === 'object') ? archiveRecord : null;
+    const lMakeup = !!(lObj && (lObj.isMakeup || MAKEUP_SUBMIT_SEGMENT_RE.test(lObj.remark || '')));
+    const aMakeup = !!(aObj && (aObj.isMakeup || MAKEUP_SUBMIT_SEGMENT_RE.test(aObj.remark || '')));
+    return lMakeup || aMakeup;
+}
+
+/**
+ * 安全合併活紀錄與封存紀錄的備註文字（確保請假、已補繳、已補簽同時完整保留並標準化）
+ */
+export function deriveRecordRemark(liveRecord, archiveRecord) {
+    const lObj = (liveRecord && typeof liveRecord === 'object') ? liveRecord : null;
+    const aObj = (archiveRecord && typeof archiveRecord === 'object') ? archiveRecord : null;
+    const effStatus = deriveRecordStatus(lObj, aObj);
+    const effSign = deriveRecordSign(lObj, aObj);
+    const leave = isRecordLeave(lObj, aObj);
+
+    const aSegs = splitRemarkSegments(aObj ? aObj.remark : '');
+    const lSegs = splitRemarkSegments(lObj ? lObj.remark : '');
+
+    let leaveSeg = lSegs.find(s => LEAVE_SEGMENT_RE.test(s)) || aSegs.find(s => LEAVE_SEGMENT_RE.test(s)) || (leave ? '請假' : '');
+    if (!leave) leaveSeg = '';
+
+    let submitSeg = '';
+    if (effStatus === '已繳') {
+        submitSeg = lSegs.find(s => MAKEUP_SUBMIT_SEGMENT_RE.test(s)) || aSegs.find(s => MAKEUP_SUBMIT_SEGMENT_RE.test(s)) || '';
+        if (!submitSeg && isRecordMakeup(lObj, aObj, effStatus)) submitSeg = '已補繳';
+    }
+
+    let signSeg = '';
+    if (effSign === '已簽名') {
+        signSeg = lSegs.find(s => MAKEUP_SIGN_SEGMENT_RE.test(s)) || aSegs.find(s => MAKEUP_SIGN_SEGMENT_RE.test(s)) || '';
+    }
+
+    const others = [];
+    [...aSegs, ...lSegs].forEach(s => {
+        if (LEAVE_SEGMENT_RE.test(s) || MAKEUP_SUBMIT_SEGMENT_RE.test(s) || MAKEUP_SIGN_SEGMENT_RE.test(s)) return;
+        if (!others.includes(s)) others.push(s);
+    });
+
+    return [leaveSeg, submitSeg, signSeg, ...others].filter(Boolean).join(' / ');
+}
+
 /**
  * 清理並標準化封存紀錄陣列，消除所有 undefined 欄位避免 Firestore setDoc 拒絕寫入
  */
 export function sanitizeArchiveRecords(records) {
-    return (records || []).map(r => ({
-        groupId: r.groupId || '',
-        groupName: r.groupName || '',
-        studentId: r.studentId || '',
-        studentName: r.studentName || '',
-        subjectId: r.subjectId || '',
-        subjectName: r.subjectName || '',
-        assignmentId: r.assignmentId || '',
-        assignmentName: r.assignmentName || '',
-        status: r.status || '未繳',
-        signStatus: r.signStatus || '未簽名',
-        correctness: r.correctness || '',
-        corrected: !!r.corrected,
-        remark: r.remark || '',
-        pointsGiven: !!r.pointsGiven,
-        pulledOut: !!r.pulledOut
-    }));
+    return (records || []).map(r => {
+        const remark = r.remark ? splitRemarkSegments(r.remark).join(' / ') : '';
+        const isLeave = (typeof r.isLeave === 'boolean') ? (r.isLeave || LEAVE_SEGMENT_RE.test(remark)) : LEAVE_SEGMENT_RE.test(remark);
+        const isMakeup = (r.status === '已繳')
+            ? ((typeof r.isMakeup === 'boolean') ? (r.isMakeup || MAKEUP_SUBMIT_SEGMENT_RE.test(remark)) : MAKEUP_SUBMIT_SEGMENT_RE.test(remark))
+            : false;
+        return {
+            groupId: r.groupId || '',
+            groupName: r.groupName || '',
+            studentId: r.studentId || '',
+            studentName: r.studentName || '',
+            subjectId: r.subjectId || '',
+            subjectName: r.subjectName || '',
+            assignmentId: r.assignmentId || '',
+            assignmentName: r.assignmentName || '',
+            status: r.status || '未繳',
+            signStatus: r.signStatus || '未簽名',
+            correctness: r.correctness || '',
+            corrected: !!r.corrected,
+            remark,
+            pointsGiven: !!r.pointsGiven,
+            pulledOut: !!r.pulledOut,
+            isLeave: !!isLeave,
+            isMakeup: !!isMakeup
+        };
+    });
+}
+
+/**
+ * 解析作業對應的實際西元日期 (YYYY-MM-DD)，供期中/期末區間篩選使用
+ */
+export function resolveAssignmentISODate(info = {}, id = '', fallbackYear = new Date().getFullYear()) {
+    const str = `${info.dateLabel || ''} ${info.name || ''} ${id || ''}`;
+    const m4 = str.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+    if (m4) {
+        return `${m4[1]}-${m4[2].padStart(2, '0')}-${m4[3].padStart(2, '0')}`;
+    }
+    const m2 = str.match(/(?:^|\s|[^\d])(\d{1,2})[/-](\d{1,2})(?:$|\s|[^\d])/);
+    if (m2) {
+        const y = info.timestamp ? new Date(info.timestamp).getFullYear() : fallbackYear;
+        return `${y}-${m2[1].padStart(2, '0')}-${m2[2].padStart(2, '0')}`;
+    }
+    if (info.timestamp) {
+        const d = new Date(info.timestamp);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    if (info.isActive) {
+        return todayISODate();
+    }
+    return '';
+}
+
+/**
+ * 收集所有作業項目（含目前作業與所有歷史封存快照，確保聯絡簿封存與同 ID 封存絕不遺漏）
+ */
+export function collectUnifiedAssignmentEntries({
+    settings = {},
+    records = [],
+    gradingRecords = [],
+    archiveDocsList = null,
+    archiveDocsMap = {},
+    extraPastAssignments = {}
+} = {}) {
+    const st = settings || {};
+    const subjects = st.subjects || [];
+    const activeAssignments = st.assignments || [];
+    const subjNameOf = a => {
+        if (a.subjectName) return a.subjectName;
+        const s = subjects.find(x => x.id === a.subjectId);
+        return s ? s.name : (a.name === '聯絡簿每日任務' ? '聯絡簿' : '');
+    };
+
+    const activeNonContact = activeAssignments.filter(a => a.name !== '聯絡簿每日任務');
+    const activeNonContactIds = new Set(activeNonContact.map(a => a.id));
+    const activeContactIds = new Set(activeAssignments.filter(a => a.name === '聯絡簿每日任務').map(a => a.id));
+
+    // 建立去重且依時間降冪排列的封存文件清單
+    let docs = [];
+    if (Array.isArray(archiveDocsList) && archiveDocsList.length) {
+        docs = [...archiveDocsList];
+    } else if (archiveDocsMap && typeof archiveDocsMap === 'object') {
+        const seenDocs = new Set();
+        Object.values(archiveDocsMap).forEach(d => {
+            if (d && typeof d === 'object' && !seenDocs.has(d)) {
+                seenDocs.add(d);
+                docs.push(d);
+            }
+        });
+    }
+    docs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    // 統計每個 assignmentId 在封存文件中出現幾次（避免舊資料同 ID 跨文件互相干擾）
+    const aidArchiveCount = new Map();
+    docs.forEach(docItem => {
+        const docAsgs = (docItem.assignments && docItem.assignments.length)
+            ? docItem.assignments
+            : Array.from(new Set((docItem.records || []).map(r => r.assignmentId).filter(Boolean))).map(aid => {
+                const r0 = (docItem.records || []).find(r => r.assignmentId === aid) || {};
+                return { id: aid, name: r0.assignmentName || '未命名作業' };
+            });
+        docAsgs.forEach(a => {
+            if (!a || !a.id) return;
+            aidArchiveCount.set(a.id, (aidArchiveCount.get(a.id) || 0) + 1);
+        });
+    });
+
+    const entries = [];
+    const coveredArchiveAids = new Set();
+
+    // 1. 今日活動中作業（依傳入需求決定是否含聯絡簿，由呼叫端過濾 isActiveContact）
+    activeAssignments.forEach(a => {
+        const isContact = a.name === '聯絡簿每日任務';
+        entries.push({
+            entryKey: `active_${a.id}`,
+            assignmentId: a.id,
+            name: a.name,
+            subjectName: subjNameOf(a),
+            needsSign: !!(a.needsSign || a.signOnly || isContact),
+            signOnly: !!a.signOnly,
+            dateLabel: todayStr(),
+            isoDate: todayISODate(),
+            timestamp: Date.now(),
+            isActive: true,
+            isActiveContact: isContact,
+            archiveDoc: null,
+            useLive: true
+        });
+    });
+
+    // 2. 所有封存文件內的作業（包含聯絡簿封存）
+    const archivedEntries = [];
+    docs.forEach((docItem, docIdx) => {
+        const docId = docItem._id || docItem.id || `doc_${docIdx}`;
+        const dateLabel = docItem.dateLabel || (docItem.timestamp ? new Date(docItem.timestamp).toLocaleDateString('zh-TW') : '');
+        const docAsgs = (docItem.assignments && docItem.assignments.length)
+            ? docItem.assignments
+            : Array.from(new Set((docItem.records || []).map(r => r.assignmentId).filter(Boolean))).map(aid => {
+                const r0 = (docItem.records || []).find(r => r.assignmentId === aid) || {};
+                const aName = r0.assignmentName || '未命名作業';
+                return {
+                    id: aid,
+                    name: aName,
+                    subjectName: aName === '聯絡簿每日任務' ? '聯絡簿' : '未分類',
+                    needsSign: aName === '聯絡簿每日任務',
+                    signOnly: false
+                };
+            });
+
+        docAsgs.forEach(a => {
+            if (!a || !a.id) return;
+            const isContact = a.name === '聯絡簿每日任務';
+            // 若一般作業已還原回今日活動中作業，避免重複計算；但封存的聯絡簿永遠獨立保留！
+            if (!isContact && activeNonContactIds.has(a.id)) return;
+            coveredArchiveAids.add(a.id);
+            const collidesWithActiveContact = isContact && activeContactIds.has(a.id);
+            const hasDuplicateArchiveId = (aidArchiveCount.get(a.id) || 0) > 1;
+            const infoObj = { dateLabel, name: a.name, timestamp: docItem.timestamp };
+            archivedEntries.push({
+                entryKey: `arch_${docId}_${a.id}`,
+                assignmentId: a.id,
+                archiveDocId: docId,
+                name: a.name,
+                subjectName: a.subjectName || (isContact ? '聯絡簿' : subjNameOf(a)),
+                needsSign: !!(a.needsSign || a.signOnly || isContact || (docItem.records || []).some(r => r.assignmentId === a.id && r.signStatus && r.signStatus !== '未簽名')),
+                signOnly: !!a.signOnly,
+                dateLabel,
+                isoDate: resolveAssignmentISODate(infoObj, a.id),
+                timestamp: docItem.timestamp || 0,
+                isActive: false,
+                isActiveContact: false,
+                archiveDoc: docItem,
+                useLive: !collidesWithActiveContact && !hasDuplicateArchiveId
+            });
+        });
+    });
+
+    // 3. 補齊僅存在於 extraPastAssignments 或 gradingRecords 的歷史作業（向下相容舊資料）
+    if (extraPastAssignments && typeof extraPastAssignments === 'object') {
+        Object.entries(extraPastAssignments).forEach(([aid, info]) => {
+            if (coveredArchiveAids.has(aid) || activeNonContactIds.has(aid) || activeContactIds.has(aid)) return;
+            const isContact = info.name === '聯絡簿每日任務';
+            coveredArchiveAids.add(aid);
+            const archDoc = archiveDocsMap ? archiveDocsMap[aid] : null;
+            archivedEntries.push({
+                entryKey: `extra_${aid}`,
+                assignmentId: aid,
+                archiveDocId: archDoc ? (archDoc._id || archDoc.id || '') : '',
+                name: info.name || '未命名作業',
+                subjectName: info.subjectName || (isContact ? '聯絡簿' : '未分類'),
+                needsSign: !!(info.needsSign || info.signOnly || isContact),
+                signOnly: !!info.signOnly,
+                dateLabel: info.dateLabel || '',
+                isoDate: resolveAssignmentISODate(info, aid),
+                timestamp: info.timestamp || (archDoc ? archDoc.timestamp || 0 : 0),
+                isActive: false,
+                isActiveContact: false,
+                archiveDoc: archDoc || null,
+                useLive: true
+            });
+        });
+    }
+
+    (gradingRecords || []).forEach(g => {
+        if (!g || !g.assignmentId || !g.assignmentName) return;
+        const aid = g.assignmentId;
+        if (coveredArchiveAids.has(aid) || activeNonContactIds.has(aid) || activeContactIds.has(aid)) return;
+        coveredArchiveAids.add(aid);
+        const isContact = g.assignmentName === '聯絡簿每日任務';
+        const m = aid.match(/^daily-.+-(\d{4})-(\d{2})-(\d{2})/);
+        const dateLabel = m ? `${m[1]}/${m[2]}/${m[3]}` : '';
+        const infoObj = { dateLabel, name: g.assignmentName, timestamp: g.updatedAt };
+        archivedEntries.push({
+            entryKey: `grading_${aid}`,
+            assignmentId: aid,
+            archiveDocId: '',
+            name: g.assignmentName,
+            subjectName: isContact ? '聯絡簿' : '未分類',
+            needsSign: isContact,
+            signOnly: false,
+            dateLabel,
+            isoDate: resolveAssignmentISODate(infoObj, aid),
+            timestamp: g.updatedAt || 0,
+            isActive: false,
+            isActiveContact: false,
+            archiveDoc: null,
+            useLive: true
+        });
+    });
+
+    archivedEntries.sort((a, b) => {
+        const keyA = getAssignmentDateKey(a, a.assignmentId);
+        const keyB = getAssignmentDateKey(b, b.assignmentId);
+        if (keyA && keyB && keyA !== keyB) return keyB.localeCompare(keyA);
+        if ((b.timestamp || 0) !== (a.timestamp || 0)) return (b.timestamp || 0) - (a.timestamp || 0);
+        return (b.name || '').localeCompare(a.name || '', 'zh-Hant');
+    });
+
+    return [...entries, ...archivedEntries];
+}
+
+/**
+ * 計算「訂正與加點」上方彈窗清單（未繳清單、未訂正清單、未簽名清單）
+ * 確保聯絡簿封存後的未繳、未訂正、未簽名 100% 納入統計
+ */
+export function computeGlobalPopupLists({
+    settings = {},
+    records = [],
+    gradingRecords = [],
+    archiveDocsList = null,
+    archiveDocsMap = {},
+    extraPastAssignments = {}
+} = {}) {
+    const students = sortBySeat((settings && settings.students) || []);
+    const allEntries = collectUnifiedAssignmentEntries({
+        settings,
+        records,
+        gradingRecords,
+        archiveDocsList,
+        archiveDocsMap,
+        extraPastAssignments
+    }).filter(e => !e.isActiveContact); // 今日尚未封存的聯絡簿在聯絡簿分頁即時處理；封存後的聯絡簿全部納入
+
+    const formatDisplayName = entry => {
+        if (!entry.isActive && entry.dateLabel && !entry.name.includes(entry.dateLabel)) {
+            return `${entry.dateLabel} ${entry.name}`;
+        }
+        return entry.name;
+    };
+
+    const missingBlocks = [];
+    const uncorrectedBlocks = [];
+    const unsignedBlocks = [];
+
+    allEntries.forEach(entry => {
+        const id = entry.assignmentId;
+        const archDoc = entry.archiveDoc;
+        const isContact = entry.name === '聯絡簿每日任務';
+        const displayName = formatDisplayName(entry);
+
+        const hasGrading = entry.useLive && (gradingRecords || []).some(g => g.assignmentId === id);
+        const hasRecord = entry.useLive && (records || []).some(r => r.assignmentId === id);
+
+        // 1. 未繳清單
+        if (entry.isActive || archDoc || hasGrading || hasRecord) {
+            const missing = students.filter(s => {
+                if (isPulledOut(s, entry.subjectName, entry.name)) return false;
+                const archRec = archDoc && (archDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === id);
+                if (archRec && archRec.pulledOut) return false;
+                const liveG = entry.useLive ? (gradingRecords || []).find(x => x.studentId === s.id && x.assignmentId === id) : null;
+                const correctness = (liveG && liveG.correctness !== undefined) ? liveG.correctness : (archRec ? archRec.correctness || '' : '');
+                if (correctness === '遺失' || correctness === '沒寫任務') return false;
+                const liveRec = entry.useLive ? (records || []).find(r => r.studentId === s.id && r.assignmentId === id) : null;
+                const status = deriveRecordStatus(liveRec, archRec ? archRec.status : '未繳');
+                return status !== '已繳';
+            });
+            if (missing.length) {
+                missingBlocks.push({
+                    entryKey: entry.entryKey,
+                    assignmentId: id,
+                    displayName,
+                    studentNames: missing.map(s => s.name)
+                });
+            }
+        }
+
+        // 2. 未訂正清單
+        if (!entry.signOnly) {
+            const hasAnyGrading = hasGrading || (archDoc && (archDoc.records || []).some(r => r.assignmentId === id && (r.correctness || r.corrected)));
+            if (hasAnyGrading) {
+                const uncorrected = students.filter(s => {
+                    if (isPulledOut(s, entry.subjectName, entry.name)) return false;
+                    const archRec = archDoc && (archDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === id);
+                    if (archRec && archRec.pulledOut) return false;
+                    const liveG = entry.useLive ? (gradingRecords || []).find(x => x.studentId === s.id && x.assignmentId === id) : null;
+                    const correctness = (liveG && liveG.correctness !== undefined) ? liveG.correctness : (archRec ? archRec.correctness || '' : '');
+                    const isCorrected = (liveG && liveG.corrected !== undefined) ? !!liveG.corrected : (archRec ? !!archRec.corrected : false);
+                    return correctness === '有錯' && !isCorrected;
+                });
+                if (uncorrected.length) {
+                    uncorrectedBlocks.push({
+                        entryKey: entry.entryKey,
+                        assignmentId: id,
+                        displayName,
+                        studentNames: uncorrected.map(s => s.name)
+                    });
+                }
+            }
+        }
+
+        // 3. 未簽名清單
+        if (entry.needsSign || entry.signOnly || isContact) {
+            const unsigned = students.filter(s => {
+                if (isPulledOut(s, entry.subjectName, entry.name)) return false;
+                const archRec = archDoc && (archDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === id);
+                if (archRec && archRec.pulledOut) return false;
+                const liveRec = entry.useLive ? (records || []).find(r => r.studentId === s.id && r.assignmentId === id) : null;
+                const status = deriveRecordStatus(liveRec, archRec ? archRec.status : '未繳');
+                const signStatus = deriveRecordSign(liveRec, archRec ? archRec.signStatus : '未簽名');
+                if (isContact) {
+                    if (status !== '已繳') return false;
+                    return signStatus !== '已簽名';
+                }
+                const isExamOrTest = isExamAssignment(entry.name);
+                if (!entry.signOnly && !isExamOrTest && status !== '已繳') return false;
+                return signStatus !== '已簽名';
+            });
+            if (unsigned.length) {
+                unsignedBlocks.push({
+                    entryKey: entry.entryKey,
+                    assignmentId: id,
+                    displayName,
+                    studentNames: unsigned.map(s => s.name)
+                });
+            }
+        }
+    });
+
+    return { missingBlocks, uncorrectedBlocks, unsignedBlocks };
+}
+
+/**
+ * 期中/期末作業成績結算：統計每位學生的「一般補繳 / 一般缺交」與「因請假補繳 / 因請假缺交（另外算）」
+ */
+export function computeMakeupAndLeaveStats({
+    settings = {},
+    records = [],
+    gradingRecords = [],
+    archiveDocsList = null,
+    archiveDocsMap = {},
+    extraPastAssignments = {},
+    startDate = '',
+    endDate = '',
+    includeContactBook = true,
+    includeActive = false,
+    includeCleanStudents = false
+} = {}) {
+    const students = sortBySeat((settings && settings.students) || []);
+    const allEntries = collectUnifiedAssignmentEntries({
+        settings,
+        records,
+        gradingRecords,
+        archiveDocsList,
+        archiveDocsMap,
+        extraPastAssignments
+    }).filter(entry => {
+        if (entry.isActive && !includeActive) return false;
+        if (!includeContactBook && entry.name === '聯絡簿每日任務') return false;
+        if (startDate && entry.isoDate && entry.isoDate < startDate) return false;
+        if (endDate && entry.isoDate && entry.isoDate > endDate) return false;
+        return true;
+    });
+
+    const studentStats = students.map(s => {
+        const regularMakeup = [];
+        const regularMissing = [];
+        const leaveMakeup = [];
+        const leaveMissing = [];
+
+        allEntries.forEach(entry => {
+            const id = entry.assignmentId;
+            if (isPulledOut(s, entry.subjectName, entry.name)) return;
+            const archDoc = entry.archiveDoc;
+            const archRec = archDoc && (archDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === id);
+            if (archRec && archRec.pulledOut) return;
+
+            const liveRec = entry.useLive ? (records || []).find(r => r.studentId === s.id && r.assignmentId === id) : null;
+            const effStatus = deriveRecordStatus(liveRec, archRec);
+            const effRemark = deriveRecordRemark(liveRec, archRec);
+            const leave = isRecordLeave(liveRec, archRec);
+            const makeup = isRecordMakeup(liveRec, archRec, effStatus);
+
+            const displayName = (!entry.isActive && entry.dateLabel && !entry.name.includes(entry.dateLabel))
+                ? `${entry.dateLabel} ${entry.name}`
+                : (entry.isActive ? `今日 ${entry.name}` : entry.name);
+
+            const detailItem = {
+                entryKey: entry.entryKey,
+                assignmentId: id,
+                archiveDocId: entry.archiveDocId || (archDoc ? (archDoc._id || archDoc.id || '') : ''),
+                isActive: !!entry.isActive,
+                dateLabel: entry.dateLabel || '',
+                isoDate: entry.isoDate || '',
+                assignmentName: entry.name,
+                subjectName: entry.subjectName || '',
+                displayName,
+                status: effStatus,
+                remark: effRemark,
+                isLeave: leave,
+                isMakeup: makeup
+            };
+
+            if (leave) {
+                if (effStatus === '已繳') {
+                    leaveMakeup.push(detailItem);
+                } else {
+                    leaveMissing.push(detailItem);
+                }
+            } else if (effStatus === '已繳' && makeup) {
+                regularMakeup.push(detailItem);
+            } else if (effStatus !== '已繳') {
+                regularMissing.push(detailItem);
+            }
+        });
+
+        const totalRegularCount = regularMakeup.length + regularMissing.length;
+        const totalLeaveCount = leaveMakeup.length + leaveMissing.length;
+
+        return {
+            studentId: s.id,
+            studentName: s.name,
+            seat: s.seat,
+            regularMakeup,
+            regularMissing,
+            leaveMakeup,
+            leaveMissing,
+            totalRegularCount,
+            totalLeaveCount,
+            hasAnyRecord: (totalRegularCount + totalLeaveCount) > 0
+        };
+    });
+
+    const filteredStudents = includeCleanStudents
+        ? studentStats
+        : studentStats.filter(stItem => stItem.hasAnyRecord);
+
+    return {
+        assignmentCount: allEntries.length,
+        students: filteredStudents,
+        allStudentsCount: students.length
+    };
+}
+
+/**
+ * 將補繳與請假統計格式化為可一鍵複製的純文字報表
+ */
+export function formatMakeupAndLeaveReport(statsResult, { className = '', startDate = '', endDate = '', includeContactBook = true } = {}) {
+    const rangeText = (startDate || endDate) ? `${startDate || '開學'} ~ ${endDate || '今日'}` : '全部期間';
+    const scopeText = includeContactBook ? '含聯絡簿' : '不含聯絡簿';
+    const title = `【${className ? className + ' ' : ''}作業補繳與請假統計】`;
+    const header = `${title}\n統計期間：${rangeText}（${scopeText}，共 ${statsResult.assignmentCount} 項作業）`;
+
+    if (!statsResult.students || !statsResult.students.length) {
+        return `${header}\n目前期間內無補繳、缺交或請假紀錄。`;
+    }
+
+    const lines = statsResult.students.map(stItem => {
+        const sName = String(stItem.studentName || '').trim();
+        const hasSeatPrefix = stItem.seat != null && stItem.seat !== '' && !sName.startsWith(String(stItem.seat));
+        const prefix = hasSeatPrefix ? `${stItem.seat}號 ${sName}` : sName;
+        const summaryParts = [
+            `一般補繳 ${stItem.regularMakeup.length} 件`,
+            `一般未繳 ${stItem.regularMissing.length} 件`
+        ];
+        if (stItem.totalLeaveCount > 0) {
+            summaryParts.push(`請假另外算 ${stItem.totalLeaveCount} 件（請假已補 ${stItem.leaveMakeup.length}、請假未繳 ${stItem.leaveMissing.length}）`);
+        }
+        const detailLines = [];
+        if (stItem.regularMakeup.length) {
+            detailLines.push(`  ・一般補繳：${stItem.regularMakeup.map(x => x.displayName).join('、')}`);
+        }
+        if (stItem.regularMissing.length) {
+            detailLines.push(`  ・一般未繳：${stItem.regularMissing.map(x => x.displayName).join('、')}`);
+        }
+        if (stItem.leaveMakeup.length) {
+            detailLines.push(`  ・因請假已補繳（另外算）：${stItem.leaveMakeup.map(x => x.displayName).join('、')}`);
+        }
+        if (stItem.leaveMissing.length) {
+            detailLines.push(`  ・因請假未繳（另外算）：${stItem.leaveMissing.map(x => x.displayName).join('、')}`);
+        }
+        return [`${prefix}｜${summaryParts.join('｜')}`, ...detailLines].join('\n');
+    });
+
+    return `${header}\n────────────────────\n${lines.join('\n')}`;
 }
 

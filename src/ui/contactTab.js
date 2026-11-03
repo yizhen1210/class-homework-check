@@ -11,7 +11,8 @@ import {
     todayStr,
     todayISODate,
     deriveRecordStatus,
-    deriveRecordSign
+    deriveRecordSign,
+    isRecordLeave
 } from '../domain/rules.js';
 
 import {
@@ -47,6 +48,7 @@ function renderContactRow(s, dailyAsg, dSubj, recs, gradingRecs) {
     const rec = recs.find(r => r.studentId === s.id && r.assignmentId === dailyAsg.id);
     const dStatus = deriveRecordStatus(rec, '未繳');
     const dSign = deriveRecordSign(rec, '未簽名');
+    const dLeave = isRecordLeave(rec, null);
     const dSignDisplay = dSign === '未簽名' ? '未簽' : dSign;
     const g = gradingRecs.find(x => x.studentId === s.id && x.assignmentId === dailyAsg.id);
     const dGrade = g ? g.correctness : '';
@@ -55,9 +57,10 @@ function renderContactRow(s, dailyAsg, dSubj, recs, gradingRecs) {
     const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(dStatus)}" data-daily-status-toggle>${escapeHtml(dStatus)}</button>`;
     const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(dSign)}" data-daily-sign-toggle>${escapeHtml(dSignDisplay)}</button>`;
     const correctedBtn = `<button type="button" class="corrected-btn ${g && g.corrected ? 'active' : ''}" data-daily-corrected="1" style="visibility:${showCorrected ? 'visible' : 'hidden'};pointer-events:${showCorrected ? 'auto' : 'none'}">${g && g.corrected ? '✓訂正' : '訂正'}</button>`;
+    const leaveBadge = dLeave ? `<span class="leave-tag" style="margin-left:6px">請假</span>` : '';
 
     return `<div class="daily-row" data-daily-student="${escapeHtml(s.id)}">
-        <span class="student-name">${sName}</span>
+        <span class="student-name">${sName}${leaveBadge}</span>
         <span class="row-slot-pill">${statusBtn}</span>
         <span class="row-slot-pill">${signBtn}</span>
         <span class="row-slot-icon"><button type="button" class="grade-btn ${dGrade === '全對' ? 'active g-ok' : ''}" data-daily-grade="全對" title="全對">✓</button></span>

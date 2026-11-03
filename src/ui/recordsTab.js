@@ -14,7 +14,8 @@ import {
     formatStudentCell,
     escapeHtml,
     recordDocId,
-    todayStr
+    todayStr,
+    isRecordLeave
 } from '../domain/rules.js';
 
 import {
@@ -245,17 +246,21 @@ export function renderRecordsTab(records, settings, isAdmin, callbacks = {}) {
                 if (isPulledOut(s, subjNameOf(a))) {
                     return `<td><span class="cell-pulled-out">抽離</span></td>`;
                 }
+                const rec = recs.find(x => x.studentId === s.id && x.assignmentId === a.id);
                 const v = statusOf(s.id, a.id);
+                const leaveTag = isRecordLeave(rec, null) ? `<span class="leave-tag">請假</span>` : '';
                 const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(v)}" data-student="${escapeHtml(s.id)}" data-assignment="${escapeHtml(a.id)}">${escapeHtml(v)}</button>`;
                 const isExamOrTest = isExamAssignment(a.name);
                 const showSign = (a.needsSign || a.signOnly) && (a.signOnly || isExamOrTest || v === '已繳');
-                if (!a.needsSign && !a.signOnly) return `<td>${statusBtn}</td>`;
+                if (!a.needsSign && !a.signOnly) {
+                    return leaveTag ? `<td><div class="cell-stack">${statusBtn}${leaveTag}</div></td>` : `<td>${statusBtn}</td>`;
+                }
 
                 const sv = signOf(s.id, a.id);
                 const svDisplay = sv === '未簽名' ? '未簽' : sv;
                 const signBtn = `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(sv)}" data-sign-student="${escapeHtml(s.id)}" data-sign-assignment="${escapeHtml(a.id)}" style="visibility:${showSign ? 'visible' : 'hidden'};pointer-events:${showSign ? 'auto' : 'none'}">${escapeHtml(svDisplay)}</button>`;
                 // 修正：單一 cell-stack，只閉合一個 </div>
-                return `<td><div class="cell-stack">${statusBtn}${signBtn}</div></td>`;
+                return `<td><div class="cell-stack">${statusBtn}${signBtn}${leaveTag}</div></td>`;
             }).join('');
             return `<tr><td>${formatStudentCell(s.name, compactCols)}</td>${cells}</tr>`;
         }).join('') : '';

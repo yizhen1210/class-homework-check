@@ -14,6 +14,7 @@ import {
     loginWithGoogle,
     logout,
     saveSettings,
+    adminSetStatus,
     clearAll,
     clearRecordsForAssignment,
     clearGradingForAssignment,
@@ -32,6 +33,16 @@ import {
     badgeClass,
     signClass,
     escapeHtml,
+    deriveRecordStatus,
+    deriveRecordSign,
+    appendMakeupSubmitRemark,
+    removeMakeupSubmitRemark,
+    appendMakeupSignRemark,
+    removeMakeupSignRemark,
+    toggleLeaveRemark,
+    deriveRecordRemark,
+    isRecordLeave,
+    isRecordMakeup,
     sanitizeArchiveRecords
 } from './domain/rules.js';
 
@@ -40,7 +51,7 @@ import { showAlert, closeAlert, askInput, askConfirm } from './ui/modals.js';
 import { renderPublic } from './ui/publicForm.js';
 import { renderRecordsTab } from './ui/recordsTab.js';
 import { renderContactTab, setContactViewMode } from './ui/contactTab.js';
-import { renderGradingTab, setGradingViewMode } from './ui/gradingTab.js';
+import { renderGradingTab, setGradingViewMode, openMakeupStatsModal } from './ui/gradingTab.js';
 import { renderStudentsTab } from './ui/studentsTab.js';
 
 import {
@@ -74,8 +85,10 @@ let gradingRecords = [];
 let settings = { groups: [], students: [], subjects: [], assignments: [], semester: {} };
 
 const appState = {
+    archiveDocsList: [],
     archiveDocsMap: {},
-    extraPastAssignments: {}
+    extraPastAssignments: {},
+    ensureArchivesLoaded: () => autoLoadArchives()
 };
 
 let stopRecordsListener = null;
@@ -141,40 +154,75 @@ function ensureDailyAssignments(st) {
 export async function autoLoadArchives() {
     try {
         const snap = await getDocs(query(archivesColl, orderBy('timestamp', 'desc')));
-        appState.extraPastAssignments = appState.extraPastAssignments || {};
-        appState.archiveDocsMap = appState.archiveDocsMap || {};
-        const currentIds = new Set(settings && settings.assignments ? settings.assignments.map(a => a.id) : []);
+        const nextExtra = {};
+        const nextMap = {};
+        const nextList = [];
+        const activeNonContactIds = new Set(
+            (settings && settings.assignments ? settings.assignments : [])
+                .filter(a => a.name !== '聯絡簿每日任務')
+                .map(a => a.id)
+        );
+        const activeContactIds = new Set(
+            (settings && settings.assignments ? settings.assignments : [])
+                .filter(a => a.name === '聯絡簿每日任務')
+                .map(a => a.id)
+        );
 
         snap.docs.forEach(d => {
             const data = d.data();
             data._id = d.id;
             data.id = d.id;
-            appState.archiveDocsMap[d.id] = data;
+            nextList.push(data);
+            nextMap[d.id] = data;
             const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
             (data.assignments || []).forEach(a => {
-                appState.archiveDocsMap[a.id] = data;
-                if (!currentIds.has(a.id)) {
-                    if (!appState.extraPastAssignments[a.id]) {
-                        appState.extraPastAssignments[a.id] = {
+                if (!nextMap[a.id]) nextMap[a.id] = data;
+                const isContact = a.name === '聯絡簿每日任務';
+                const isCurrentlyActive = isContact ? activeContactIds.has(a.id) : activeNonContactIds.has(a.id);
+                if (!isCurrentlyActive) {
+                    if (!nextExtra[a.id]) {
+                        nextExtra[a.id] = {
                             name: a.name,
                             dateLabel,
-                            subjectName: a.subjectName || '未分類',
-                            needsSign: !!a.needsSign,
+                            timestamp: data.timestamp,
+                            subjectName: a.subjectName || (isContact ? '聯絡簿' : '未分類'),
+                            needsSign: !!(a.needsSign || isContact),
                             signOnly: !!a.signOnly
                         };
-                    } else {
-                        appState.extraPastAssignments[a.id].name = a.name;
-                        appState.extraPastAssignments[a.id].dateLabel = dateLabel;
-                        appState.extraPastAssignments[a.id].subjectName = a.subjectName || '未分類';
                     }
                 }
             });
+            if ((!data.assignments || !data.assignments.length) && Array.isArray(data.records)) {
+                const uniqueAids = new Set();
+                data.records.forEach(r => {
+                    if (r.assignmentId && !uniqueAids.has(r.assignmentId)) {
+                        uniqueAids.add(r.assignmentId);
+                        const aName = r.assignmentName || '未命名作業';
+                        const isContact = aName === '聯絡簿每日任務';
+                        const isCurrentlyActive = isContact ? activeContactIds.has(r.assignmentId) : activeNonContactIds.has(r.assignmentId);
+                        if (!isCurrentlyActive && !nextExtra[r.assignmentId]) {
+                            nextExtra[r.assignmentId] = {
+                                name: aName,
+                                dateLabel,
+                                timestamp: data.timestamp,
+                                subjectName: isContact ? '聯絡簿' : '未分類',
+                                needsSign: isContact,
+                                signOnly: false
+                            };
+                        }
+                    }
+                });
+            }
             (data.records || []).forEach(r => {
-                if (r.assignmentId) {
-                    appState.archiveDocsMap[r.assignmentId] = data;
+                if (r.assignmentId && !nextMap[r.assignmentId]) {
+                    nextMap[r.assignmentId] = data;
                 }
             });
         });
+
+        appState.archiveDocsList = nextList;
+        appState.archiveDocsMap = nextMap;
+        appState.extraPastAssignments = nextExtra;
 
         if (isAdmin && settings && Array.isArray(settings.students)) {
             for (const d of snap.docs) {
@@ -201,19 +249,38 @@ export async function autoLoadArchives() {
             }
         }
         renderGradingTab(gradingRecords, records, settings, appState);
-        renderArchivesList();
+        await renderArchivesList(nextList);
     } catch (e) {
         logger.warn('AUTO_LOAD_ARCHIVES_FAILED', e);
     }
 }
 
-async function renderArchivesList() {
+async function renderArchivesList(prefetchedList = null) {
     const archivesListEl = $('archivesList');
     if (!archivesListEl) return;
-    archivesListEl.innerHTML = '<p class="empty-hint">載入中…</p>';
+
+    // 保留目前已展開的歷史封存明細 ID，避免重新整理時自動收合
+    const openDetailIds = new Set(
+        [...archivesListEl.querySelectorAll('.archive-detail')]
+            .filter(el => el.style.display === 'block')
+            .map(el => el.getAttribute('data-detail'))
+    );
+
+    if (!prefetchedList && !archivesListEl.children.length) {
+        archivesListEl.innerHTML = '<p class="empty-hint">載入中…</p>';
+    }
     try {
-        const snap = await getDocs(query(archivesColl, orderBy('timestamp', 'desc')));
-        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        let list = prefetchedList;
+        if (!Array.isArray(list)) {
+            const snap = await getDocs(query(archivesColl, orderBy('timestamp', 'desc')));
+            list = snap.docs.map(d => {
+                const data = d.data();
+                data._id = d.id;
+                data.id = d.id;
+                return data;
+            });
+            appState.archiveDocsList = list;
+        }
         archivesListEl.innerHTML = list.length ? list.map(a => `
             <div class="group-block" data-archive="${escapeHtml(a.id)}">
                 <div class="group-block-head">
@@ -228,31 +295,58 @@ async function renderArchivesList() {
                 <div class="table-scroll archive-detail" data-detail="${escapeHtml(a.id)}" style="display:none"></div>
             </div>`).join('') : '<p class="empty-hint">尚無歷史封存紀錄</p>';
 
+        function syncArchiveRecordsInMemory(item, updatedRecords) {
+            item.records = updatedRecords;
+            if (appState.archiveDocsMap) {
+                if (appState.archiveDocsMap[item.id]) appState.archiveDocsMap[item.id].records = updatedRecords;
+                (item.assignments || []).forEach(a => {
+                    if (appState.archiveDocsMap[a.id] === item || (appState.archiveDocsMap[a.id] && appState.archiveDocsMap[a.id].id === item.id)) {
+                        appState.archiveDocsMap[a.id].records = updatedRecords;
+                    }
+                });
+            }
+            if (Array.isArray(appState.archiveDocsList)) {
+                const found = appState.archiveDocsList.find(d => (d._id || d.id) === item.id);
+                if (found) found.records = updatedRecords;
+            }
+        }
+
         function renderArchiveDetail(item) {
             const box = archivesListEl.querySelector(`[data-detail="${item.id}"]`);
             if (!box) return;
 
-            const headerHtml = `<div style="display: grid; grid-template-columns: 110px 170px 140px 140px 1fr; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 2px solid var(--line); font-weight: bold; color: #000; font-size: 0.95em; text-align: left;">
+            const activeContactIds = new Set(
+                (settings && settings.assignments ? settings.assignments : [])
+                    .filter(a => a.name === '聯絡簿每日任務')
+                    .map(a => a.id)
+            );
+
+            const headerHtml = `<div style="display: grid; grid-template-columns: 110px 165px 140px 140px 64px 1fr; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 2px solid var(--line); font-weight: bold; color: #000; font-size: 0.95em; text-align: left;">
                 <span>學生</span>
                 <span>作業</span>
                 <span>狀態</span>
                 <span>簽名</span>
+                <span>請假</span>
                 <span>備註</span>
             </div>`;
 
-            box.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;min-width:680px;">` + headerHtml +
+            box.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;min-width:740px;">` + headerHtml +
                 (item.records || []).map((r, i) => {
                     const stu = (settings.students || []).find(s => s.id === r.studentId || s.name === r.studentName);
                     const asg = (item.assignments || []).find(x => x.id === r.assignmentId);
+                    const aName = asg ? asg.name : (r.assignmentName || '');
                     const asgSubj = asg ? (asg.subjectName || ((settings.subjects || []).find(x => x.id === asg.subjectId) || {}).name || '') : '';
-                    const isPull = isRecordPulledOut(r, stu, asgSubj, asg ? asg.name : r.assignmentName);
-                    const liveRec = (records || []).find(x => x.studentId === r.studentId && x.assignmentId === r.assignmentId);
+                    const isPull = isRecordPulledOut(r, stu, asgSubj, aName);
+                    const collidesWithActiveContact = aName === '聯絡簿每日任務' && activeContactIds.has(r.assignmentId);
+                    const liveRec = !collidesWithActiveContact ? (records || []).find(x => x.studentId === r.studentId && x.assignmentId === r.assignmentId) : null;
                     const effStatus = deriveRecordStatus(liveRec, r);
                     const effSign = deriveRecordSign(liveRec, r);
-                    const needsSign = asg && (asg.needsSign || asg.signOnly);
-                    const isSignOnly = asg && asg.signOnly;
+                    const effRemark = deriveRecordRemark(liveRec, r);
+                    const effLeave = isRecordLeave(liveRec, r);
+                    const needsSign = !!(asg && (asg.needsSign || asg.signOnly)) || aName === '聯絡簿每日任務';
+                    const isSignOnly = !!(asg && asg.signOnly);
                     const isSigned = effSign === '已簽名';
-                    const isExamOrTest = asg && (asg.name.includes('卷') || asg.name.includes('考') || asg.name.includes('聽') || asg.name.includes('測驗'));
+                    const isExamOrTest = aName.includes('卷') || aName.includes('考') || aName.includes('聽') || aName.includes('測驗');
                     const showSign = needsSign && (isSignOnly || isExamOrTest || effStatus === '已繳');
                     const signDisplay = effSign === '未簽名' ? '未簽' : (effSign === '已簽名' ? '已簽' : effSign);
 
@@ -275,12 +369,17 @@ async function renderArchivesList() {
                         signCol = `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-start;visibility:hidden;pointer-events:none;"><button type="button" class="cell-status-btn">已簽</button><button class="btn small outline">補簽</button></div>`;
                     }
 
-                    return `<div style="display: grid; grid-template-columns: 110px 170px 140px 140px 1fr; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line);">
+                    const leaveCol = isPull
+                        ? `<span></span>`
+                        : `<button type="button" class="leave-btn ${effLeave ? 'active' : ''}" data-arch-leave="${i}" title="標記請假（期中期末另外算）">${effLeave ? '✓請假' : '請假'}</button>`;
+
+                    return `<div style="display: grid; grid-template-columns: 110px 165px 140px 140px 64px 1fr; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line);">
                         <span class="student-name" style="font-size:1em; color:#000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(r.studentName)}</span>
                         <span style="font-size:0.95em; color:#000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(r.assignmentName)}</span>
                         ${statusCol}
                         ${signCol}
-                        <span class="row-slot-remark" style="font-size:0.85em; color:var(--muted); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(r.remark || '')}</span>
+                        ${leaveCol}
+                        <span class="row-slot-remark" style="font-size:0.85em; color:var(--muted); text-align: left; line-height: 1.35; word-break: break-word;">${escapeHtml(effRemark)}</span>
                     </div>`;
                 }).join('') + `</div>`;
 
@@ -288,31 +387,36 @@ async function renderArchivesList() {
                 btn.onclick = async () => {
                     const idx = Number(btn.getAttribute('data-makeup'));
                     const r = item.records[idx];
+                    const collides = r.assignmentName === '聯絡簿每日任務' && activeContactIds.has(r.assignmentId);
+                    const liveRec = !collides ? records.find(rx => rx.studentId === r.studentId && rx.assignmentId === r.assignmentId) : null;
+                    const curSign = deriveRecordSign(liveRec, r);
+                    const curRemark = deriveRecordRemark(liveRec, r);
+                    const curLeave = isRecordLeave(liveRec, r);
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                    const remarkText = r.remark ? `${r.remark} / 已補交（${timeStr}）` : `已補交（${timeStr}）`;
-                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r2, i2) => i2 === idx ? { ...r2, status: '已繳', remark: remarkText } : r2));
-                    item.records = updatedRecords;
-                    if (appState.archiveDocsMap) {
-                        if (appState.archiveDocsMap[item.id]) appState.archiveDocsMap[item.id].records = updatedRecords;
-                        (item.assignments || []).forEach(a => {
-                            if (appState.archiveDocsMap[a.id]) appState.archiveDocsMap[a.id].records = updatedRecords;
-                        });
-                    }
-                    renderArchiveDetail(item);
-                    renderGradingTab(gradingRecords, records, settings, appState);
-                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    const remarkText = appendMakeupSubmitRemark(curRemark, timeStr);
+                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r2, i2) => i2 === idx ? { ...r2, status: '已繳', signStatus: curSign, remark: remarkText, isLeave: curLeave, isMakeup: true } : r2));
+                    syncArchiveRecordsInMemory(item, updatedRecords);
                     const payload = {
                         studentId: r.studentId,
                         studentName: r.studentName,
                         assignmentId: r.assignmentId,
                         assignmentName: r.assignmentName,
                         status: '已繳',
-                        signStatus: r.signStatus || '未簽名',
-                        remark: remarkText
+                        signStatus: curSign,
+                        remark: remarkText,
+                        isLeave: curLeave,
+                        isMakeup: true
                     };
-                    let rLive = records.find(rx => rx.studentId === r.studentId && rx.assignmentId === r.assignmentId);
-                    if (rLive) Object.assign(rLive, payload); else records.push(payload);
-                    await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
+                    if (!collides) {
+                        let rLive = records.find(rx => rx.studentId === r.studentId && rx.assignmentId === r.assignmentId);
+                        if (rLive) Object.assign(rLive, payload); else records.push(payload);
+                    }
+                    renderArchiveDetail(item);
+                    renderGradingTab(gradingRecords, records, settings, appState);
+                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    if (!collides) {
+                        await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
+                    }
                 };
             });
 
@@ -320,31 +424,37 @@ async function renderArchivesList() {
                 btn.onclick = async () => {
                     const idx = Number(btn.getAttribute('data-makeup-sign'));
                     const r = item.records[idx];
+                    const collides = r.assignmentName === '聯絡簿每日任務' && activeContactIds.has(r.assignmentId);
+                    const liveRec = !collides ? records.find(rx => rx.studentId === r.studentId && rx.assignmentId === r.assignmentId) : null;
+                    const curStatus = deriveRecordStatus(liveRec, r);
+                    const curRemark = deriveRecordRemark(liveRec, r);
+                    const curLeave = isRecordLeave(liveRec, r);
+                    const curMakeup = isRecordMakeup(liveRec, r, curStatus);
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                    const remarkText = r.remark ? `${r.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`;
-                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r2, i2) => i2 === idx ? { ...r2, signStatus: '已簽名', remark: remarkText } : r2));
-                    item.records = updatedRecords;
-                    if (appState.archiveDocsMap) {
-                        if (appState.archiveDocsMap[item.id]) appState.archiveDocsMap[item.id].records = updatedRecords;
-                        (item.assignments || []).forEach(a => {
-                            if (appState.archiveDocsMap[a.id]) appState.archiveDocsMap[a.id].records = updatedRecords;
-                        });
-                    }
-                    renderArchiveDetail(item);
-                    renderGradingTab(gradingRecords, records, settings, appState);
-                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    const remarkText = appendMakeupSignRemark(curRemark, timeStr);
+                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r2, i2) => i2 === idx ? { ...r2, status: curStatus, signStatus: '已簽名', remark: remarkText, isLeave: curLeave, isMakeup: curMakeup } : r2));
+                    syncArchiveRecordsInMemory(item, updatedRecords);
                     const payload = {
                         studentId: r.studentId,
                         studentName: r.studentName,
                         assignmentId: r.assignmentId,
                         assignmentName: r.assignmentName,
-                        status: r.status || '未繳',
+                        status: curStatus,
                         signStatus: '已簽名',
-                        remark: remarkText
+                        remark: remarkText,
+                        isLeave: curLeave,
+                        isMakeup: curMakeup
                     };
-                    let rLive = records.find(rx => rx.studentId === r.studentId && rx.assignmentId === r.assignmentId);
-                    if (rLive) Object.assign(rLive, payload); else records.push(payload);
-                    await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
+                    if (!collides) {
+                        let rLive = records.find(rx => rx.studentId === r.studentId && rx.assignmentId === r.assignmentId);
+                        if (rLive) Object.assign(rLive, payload); else records.push(payload);
+                    }
+                    renderArchiveDetail(item);
+                    renderGradingTab(gradingRecords, records, settings, appState);
+                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    if (!collides) {
+                        await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
+                    }
                 };
             });
 
@@ -352,21 +462,20 @@ async function renderArchivesList() {
                 btn.onclick = async () => {
                     const idx = Number(btn.getAttribute('data-arch-status'));
                     const cur = item.records[idx];
-                    const nv = cur.status === '已繳' ? '未繳' : '已繳';
+                    const collides = cur.assignmentName === '聯絡簿每日任務' && activeContactIds.has(cur.assignmentId);
+                    const liveRec = !collides ? records.find(rx => rx.studentId === cur.studentId && rx.assignmentId === cur.assignmentId) : null;
+                    const curStatus = deriveRecordStatus(liveRec, cur);
+                    const curSign = deriveRecordSign(liveRec, cur);
+                    const curRemark = deriveRecordRemark(liveRec, cur);
+                    const curLeave = isRecordLeave(liveRec, cur);
+                    const nv = curStatus === '已繳' ? '未繳' : '已繳';
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                    const remarkText = nv === '已繳' ? `狀態改已繳（${timeStr}）` : cur.remark;
-                    const nextSign = nv === '已繳' ? (cur.signStatus || '未簽名') : '未簽名';
-                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r, i2) => i2 === idx ? { ...r, status: nv, signStatus: nextSign, remark: remarkText } : r));
-                    item.records = updatedRecords;
-                    if (appState.archiveDocsMap) {
-                        if (appState.archiveDocsMap[item.id]) appState.archiveDocsMap[item.id].records = updatedRecords;
-                        (item.assignments || []).forEach(a => {
-                            if (appState.archiveDocsMap[a.id]) appState.archiveDocsMap[a.id].records = updatedRecords;
-                        });
-                    }
-                    renderArchiveDetail(item);
-                    renderGradingTab(gradingRecords, records, settings, appState);
-                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    const nextSign = nv === '已繳' ? curSign : '未簽名';
+                    let remarkText = nv === '已繳' ? appendMakeupSubmitRemark(curRemark, timeStr) : removeMakeupSubmitRemark(curRemark);
+                    if (nv !== '已繳') remarkText = removeMakeupSignRemark(remarkText);
+                    const nextMakeup = nv === '已繳';
+                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r, i2) => i2 === idx ? { ...r, status: nv, signStatus: nextSign, remark: remarkText, isLeave: curLeave, isMakeup: nextMakeup } : r));
+                    syncArchiveRecordsInMemory(item, updatedRecords);
                     const payload = {
                         studentId: cur.studentId,
                         studentName: cur.studentName,
@@ -374,11 +483,20 @@ async function renderArchivesList() {
                         assignmentName: cur.assignmentName,
                         status: nv,
                         signStatus: nextSign,
-                        remark: remarkText
+                        remark: remarkText,
+                        isLeave: curLeave,
+                        isMakeup: nextMakeup
                     };
-                    let rLive = records.find(rx => rx.studentId === cur.studentId && rx.assignmentId === cur.assignmentId);
-                    if (rLive) Object.assign(rLive, payload); else records.push(payload);
-                    await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
+                    if (!collides) {
+                        let rLive = records.find(rx => rx.studentId === cur.studentId && rx.assignmentId === cur.assignmentId);
+                        if (rLive) Object.assign(rLive, payload); else records.push(payload);
+                    }
+                    renderArchiveDetail(item);
+                    renderGradingTab(gradingRecords, records, settings, appState);
+                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    if (!collides) {
+                        await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
+                    }
                 };
             });
 
@@ -386,40 +504,104 @@ async function renderArchivesList() {
                 btn.onclick = async () => {
                     const idx = Number(btn.getAttribute('data-arch-sign'));
                     const cur = item.records[idx];
-                    const nv = (cur.signStatus === '已簽名') ? '未簽名' : '已簽名';
+                    const collides = cur.assignmentName === '聯絡簿每日任務' && activeContactIds.has(cur.assignmentId);
+                    const liveRec = !collides ? records.find(rx => rx.studentId === cur.studentId && rx.assignmentId === cur.assignmentId) : null;
+                    const curStatus = deriveRecordStatus(liveRec, cur);
+                    const curSign = deriveRecordSign(liveRec, cur);
+                    const curRemark = deriveRecordRemark(liveRec, cur);
+                    const curLeave = isRecordLeave(liveRec, cur);
+                    const curMakeup = isRecordMakeup(liveRec, cur, curStatus);
+                    const nv = (curSign === '已簽名') ? '未簽名' : '已簽名';
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                    const remarkText = nv === '已簽名' ? (cur.remark ? `${cur.remark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`) : cur.remark;
-                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r, i2) => i2 === idx ? { ...r, signStatus: nv, remark: remarkText } : r));
-                    item.records = updatedRecords;
-                    if (appState.archiveDocsMap) {
-                        if (appState.archiveDocsMap[item.id]) appState.archiveDocsMap[item.id].records = updatedRecords;
-                        (item.assignments || []).forEach(a => {
-                            if (appState.archiveDocsMap[a.id]) appState.archiveDocsMap[a.id].records = updatedRecords;
-                        });
-                    }
-                    renderArchiveDetail(item);
-                    renderGradingTab(gradingRecords, records, settings, appState);
-                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    const remarkText = nv === '已簽名' ? appendMakeupSignRemark(curRemark, timeStr) : removeMakeupSignRemark(curRemark);
+                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r, i2) => i2 === idx ? { ...r, status: curStatus, signStatus: nv, remark: remarkText, isLeave: curLeave, isMakeup: curMakeup } : r));
+                    syncArchiveRecordsInMemory(item, updatedRecords);
                     const payload = {
                         studentId: cur.studentId,
                         studentName: cur.studentName,
                         assignmentId: cur.assignmentId,
                         assignmentName: cur.assignmentName,
-                        status: cur.status || '未繳',
+                        status: curStatus,
                         signStatus: nv,
-                        remark: remarkText
+                        remark: remarkText,
+                        isLeave: curLeave,
+                        isMakeup: curMakeup
                     };
-                    let rLive = records.find(rx => rx.studentId === cur.studentId && rx.assignmentId === cur.assignmentId);
-                    if (rLive) Object.assign(rLive, payload); else records.push(payload);
-                    await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
+                    if (!collides) {
+                        let rLive = records.find(rx => rx.studentId === cur.studentId && rx.assignmentId === cur.assignmentId);
+                        if (rLive) Object.assign(rLive, payload); else records.push(payload);
+                    }
+                    renderArchiveDetail(item);
+                    renderGradingTab(gradingRecords, records, settings, appState);
+                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    if (!collides) {
+                        await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
+                    }
+                };
+            });
+
+            box.querySelectorAll('[data-arch-leave]').forEach(btn => {
+                btn.onclick = async () => {
+                    const idx = Number(btn.getAttribute('data-arch-leave'));
+                    const cur = item.records[idx];
+                    const collides = cur.assignmentName === '聯絡簿每日任務' && activeContactIds.has(cur.assignmentId);
+                    const liveRec = !collides ? records.find(rx => rx.studentId === cur.studentId && rx.assignmentId === cur.assignmentId) : null;
+                    const curStatus = deriveRecordStatus(liveRec, cur);
+                    const curSign = deriveRecordSign(liveRec, cur);
+                    const curRemark = deriveRecordRemark(liveRec, cur);
+                    const curLeave = isRecordLeave(liveRec, cur);
+                    const curMakeup = isRecordMakeup(liveRec, cur, curStatus);
+                    const nextLeave = !curLeave;
+                    const remarkText = toggleLeaveRemark(curRemark, nextLeave);
+                    const updatedRecords = sanitizeArchiveRecords(item.records.map((r, i2) => i2 === idx ? { ...r, status: curStatus, signStatus: curSign, remark: remarkText, isLeave: nextLeave, isMakeup: curMakeup } : r));
+                    syncArchiveRecordsInMemory(item, updatedRecords);
+                    const payload = {
+                        studentId: cur.studentId,
+                        studentName: cur.studentName,
+                        assignmentId: cur.assignmentId,
+                        assignmentName: cur.assignmentName,
+                        status: curStatus,
+                        signStatus: curSign,
+                        remark: remarkText,
+                        isLeave: nextLeave,
+                        isMakeup: curMakeup
+                    };
+                    if (!collides) {
+                        let rLive = records.find(rx => rx.studentId === cur.studentId && rx.assignmentId === cur.assignmentId);
+                        if (rLive) Object.assign(rLive, payload); else records.push(payload);
+                    }
+                    renderArchiveDetail(item);
+                    renderGradingTab(gradingRecords, records, settings, appState);
+                    await setDoc(doc(db, 'archives', item.id), { records: updatedRecords }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                    if (!collides) {
+                        await adminSetStatus(payload).catch(e => logger.warn('ADMIN_SET_STATUS_FAILED', e));
+                    }
                 };
             });
         }
 
+        appState.refreshOpenArchiveDetail = (docId) => {
+            const item = (appState.archiveDocsMap && appState.archiveDocsMap[docId]) || list.find(x => x.id === docId);
+            const box = archivesListEl.querySelector(`[data-detail="${docId}"]`);
+            if (item && box && box.style.display === 'block') {
+                renderArchiveDetail(item);
+            }
+        };
+
+        // 若重繪前已有展開的明細，自動維持展開並渲染最新資料
+        openDetailIds.forEach(docId => {
+            const item = (appState.archiveDocsMap && appState.archiveDocsMap[docId]) || list.find(x => x.id === docId);
+            const box = archivesListEl.querySelector(`[data-detail="${docId}"]`);
+            if (item && box) {
+                renderArchiveDetail(item);
+                box.style.display = 'block';
+            }
+        });
+
         archivesListEl.querySelectorAll('[data-view-archive]').forEach(b => {
             b.onclick = () => {
                 const aid = b.getAttribute('data-view-archive');
-                const item = list.find(x => x.id === aid);
+                const item = (appState.archiveDocsMap && appState.archiveDocsMap[aid]) || list.find(x => x.id === aid);
                 const box = archivesListEl.querySelector(`[data-detail="${aid}"]`);
                 if (box.style.display === 'block') { box.style.display = 'none'; return; }
                 renderArchiveDetail(item);
@@ -446,6 +628,9 @@ async function renderArchivesList() {
                         subjectId: '', subjectName: '',
                         assignmentId: r.assignmentId, assignmentName: r.assignmentName,
                         status: r.status || '未繳',
+                        remark: r.remark || '',
+                        isLeave: !!r.isLeave,
+                        isMakeup: !!r.isMakeup,
                         [ORDER_FIELD]: Date.now()
                     };
                     if (r.signStatus) payload.signStatus = r.signStatus;
@@ -480,7 +665,7 @@ async function renderArchivesList() {
                     await clearRecordsForAssignment(gid);
                     if (appState.extraPastAssignments) delete appState.extraPastAssignments[gid];
                 }
-                renderArchivesList();
+                await autoLoadArchives();
             };
         });
     } catch (e) {
@@ -534,6 +719,116 @@ function stopGradingListenerIfAny() {
     gradingRecords = [];
 }
 
+function openTodayLeaveModal() {
+    let modal = document.getElementById('todayLeaveModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'todayLeaveModal';
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content" style="width:min(580px, 92vw); max-width:580px; text-align:left; padding:26px 28px;">
+                <p class="modal-title" style="text-align:center; margin-bottom:8px;">今日請假登記</p>
+                <p id="todayLeaveSubtitle" style="margin:0 0 14px; font-size:0.88em; color:var(--muted); text-align:center; line-height:1.45;"></p>
+                <div id="todayLeaveStudentsBox" style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-height:50vh; overflow-y:auto; margin-bottom:20px; padding:12px; background:var(--bg); border-radius:14px; border:1px solid var(--line);"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-ok" id="todayLeaveCloseBtn">完成</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    const subtitleEl = document.getElementById('todayLeaveSubtitle');
+    const boxEl = document.getElementById('todayLeaveStudentsBox');
+    const closeBtn = document.getElementById('todayLeaveCloseBtn');
+
+    const renderLeaveStudents = () => {
+        const activeAsgs = settings.assignments || [];
+        const students = sortBySeat(settings.students || []);
+        if (!activeAsgs.length) {
+            subtitleEl.textContent = '目前沒有今日作業或聯絡簿可標記請假';
+            boxEl.innerHTML = '<p class="empty-hint" style="padding:10px;">請先新增今日作業</p>';
+            return;
+        }
+        subtitleEl.textContent = `點選學生即可一鍵切換「請假」（套用至目前 ${activeAsgs.length} 項今日作業與聯絡簿，期中期末將自動歸入「請假另外算」）：`;
+        if (!students.length) {
+            boxEl.innerHTML = '<p class="empty-hint" style="padding:10px;">尚未新增學生</p>';
+            return;
+        }
+
+        boxEl.innerHTML = students.map(s => {
+            const applicableAsgs = activeAsgs.filter(a => {
+                const subj = (settings.subjects || []).find(x => x.id === a.subjectId);
+                return !isPulledOut(s, subj ? subj.name : '', a.name);
+            });
+            const anyLeave = applicableAsgs.some(a => {
+                const rec = records.find(r => r.studentId === s.id && r.assignmentId === a.id);
+                return isRecordLeave(rec, null);
+            });
+            const sName = String(s.name || '').trim();
+            const hasSeat = s.seat != null && s.seat !== '' && !sName.startsWith(String(s.seat));
+            const label = hasSeat ? `${s.seat} ${sName}` : sName;
+            return `<button type="button" class="leave-btn large ${anyLeave ? 'active' : ''}" data-today-leave-student="${escapeHtml(s.id)}">${anyLeave ? '✓ ' : ''}${escapeHtml(label)}</button>`;
+        }).join('');
+
+        boxEl.querySelectorAll('[data-today-leave-student]').forEach(btn => {
+            btn.onclick = async () => {
+                const sid = btn.getAttribute('data-today-leave-student');
+                const stu = (settings.students || []).find(x => x.id === sid);
+                if (!stu) return;
+                const grp = (settings.groups || []).find(x => x.id === stu.groupId);
+                const applicableAsgs = (settings.assignments || []).filter(a => {
+                    const subj = (settings.subjects || []).find(x => x.id === a.subjectId);
+                    return !isPulledOut(stu, subj ? subj.name : '', a.name);
+                });
+                const currentlyLeave = applicableAsgs.some(a => {
+                    const rec = records.find(r => r.studentId === sid && r.assignmentId === a.id);
+                    return isRecordLeave(rec, null);
+                });
+                const nextLeave = !currentlyLeave;
+
+                const updates = applicableAsgs.map(a => {
+                    const subj = (settings.subjects || []).find(x => x.id === a.subjectId);
+                    const curRec = records.find(r => r.studentId === sid && r.assignmentId === a.id);
+                    const curStatus = curRec ? (curRec.status || '未繳') : '未繳';
+                    const curSign = curRec ? (curRec.signStatus || '未簽名') : '未簽名';
+                    const curRemark = curRec ? (curRec.remark || '') : '';
+                    const curMakeup = isRecordMakeup(curRec, null, curStatus);
+                    const remarkText = toggleLeaveRemark(curRemark, nextLeave);
+                    const payload = {
+                        groupId: grp ? grp.id : '',
+                        groupName: grp ? grp.name : '',
+                        studentId: sid,
+                        studentName: stu.name,
+                        subjectId: a.subjectId || '',
+                        subjectName: subj ? subj.name : '',
+                        assignmentId: a.id,
+                        assignmentName: a.name,
+                        status: curStatus,
+                        signStatus: curSign,
+                        remark: remarkText,
+                        isLeave: nextLeave,
+                        isMakeup: curMakeup
+                    };
+                    if (curRec) Object.assign(curRec, payload); else records.push(payload);
+                    return payload;
+                });
+
+                renderLeaveStudents();
+                renderRecordsTab(records, settings, isAdmin);
+                renderContactTab(records, gradingRecords, settings, isAdmin);
+                renderGradingTab(gradingRecords, records, settings, appState);
+
+                await Promise.all(updates.map(p => adminSetStatus(p)));
+            };
+        });
+    };
+
+    if (closeBtn) closeBtn.onclick = () => { modal.style.display = 'none'; };
+    renderLeaveStudents();
+    modal.style.display = 'flex';
+}
+
 function loadEditor() {
     $('adminArea').innerHTML = `
         <div class="admin-tabs">
@@ -544,7 +839,7 @@ function loadEditor() {
         </div>
         <div id="tabRecords" class="tab-panel">
             <div class="card">
-                <div class="row">
+                <div class="row" style="flex-wrap:wrap">
                     <div class="subject-select-group">
                         <select id="quickAssignmentSubject" style="max-width:160px"></select>
                         <button type="button" id="renameSubjectBtn" class="icon-btn" title="修改選取科目的名稱" style="width:26px;height:26px">
@@ -565,6 +860,7 @@ function loadEditor() {
                     </div>
                     <button class="btn" id="quickAddAssignmentBtn">＋ 新增作業</button>
                     <button class="btn outline" id="copyMissingBtn">複製未繳名單</button>
+                    <button class="btn outline" id="markTodayLeaveBtn">今日請假登記</button>
                 </div>
             </div>
             <div class="card">
@@ -596,7 +892,10 @@ function loadEditor() {
             </div>
             <div class="card">
                 <h2>歷史封存紀錄</h2>
-                <button class="btn outline" id="loadArchivesBtn">重新整理歷史封存</button>
+                <div class="row" style="flex-wrap:wrap; margin-bottom:0">
+                    <button class="btn outline" id="loadArchivesBtn">重新整理歷史封存</button>
+                    <button class="btn" id="recordsMakeupStatsBtn">補繳與請假統計（期中／期末）</button>
+                </div>
                 <div id="archivesList" style="margin-top:14px"></div>
             </div>
         </div>
@@ -607,9 +906,10 @@ function loadEditor() {
             <div class="card">
                 <h2>聯絡簿每日批改</h2>
                 <p class="empty-hint" style="text-align:left;padding:0 0 10px">一位學生一排，繳交／簽名／批改一次點完。</p>
-                <div class="row" style="margin-bottom:14px">
+                <div class="row" style="margin-bottom:14px; flex-wrap:wrap">
                     <button class="btn small" id="contactViewSeatBtn">依座號</button>
                     <button class="btn small outline" id="contactViewGroupBtn">依小組</button>
+                    <button class="btn small outline" id="contactLeaveBtn">今日請假登記</button>
                 </div>
                 <div id="dailyQuickGradeList"></div>
             </div>
@@ -621,11 +921,12 @@ function loadEditor() {
         </div>
         <div id="tabGrading" class="tab-panel" style="display:none">
             <div class="card">
-                <div class="row" style="margin-bottom:14px">
+                <div class="row" style="margin-bottom:0; flex-wrap:wrap">
                     <button class="btn outline" id="globalMissingListBtn">未繳清單</button>
                     <button class="btn outline" id="globalUncorrectedListBtn">未訂正清單</button>
                     <button class="btn outline" id="globalUnsignedListBtn">未簽名清單</button>
                     <button class="btn outline" id="globalLostListBtn">遺失作業清單</button>
+                    <button class="btn" id="globalMakeupStatsBtn">補繳與請假統計</button>
                 </div>
             </div>
             <div class="card">
@@ -646,10 +947,11 @@ function loadEditor() {
                 <h2>已封存作業的訂正紀錄 <button class="btn small outline" id="toggleArchivedGradingBtn" style="margin-left:8px;font-weight:normal">展開</button></h2>
                 <p class="empty-hint" style="text-align:left;padding:0 0 10px">這裡可以選一份過去的作業繼續批改。</p>
                 <div id="archivedGradingBody" style="display:none">
-                    <div class="row" style="margin-bottom:10px">
+                    <div class="row" style="margin-bottom:10px; flex-wrap:wrap">
                         <select id="pastSubjectSelect" style="flex:1"></select>
                         <select id="pastAssignmentSelect" style="flex:1"></select>
                         <button class="btn outline" id="loadPastArchivesBtn">重新整理歷史作業</button>
+                        <button class="btn outline" id="renameSelectedPastBtn">重新命名此作業</button>
                         <button class="btn outline danger" id="deleteSelectedPastBtn">刪除選取的這筆</button>
                     </div>
                     <div id="pastAssignmentGradeList"></div>
@@ -706,6 +1008,16 @@ function loadEditor() {
             $('adminArea').querySelectorAll('.tab-panel').forEach(p => p.style.display = (p.id === btn.dataset.tab) ? 'block' : 'none');
         };
     });
+
+    // 今日請假登記與補繳統計按鈕
+    $('markTodayLeaveBtn').onclick = () => openTodayLeaveModal();
+    $('contactLeaveBtn').onclick = () => openTodayLeaveModal();
+    $('recordsMakeupStatsBtn').onclick = async () => {
+        if (!appState.archiveDocsList || !appState.archiveDocsList.length) {
+            await autoLoadArchives();
+        }
+        openMakeupStatsModal({ settings, records, gradingRecords, state: appState });
+    };
 
     // 折疊按鈕
     $('toggleGradeMatrixBtn').onclick = () => {
@@ -813,6 +1125,9 @@ function loadEditor() {
                 status: rec ? rec.status : '未繳',
                 correctness: g ? g.correctness : '',
                 corrected: g ? g.corrected : false,
+                remark: rec ? (rec.remark || '') : '',
+                isLeave: !!(rec && isRecordLeave(rec, null)),
+                isMakeup: !!(rec && isRecordMakeup(rec, null)),
                 pulledOut: isPulledOut(s, subj ? subj.name : '', a.name)
             };
             if (rec && rec.signStatus) entry.signStatus = rec.signStatus;
@@ -834,7 +1149,8 @@ function loadEditor() {
         settings.assignments = settings.assignments.filter(a => !selectedIds.includes(a.id));
         await saveSettings({ assignments: settings.assignments }, isAdmin);
         ensureDailyAssignments(settings);
-        autoLoadArchives();
+        await autoLoadArchives();
+        renderRecordsTab(records, settings, isAdmin);
 
         $('archiveModal').style.display = 'none';
         $('archiveConfirmBtn').disabled = false;
@@ -859,11 +1175,9 @@ function loadEditor() {
 
     $('loadArchivesBtn').onclick = async () => {
         await autoLoadArchives();
-        await renderArchivesList();
     };
     $('loadPastArchivesBtn').onclick = async () => {
         await autoLoadArchives();
-        renderGradingTab(gradingRecords, records, settings, appState);
     };
 
     // 聯絡簿封存
@@ -886,13 +1200,16 @@ function loadEditor() {
                 signStatus: rec ? rec.signStatus : '未簽名',
                 correctness: g ? g.correctness : '',
                 corrected: g ? g.corrected : false,
+                remark: rec ? (rec.remark || '') : '',
+                isLeave: !!(rec && isRecordLeave(rec, null)),
+                isMakeup: !!(rec && isRecordMakeup(rec, null)),
                 pulledOut: isPulledOut(s, dSubj ? dSubj.name : '', dailyAsg.name)
             };
         });
         await addDoc(archivesColl, {
             timestamp: Date.now(),
             dateLabel: dateLabel || todayStr(),
-            assignments: [{ id: dailyAsg.id, name: dailyAsg.name, subjectName: dSubj ? dSubj.name : '', needsSign: true }],
+            assignments: [{ id: dailyAsg.id, name: dailyAsg.name, subjectName: dSubj ? dSubj.name : '聯絡簿', needsSign: true }],
             records: sanitizeArchiveRecords(snapshotRecords),
             studentCount: settings.students.length,
             assignmentCount: 1
@@ -905,8 +1222,10 @@ function loadEditor() {
         const newId = `daily-聯絡簿每日任務-${todayISODate()}-${crypto.randomUUID().slice(0, 6)}`;
         settings.assignments.push({ id: newId, name: '聯絡簿每日任務', subjectId: dailyAsg.subjectId, needsSign: true });
         await saveSettings({ assignments: settings.assignments }, isAdmin);
+        await autoLoadArchives();
+        renderContactTab(records, gradingRecords, settings, isAdmin);
+        renderGradingTab(gradingRecords, records, settings, appState);
         showAlert('已封存今天的聯絡簿紀錄，換成新的一輪');
-        autoLoadArchives();
     };
 
     $('contactViewSeatBtn').onclick = () => { setContactViewMode('seat'); renderContactTab(records, gradingRecords, settings, isAdmin); };

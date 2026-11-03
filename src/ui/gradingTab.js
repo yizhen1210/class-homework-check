@@ -20,6 +20,17 @@ import {
     isGradingMissingExempt,
     deriveRecordStatus,
     deriveRecordSign,
+    appendMakeupSubmitRemark,
+    removeMakeupSubmitRemark,
+    appendMakeupSignRemark,
+    removeMakeupSignRemark,
+    toggleLeaveRemark,
+    deriveRecordRemark,
+    isRecordLeave,
+    isRecordMakeup,
+    computeGlobalPopupLists,
+    computeMakeupAndLeaveStats,
+    formatMakeupAndLeaveReport,
     sanitizeArchiveRecords
 } from '../domain/rules.js';
 
@@ -163,15 +174,34 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
             const isContact = aName === '聯絡簿每日任務';
             const pastNeedsPoints = !isExam && !isContact;
 
+            const syncArchiveDocToFirestore = async (targetDoc) => {
+                const docId = targetDoc ? (targetDoc._id || targetDoc.id) : null;
+                if (!targetDoc || !docId) return;
+                targetDoc.records = sanitizeArchiveRecords(targetDoc.records);
+                if (state.archiveDocsMap) {
+                    if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = targetDoc.records;
+                    if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = targetDoc.records;
+                }
+                if (Array.isArray(state.archiveDocsList)) {
+                    const listDoc = state.archiveDocsList.find(d => (d._id || d.id) === docId);
+                    if (listDoc) listDoc.records = targetDoc.records;
+                }
+                if (state.refreshOpenArchiveDetail) {
+                    state.refreshOpenArchiveDetail(docId);
+                }
+                await setDoc(doc(db, 'archives', docId), { records: targetDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+            };
+
             box.innerHTML = sortBySeat(st.students).map(s => {
                 const sName = escapeHtml(s.name);
                 const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === aid);
                 const isPull = isRecordPulledOut(archRec, s, pastSubjName, aName) || isPulledOut(s, foundAsg ? foundAsg.subjectName : '', foundAsg ? foundAsg.name : '');
                 if (isPull) {
-                    return `<div class="daily-row ${pastNeedsSign ? '' : 'no-sign'} ${pastNeedsPoints ? 'has-points' : ''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign ? '140px ' : ''}38px 38px 76px 38px ${pastNeedsPoints ? '72px' : ''}">
+                    return `<div class="daily-row ${pastNeedsSign ? '' : 'no-sign'} ${pastNeedsPoints ? 'has-points' : ''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign ? '140px ' : ''}58px 38px 38px 76px 38px ${pastNeedsPoints ? '72px' : ''}">
                         <span class="student-name">${sName}</span>
                         <span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%"><button type="button" class="cell-status-btn" style="background:transparent; color:var(--muted); font-weight:bold; pointer-events:none; box-shadow:none;">抽離</button><button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button></div></span>
                         ${pastNeedsSign ? `<span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%"><button type="button" class="cell-status-btn" style="background:transparent; color:var(--muted); font-weight:bold; pointer-events:none; box-shadow:none;">抽離</button><button class="btn small outline" style="visibility:hidden;pointer-events:none;">補簽</button></div></span>` : ''}
+                        <span class="row-slot-leave"></span>
                         <span class="row-slot-icon"></span>
                         <span class="row-slot-icon"></span>
                         <span class="row-slot-corrected"><button type="button" class="corrected-btn" style="visibility:hidden;pointer-events:none">訂正</button></span>
@@ -187,6 +217,7 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 const rec = recs.find(r => r.studentId === s.id && r.assignmentId === aid);
                 const dStatus = deriveRecordStatus(rec, archRec ? archRec.status : '未繳');
                 const dSign = deriveRecordSign(rec, archRec ? archRec.signStatus : '未簽名');
+                const dLeave = isRecordLeave(rec, archRec);
                 const dSignDisplay = dSign === '未簽名' ? '未簽' : (dSign === '已簽名' ? '已簽' : dSign);
                 const isSigned = dSign === '已簽名';
                 const showCorrected = cur === '有錯';
@@ -195,16 +226,18 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 const showSign = pastNeedsSign && (isExamOrTest || dStatus === '已繳');
                 const signBtn = pastNeedsSign ? `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(dSign)}" data-past-sign-toggle style="visibility:${showSign ? 'visible' : 'hidden'};pointer-events:${showSign ? 'auto' : 'none'}">${escapeHtml(dSignDisplay)}</button>` : '';
                 const makeupSignBtn = (pastNeedsSign && !isSigned && showSign) ? `<button class="btn small outline" data-past-makeup-sign="1">補簽</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補簽</button>`;
+                const leaveBtn = `<button type="button" class="leave-btn ${dLeave ? 'active' : ''}" data-past-leave="1" title="標記請假（期中期末另外算）">${dLeave ? '✓請假' : '請假'}</button>`;
                 const correctedBtn = `<button type="button" class="corrected-btn ${g && g.corrected ? 'active' : ''}" data-past-corrected="1" style="visibility:${showCorrected ? 'visible' : 'hidden'};pointer-events:${showCorrected ? 'auto' : 'none'}">${g && g.corrected ? '✓訂正' : '訂正'}</button>`;
                 const makeupBtn = (dStatus !== '已繳') ? `<button class="btn small outline" data-past-makeup="1">補交</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button>`;
 
                 const pts = pointsOf(g, st, pastInfo);
                 const pointsSlot = pastNeedsPoints ? `<span class="row-slot-points" style="visibility:${pts > 0 ? 'visible' : 'hidden'}">${pts > 0 ? (g.pointsGiven ? '已加點' : '尚未加點') : '尚未加點'}</span>` : '';
 
-                return `<div class="daily-row ${pastNeedsSign ? '' : 'no-sign'} ${pastNeedsPoints ? 'has-points' : ''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign ? '140px ' : ''}38px 38px 76px 38px ${pastNeedsPoints ? '72px' : ''}" data-past-student="${escapeHtml(s.id)}">
+                return `<div class="daily-row ${pastNeedsSign ? '' : 'no-sign'} ${pastNeedsPoints ? 'has-points' : ''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign ? '140px ' : ''}58px 38px 38px 76px 38px ${pastNeedsPoints ? '72px' : ''}" data-past-student="${escapeHtml(s.id)}">
                     <span class="student-name">${sName}</span>
                     <span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%">${statusBtn}${makeupBtn}</div></span>
                     ${pastNeedsSign ? `<span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%">${signBtn}${makeupSignBtn}</div></span>` : ''}
+                    <span class="row-slot-leave">${leaveBtn}</span>
                     <span class="row-slot-icon"><button type="button" class="grade-btn ${cur === '全對' ? 'active g-ok' : ''}" data-past-grade="全對" title="全對">✓</button></span>
                     <span class="row-slot-icon"><button type="button" class="grade-btn ${cur === '有錯' ? 'active g-err' : ''}" data-past-grade="有錯" title="有錯">▲</button></span>
                     <span class="row-slot-corrected">${correctedBtn}</span>
@@ -223,10 +256,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === sid && r.assignmentId === aid);
                     const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
                     const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
-                    const curRemark = (cur2 && cur2.remark) ? cur2.remark : (archRec ? archRec.remark || '' : '');
+                    const curRemark = deriveRecordRemark(cur2, archRec);
+                    const curLeave = isRecordLeave(cur2, archRec);
                     const nv = curStatus === '已繳' ? '未繳' : '已繳';
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                    const remarkText = nv === '已繳' ? `已補交（${timeStr}）` : curRemark;
+                    const remarkText = nv === '已繳' ? appendMakeupSubmitRemark(curRemark, timeStr) : removeMakeupSubmitRemark(curRemark);
+                    const nextMakeup = nv === '已繳';
                     const payload = {
                         groupId: grp ? grp.id : '',
                         groupName: grp ? grp.name : '',
@@ -238,7 +273,9 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         assignmentName: aName,
                         status: nv,
                         signStatus: curSignStatus,
-                        remark: remarkText
+                        remark: remarkText,
+                        isLeave: curLeave,
+                        isMakeup: nextMakeup
                     };
                     let r = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
                     if (r) Object.assign(r, payload); else recs.push(payload);
@@ -247,25 +284,20 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         if (!archiveDoc.records) archiveDoc.records = [];
                         const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
                         if (archIdx !== -1) {
-                            archiveDoc.records[archIdx].status = nv;
-                            archiveDoc.records[archIdx].signStatus = curSignStatus;
-                            archiveDoc.records[archIdx].remark = remarkText;
+                            Object.assign(archiveDoc.records[archIdx], {
+                                status: nv,
+                                signStatus: curSignStatus,
+                                remark: remarkText,
+                                isLeave: curLeave,
+                                isMakeup: nextMakeup
+                            });
                         } else {
                             archiveDoc.records.push({ ...payload });
                         }
                     }
                     renderPastAssignmentGrader();
-
                     await adminSetStatus(payload);
-                    const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
-                    if (archiveDoc && docId) {
-                        archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                        if (state.archiveDocsMap) {
-                            if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
-                            if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
-                        }
-                        await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
-                    }
+                    await syncArchiveDocToFirestore(archiveDoc);
                 };
             });
 
@@ -278,7 +310,10 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     const cur2 = recs.find(r => r.studentId === sid && r.assignmentId === aid);
                     const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === sid && r.assignmentId === aid);
                     const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
+                    const curRemark = deriveRecordRemark(cur2, archRec);
+                    const curLeave = isRecordLeave(cur2, archRec);
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
+                    const remarkText = appendMakeupSubmitRemark(curRemark, timeStr);
                     const payload = {
                         groupId: grp ? grp.id : '',
                         groupName: grp ? grp.name : '',
@@ -290,7 +325,9 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         assignmentName: aName,
                         status: '已繳',
                         signStatus: curSignStatus,
-                        remark: `已補交（${timeStr}）`
+                        remark: remarkText,
+                        isLeave: curLeave,
+                        isMakeup: true
                     };
                     let r = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
                     if (r) Object.assign(r, payload); else recs.push(payload);
@@ -299,25 +336,20 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         if (!archiveDoc.records) archiveDoc.records = [];
                         const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
                         if (archIdx !== -1) {
-                            archiveDoc.records[archIdx].status = '已繳';
-                            archiveDoc.records[archIdx].signStatus = curSignStatus;
-                            archiveDoc.records[archIdx].remark = payload.remark;
+                            Object.assign(archiveDoc.records[archIdx], {
+                                status: '已繳',
+                                signStatus: curSignStatus,
+                                remark: remarkText,
+                                isLeave: curLeave,
+                                isMakeup: true
+                            });
                         } else {
                             archiveDoc.records.push({ ...payload });
                         }
                     }
                     renderPastAssignmentGrader();
-
                     await adminSetStatus(payload);
-                    const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
-                    if (archiveDoc && docId) {
-                        archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                        if (state.archiveDocsMap) {
-                            if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
-                            if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
-                        }
-                        await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
-                    }
+                    await syncArchiveDocToFirestore(archiveDoc);
                 };
             });
 
@@ -331,10 +363,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     const archRec = archiveDoc && (archiveDoc.records || []).find(rx => rx.studentId === sid && rx.assignmentId === aid);
                     const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
                     const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
-                    const curRemark = (cur2 && cur2.remark) ? cur2.remark : (archRec ? archRec.remark || '' : '');
+                    const curRemark = deriveRecordRemark(cur2, archRec);
+                    const curLeave = isRecordLeave(cur2, archRec);
+                    const curMakeup = isRecordMakeup(cur2, archRec, curStatus);
                     const nv = (curSignStatus === '已簽名' || curSignStatus === '已簽') ? '未簽名' : '已簽名';
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                    const remarkText = nv === '已簽名' ? (curRemark ? `${curRemark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`) : curRemark;
+                    const remarkText = nv === '已簽名' ? appendMakeupSignRemark(curRemark, timeStr) : removeMakeupSignRemark(curRemark);
                     const payload = {
                         groupId: grp ? grp.id : '',
                         groupName: grp ? grp.name : '',
@@ -346,7 +380,9 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         assignmentName: aName,
                         status: curStatus,
                         signStatus: nv,
-                        remark: remarkText
+                        remark: remarkText,
+                        isLeave: curLeave,
+                        isMakeup: curMakeup
                     };
                     let r = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
                     if (r) Object.assign(r, payload); else recs.push(payload);
@@ -355,25 +391,20 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         if (!archiveDoc.records) archiveDoc.records = [];
                         const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
                         if (archIdx !== -1) {
-                            archiveDoc.records[archIdx].status = curStatus;
-                            archiveDoc.records[archIdx].signStatus = nv;
-                            archiveDoc.records[archIdx].remark = remarkText;
+                            Object.assign(archiveDoc.records[archIdx], {
+                                status: curStatus,
+                                signStatus: nv,
+                                remark: remarkText,
+                                isLeave: curLeave,
+                                isMakeup: curMakeup
+                            });
                         } else {
                             archiveDoc.records.push({ ...payload });
                         }
                     }
                     renderPastAssignmentGrader();
-
                     await adminSetStatus(payload);
-                    const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
-                    if (archiveDoc && docId) {
-                        archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                        if (state.archiveDocsMap) {
-                            if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
-                            if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
-                        }
-                        await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
-                    }
+                    await syncArchiveDocToFirestore(archiveDoc);
                 };
             });
 
@@ -387,8 +418,10 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     const cur2 = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
                     const archRec = archiveDoc && (archiveDoc.records || []).find(rx => rx.studentId === sid && rx.assignmentId === aid);
                     const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
-                    const curRemark = (cur2 && cur2.remark) ? cur2.remark : (archRec ? archRec.remark || '' : '');
-                    const remarkText = curRemark ? `${curRemark} / 補簽（${timeStr}）` : `已補簽（${timeStr}）`;
+                    const curRemark = deriveRecordRemark(cur2, archRec);
+                    const curLeave = isRecordLeave(cur2, archRec);
+                    const curMakeup = isRecordMakeup(cur2, archRec, curStatus);
+                    const remarkText = appendMakeupSignRemark(curRemark, timeStr);
                     const payload = {
                         groupId: grp ? grp.id : '',
                         groupName: grp ? grp.name : '',
@@ -400,7 +433,9 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         assignmentName: aName,
                         status: curStatus,
                         signStatus: '已簽名',
-                        remark: remarkText
+                        remark: remarkText,
+                        isLeave: curLeave,
+                        isMakeup: curMakeup
                     };
                     let r = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
                     if (r) Object.assign(r, payload); else recs.push(payload);
@@ -409,25 +444,74 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         if (!archiveDoc.records) archiveDoc.records = [];
                         const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
                         if (archIdx !== -1) {
-                            archiveDoc.records[archIdx].status = curStatus;
-                            archiveDoc.records[archIdx].signStatus = '已簽名';
-                            archiveDoc.records[archIdx].remark = remarkText;
+                            Object.assign(archiveDoc.records[archIdx], {
+                                status: curStatus,
+                                signStatus: '已簽名',
+                                remark: remarkText,
+                                isLeave: curLeave,
+                                isMakeup: curMakeup
+                            });
                         } else {
                             archiveDoc.records.push({ ...payload });
                         }
                     }
                     renderPastAssignmentGrader();
-
                     await adminSetStatus(payload);
-                    const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
-                    if (archiveDoc && docId) {
-                        archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
-                        if (state.archiveDocsMap) {
-                            if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
-                            if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
+                    await syncArchiveDocToFirestore(archiveDoc);
+                };
+            });
+
+            box.querySelectorAll('[data-past-leave]').forEach(btn => {
+                btn.onclick = async () => {
+                    const row = btn.closest('.daily-row');
+                    const sid = row.getAttribute('data-past-student');
+                    const stu = st.students.find(x => x.id === sid);
+                    const grp = st.groups.find(x => x.id === stu?.groupId);
+                    const cur2 = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
+                    const archRec = archiveDoc && (archiveDoc.records || []).find(rx => rx.studentId === sid && rx.assignmentId === aid);
+                    const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
+                    const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
+                    const curRemark = deriveRecordRemark(cur2, archRec);
+                    const curLeave = isRecordLeave(cur2, archRec);
+                    const curMakeup = isRecordMakeup(cur2, archRec, curStatus);
+                    const nextLeave = !curLeave;
+                    const remarkText = toggleLeaveRemark(curRemark, nextLeave);
+                    const payload = {
+                        groupId: grp ? grp.id : '',
+                        groupName: grp ? grp.name : '',
+                        studentId: sid,
+                        studentName: stu ? stu.name : '',
+                        subjectId: dSubj ? dSubj.id : '',
+                        subjectName: dSubj ? dSubj.name : '',
+                        assignmentId: aid,
+                        assignmentName: aName,
+                        status: curStatus,
+                        signStatus: curSignStatus,
+                        remark: remarkText,
+                        isLeave: nextLeave,
+                        isMakeup: curMakeup
+                    };
+                    let r = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
+                    if (r) Object.assign(r, payload); else recs.push(payload);
+
+                    if (archiveDoc) {
+                        if (!archiveDoc.records) archiveDoc.records = [];
+                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        if (archIdx !== -1) {
+                            Object.assign(archiveDoc.records[archIdx], {
+                                status: curStatus,
+                                signStatus: curSignStatus,
+                                remark: remarkText,
+                                isLeave: nextLeave,
+                                isMakeup: curMakeup
+                            });
+                        } else {
+                            archiveDoc.records.push({ ...payload });
                         }
-                        await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     }
+                    renderPastAssignmentGrader();
+                    await adminSetStatus(payload);
+                    await syncArchiveDocToFirestore(archiveDoc);
                 };
             });
 
@@ -478,6 +562,9 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                             if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
                             if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
                         }
+                        if (state.refreshOpenArchiveDetail && docId) {
+                            state.refreshOpenArchiveDetail(docId);
+                        }
                         await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     }
                 };
@@ -527,6 +614,9 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         if (state.archiveDocsMap) {
                             if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
                             if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
+                        }
+                        if (state.refreshOpenArchiveDetail && docId) {
+                            state.refreshOpenArchiveDetail(docId);
                         }
                         await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     }
@@ -635,108 +725,66 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
         }
     }
 
-    // 3. 全域統計清單彈窗按鈕
+    // 3. 全域統計清單彈窗按鈕（未繳、未訂正、未簽名、遺失、期中期末補繳與請假統計）
     const globalMissingBtn = $('globalMissingListBtn');
     const globalUncorrectedBtn = $('globalUncorrectedListBtn');
     const globalUnsignedBtn = $('globalUnsignedListBtn');
     const globalLostBtn = $('globalLostListBtn');
+    const globalMakeupStatsBtn = $('globalMakeupStatsBtn');
+
+    const ensureArchivesReady = async () => {
+        if ((!state.archiveDocsList || !state.archiveDocsList.length) && typeof state.ensureArchivesLoaded === 'function') {
+            await state.ensureArchivesLoaded();
+        }
+    };
+
+    const renderGlobalPopupByType = (type) => {
+        const { missingBlocks, uncorrectedBlocks, unsignedBlocks } = computeGlobalPopupLists({
+            settings: st,
+            records: recs,
+            gradingRecords: gradingRecs,
+            archiveDocsList: state.archiveDocsList,
+            archiveDocsMap: state.archiveDocsMap,
+            extraPastAssignments: state.extraPastAssignments
+        });
+        if (type === 'missing') {
+            $('missingListTitle').textContent = '未繳清單';
+            $('missingListBody').innerHTML = missingBlocks.length
+                ? missingBlocks.map(b => `<p style="margin-bottom:4px"><strong>${escapeHtml(b.displayName)}</strong>：${b.studentNames.map(n => escapeHtml(n)).join('、')}</p>`).join('')
+                : '<p class="empty-hint">目前沒有未繳項目</p>';
+        } else if (type === 'uncorrected') {
+            $('missingListTitle').textContent = '未訂正清單';
+            $('missingListBody').innerHTML = uncorrectedBlocks.length
+                ? uncorrectedBlocks.map(b => `<p style="margin-bottom:4px"><strong>${escapeHtml(b.displayName)}</strong>：${b.studentNames.map(n => escapeHtml(n)).join('、')}</p>`).join('')
+                : '<p class="empty-hint">目前沒有未訂正項目</p>';
+        } else if (type === 'unsigned') {
+            $('missingListTitle').textContent = '未簽名清單';
+            $('missingListBody').innerHTML = unsignedBlocks.length
+                ? unsignedBlocks.map(b => `<p style="margin-bottom:4px"><strong>${escapeHtml(b.displayName)}</strong>：${b.studentNames.map(n => escapeHtml(n)).join('、')}</p>`).join('')
+                : '<p class="empty-hint">目前沒有未簽名項目</p>';
+        }
+    };
 
     if (globalMissingBtn) {
-        globalMissingBtn.onclick = () => {
-            $('missingListTitle').textContent = '未繳清單';
-            const allAssignmentsMap = {};
-            (st.assignments || []).filter(a => a.name !== '聯絡簿每日任務').forEach(a => {
-                allAssignmentsMap[a.id] = { name: a.name, subjectName: subjNameOf(a) };
-            });
-            if (state.extraPastAssignments) {
-                Object.entries(state.extraPastAssignments).forEach(([id, info]) => {
-                    if (!allAssignmentsMap[id]) allAssignmentsMap[id] = { name: info.name, subjectName: info.subjectName };
-                });
-            }
-            const activeAssIds = new Set((st.assignments || []).map(a => a.id));
-            const blocks = Object.entries(allAssignmentsMap).map(([id, info]) => {
-                const hasGrading = gradingRecs.some(g => g.assignmentId === id);
-                const hasRecord = recs.some(r => r.assignmentId === id);
-                const archiveDoc = state.archiveDocsMap ? state.archiveDocsMap[id] : null;
-                if (!hasGrading && !hasRecord && !activeAssIds.has(id) && !archiveDoc) return '';
-
-                const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName, info.name));
-                const missing = applicable.filter(s => {
-                    const g = gradingRecs.find(x => x.studentId === s.id && x.assignmentId === id);
-                    if (g && (g.correctness === '遺失' || g.correctness === '沒寫任務')) return false;
-                    const rec = recs.find(r => r.studentId === s.id && r.assignmentId === id);
-                    const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === id);
-                    const status = deriveRecordStatus(rec, archRec ? archRec.status : '未繳');
-                    return status !== '已繳';
-                });
-                if (!missing.length) return '';
-                return `<p style="margin-bottom:4px"><strong>${escapeHtml(info.name)}</strong>：${missing.map(s => escapeHtml(s.name)).join('、')}</p>`;
-            }).filter(Boolean);
-            $('missingListBody').innerHTML = blocks.length ? blocks.join('') : '<p class="empty-hint">目前沒有未繳項目</p>';
+        globalMissingBtn.onclick = async () => {
+            await ensureArchivesReady();
+            renderGlobalPopupByType('missing');
             $('missingListModal').style.display = 'flex';
         };
     }
 
     if (globalUncorrectedBtn) {
-        globalUncorrectedBtn.onclick = () => {
-            $('missingListTitle').textContent = '未訂正清單';
-            const allAssignmentsMap = {};
-            (st.assignments || []).filter(a => a.name !== '聯絡簿每日任務' && !a.signOnly).forEach(a => {
-                allAssignmentsMap[a.id] = { name: a.name, subjectName: subjNameOf(a) };
-            });
-            if (state.extraPastAssignments) {
-                Object.entries(state.extraPastAssignments).forEach(([id, info]) => {
-                    if (!info.signOnly && !allAssignmentsMap[id]) allAssignmentsMap[id] = { name: info.name, subjectName: info.subjectName };
-                });
-            }
-            const blocks = Object.entries(allAssignmentsMap).map(([id, info]) => {
-                const hasAnyGrading = gradingRecs.some(g => g.assignmentId === id) || (state.archiveDocsMap && state.archiveDocsMap[id]);
-                if (!hasAnyGrading) return '';
-                const uncorrected = sortBySeat(st.students).filter(s => {
-                    if (isPulledOut(s, info.subjectName, info.name)) return false;
-                    const g = gradingRecs.find(x => x.studentId === s.id && x.assignmentId === id);
-                    return g && g.correctness === '有錯' && !g.corrected;
-                });
-                if (!uncorrected.length) return '';
-                return `<p style="margin-bottom:4px"><strong>${escapeHtml(info.name)}</strong>：${uncorrected.map(s => escapeHtml(s.name)).join('、')}</p>`;
-            }).filter(Boolean);
-            $('missingListBody').innerHTML = blocks.length ? blocks.join('') : '<p class="empty-hint">目前沒有未訂正項目</p>';
+        globalUncorrectedBtn.onclick = async () => {
+            await ensureArchivesReady();
+            renderGlobalPopupByType('uncorrected');
             $('missingListModal').style.display = 'flex';
         };
     }
 
     if (globalUnsignedBtn) {
-        globalUnsignedBtn.onclick = () => {
-            $('missingListTitle').textContent = '未簽名清單';
-            const allAssignmentsMap = {};
-            (st.assignments || []).filter(a => a.name !== '聯絡簿每日任務' && (a.needsSign || a.signOnly)).forEach(a => {
-                allAssignmentsMap[a.id] = { name: a.name, subjectName: subjNameOf(a), signOnly: !!a.signOnly };
-            });
-            if (state.extraPastAssignments) {
-                Object.entries(state.extraPastAssignments).forEach(([id, info]) => {
-                    if ((info.needsSign || info.signOnly) && !allAssignmentsMap[id]) allAssignmentsMap[id] = { name: info.name, subjectName: info.subjectName, signOnly: !!info.signOnly };
-                });
-            }
-            const blocks = Object.entries(allAssignmentsMap).map(([id, info]) => {
-                const applicable = sortBySeat(st.students).filter(s => !isPulledOut(s, info.subjectName, info.name));
-                const unsigned = applicable.filter(s => {
-                    const rec = recs.find(r => r.studentId === s.id && r.assignmentId === id);
-                    const archDoc = state.archiveDocsMap ? state.archiveDocsMap[id] : null;
-                    const archRec = archDoc && (archDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === id);
-                    const status = deriveRecordStatus(rec, archRec ? archRec.status : '未繳');
-                    const signStatus = deriveRecordSign(rec, archRec ? archRec.signStatus : '未簽名');
-                    if (info.name === '聯絡簿每日任務') {
-                        if (status !== '已繳') return false;
-                        return signStatus !== '已簽名';
-                    }
-                    const isExamOrTest = isExamAssignment(info.name);
-                    if (!info.signOnly && !isExamOrTest && status !== '已繳') return false;
-                    return signStatus !== '已簽名';
-                });
-                if (!unsigned.length) return '';
-                return `<p style="margin-bottom:4px"><strong>${escapeHtml(info.name)}</strong>：${unsigned.map(s => escapeHtml(s.name)).join('、')}</p>`;
-            }).filter(Boolean);
-            $('missingListBody').innerHTML = blocks.length ? blocks.join('') : '<p class="empty-hint">目前沒有未簽名項目</p>';
+        globalUnsignedBtn.onclick = async () => {
+            await ensureArchivesReady();
+            renderGlobalPopupByType('unsigned');
             $('missingListModal').style.display = 'flex';
         };
     }
@@ -766,13 +814,26 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
     }
 
     if (globalLostBtn) {
-        globalLostBtn.onclick = () => {
+        globalLostBtn.onclick = async () => {
+            await ensureArchivesReady();
             renderMissingLostList();
             $('missingListModal').style.display = 'flex';
         };
     }
-    if ($('missingListModal') && $('missingListModal').style.display === 'flex' && $('missingListTitle') && $('missingListTitle').textContent === '遺失作業清單') {
-        renderMissingLostList();
+
+    if (globalMakeupStatsBtn) {
+        globalMakeupStatsBtn.onclick = async () => {
+            await ensureArchivesReady();
+            openMakeupStatsModal({ settings: st, records: recs, gradingRecords: gradingRecs, state });
+        };
+    }
+
+    if ($('missingListModal') && $('missingListModal').style.display === 'flex' && $('missingListTitle')) {
+        const curTitle = $('missingListTitle').textContent;
+        if (curTitle === '遺失作業清單') renderMissingLostList();
+        else if (curTitle === '未繳清單') renderGlobalPopupByType('missing');
+        else if (curTitle === '未訂正清單') renderGlobalPopupByType('uncorrected');
+        else if (curTitle === '未簽名清單') renderGlobalPopupByType('unsigned');
     }
 
     // 4. 今日作業批改矩陣 (座號模式 / 小組模式)
@@ -1016,5 +1077,334 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
 
 export function setGradingViewMode(mode) {
     gradingViewMode = mode;
+}
+
+const makeupStatsExpanded = new Set();
+
+function ensureMakeupStatsModalElement() {
+    let modal = document.getElementById('makeupStatsModal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'makeupStatsModal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal-content" style="width:min(760px, 94vw); max-width:760px; text-align:left; padding:26px 28px;">
+            <p class="modal-title" style="text-align:center; margin-bottom:14px;">期中／期末 作業補繳與請假統計</p>
+            <div style="background:var(--bg); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:14px;">
+                <div class="date-range-row" style="align-items:flex-end; margin-bottom:10px;">
+                    <div class="field">
+                        <label>開始日期（可留空＝不限）</label>
+                        <input type="date" id="msStartDate" class="txt-input" style="margin:0; text-align:center;">
+                    </div>
+                    <div class="field">
+                        <label>結束日期（可留空＝不限）</label>
+                        <input type="date" id="msEndDate" class="txt-input" style="margin:0; text-align:center;">
+                    </div>
+                    <button type="button" class="btn small outline" id="msResetDateBtn" style="height:40px; flex-shrink:0;">全部期間</button>
+                </div>
+                <div style="display:flex; flex-wrap:wrap; gap:14px; font-size:0.9em; color:var(--text);">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin:0;">
+                        <input type="checkbox" id="msIncludeContactChk" checked style="width:auto; margin:0;">包含聯絡簿每日任務
+                    </label>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin:0;">
+                        <input type="checkbox" id="msIncludeActiveChk" style="width:auto; margin:0;">包含今日尚未封存作業
+                    </label>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin:0;">
+                        <input type="checkbox" id="msShowAllStudentsChk" style="width:auto; margin:0;">顯示全班（含無缺補交紀錄者）
+                    </label>
+                </div>
+                <p style="margin:8px 0 0; font-size:0.82em; color:var(--muted); line-height:1.45;">
+                    💡 <strong>一般補繳／未繳</strong>與<strong>「因請假缺交／補繳（另外算）」</strong>已自動分開統計；展開學生明細即可一鍵標記或取消「請假」。
+                </p>
+            </div>
+            <div id="msSummaryBanner" style="font-size:0.9em; color:var(--muted); margin-bottom:8px;"></div>
+            <div id="msResultBody" style="max-height:50vh; overflow-y:auto; margin-bottom:18px; padding-right:4px;"></div>
+            <div class="modal-actions" style="flex-wrap:wrap; gap:10px;">
+                <button type="button" class="btn small outline" id="msExpandAllBtn" style="padding:9px 20px; font-size:0.95em;">全部展開</button>
+                <button type="button" class="btn-ok" id="msCopyReportBtn" style="padding:9px 24px; font-size:1em;">複製統計報表</button>
+                <button type="button" class="btn-cancel" id="msCloseBtn" style="padding:9px 24px; font-size:1em;">關閉</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    return modal;
+}
+
+export function openMakeupStatsModal({ settings, records, gradingRecords, state = {} }) {
+    const modal = ensureMakeupStatsModalElement();
+    const st = settings || { groups: [], students: [], subjects: [], assignments: [] };
+    const recs = records || [];
+    const gradingRecs = gradingRecords || [];
+
+    const startInp = document.getElementById('msStartDate');
+    const endInp = document.getElementById('msEndDate');
+    const resetDateBtn = document.getElementById('msResetDateBtn');
+    const includeContactChk = document.getElementById('msIncludeContactChk');
+    const includeActiveChk = document.getElementById('msIncludeActiveChk');
+    const showAllChk = document.getElementById('msShowAllStudentsChk');
+    const bannerEl = document.getElementById('msSummaryBanner');
+    const bodyEl = document.getElementById('msResultBody');
+    const expandAllBtn = document.getElementById('msExpandAllBtn');
+    const copyBtn = document.getElementById('msCopyReportBtn');
+    const closeBtn = document.getElementById('msCloseBtn');
+
+    let latestStats = null;
+
+    const getOptions = () => ({
+        settings: st,
+        records: recs,
+        gradingRecords: gradingRecs,
+        archiveDocsList: state.archiveDocsList,
+        archiveDocsMap: state.archiveDocsMap,
+        extraPastAssignments: state.extraPastAssignments,
+        startDate: startInp ? startInp.value : '',
+        endDate: endInp ? endInp.value : '',
+        includeContactBook: includeContactChk ? includeContactChk.checked : true,
+        includeActive: includeActiveChk ? includeActiveChk.checked : false,
+        includeCleanStudents: showAllChk ? showAllChk.checked : false
+    });
+
+    const renderDetailRow = (studentId, item, categoryLabel, categoryStyle) => {
+        const leaveBtnLabel = item.isLeave ? '✓請假（取消）' : '標記請假';
+        const remarkSpan = item.remark ? `<span style="font-size:0.82em; color:var(--muted); margin-left:6px;">（${escapeHtml(item.remark)}）</span>` : '';
+        return `
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); font-size:0.92em;">
+                <div style="flex:1; min-width:0; line-height:1.4;">
+                    <span style="display:inline-block; padding:1px 8px; border-radius:10px; font-size:0.8em; margin-right:6px; ${categoryStyle}">${categoryLabel}</span>
+                    <strong>${escapeHtml(item.displayName)}</strong>${remarkSpan}
+                </div>
+                <button type="button" class="leave-btn ${item.isLeave ? 'active' : ''}"
+                    data-ms-leave-student="${escapeHtml(studentId)}"
+                    data-ms-leave-aid="${escapeHtml(item.assignmentId)}"
+                    data-ms-leave-doc="${escapeHtml(item.archiveDocId || '')}"
+                    data-ms-leave-active="${item.isActive ? '1' : '0'}"
+                    data-ms-leave-name="${escapeHtml(item.assignmentName || '')}"
+                    data-ms-leave-subj="${escapeHtml(item.subjectName || '')}"
+                    style="flex-shrink:0;">${leaveBtnLabel}</button>
+            </div>
+        `;
+    };
+
+    const renderStatsContent = () => {
+        const scrollTop = bodyEl.scrollTop;
+        const opts = getOptions();
+        latestStats = computeMakeupAndLeaveStats(opts);
+
+        bannerEl.textContent = `統計範圍共 ${latestStats.assignmentCount} 項作業｜符合條件學生：${latestStats.students.length} 人（全班 ${latestStats.allStudentsCount} 人）`;
+
+        if (!latestStats.students.length) {
+            bodyEl.innerHTML = '<p class="empty-hint">目前篩選期間內沒有任何補繳、未繳或請假紀錄</p>';
+            return;
+        }
+
+        const allVisibleExpanded = latestStats.students.filter(s => s.hasAnyRecord).every(s => makeupStatsExpanded.has(s.studentId));
+        if (expandAllBtn) {
+            expandAllBtn.textContent = allVisibleExpanded ? '全部收合' : '全部展開';
+        }
+
+        bodyEl.innerHTML = latestStats.students.map(stItem => {
+            const sName = String(stItem.studentName || '').trim();
+            const hasSeatPrefix = stItem.seat != null && stItem.seat !== '' && !sName.startsWith(String(stItem.seat));
+            const displayStudent = hasSeatPrefix ? `${stItem.seat}號 ${sName}` : sName;
+            const isExp = makeupStatsExpanded.has(stItem.studentId);
+
+            const badges = [];
+            if (stItem.regularMakeup.length > 0) {
+                badges.push(`<span class="stats-pill makeup">一般補繳 ${stItem.regularMakeup.length} 件</span>`);
+            }
+            if (stItem.regularMissing.length > 0) {
+                badges.push(`<span class="stats-pill missing">一般未繳 ${stItem.regularMissing.length} 件</span>`);
+            }
+            if (stItem.totalRegularCount === 0) {
+                badges.push(`<span class="stats-pill clean">一般無缺補交</span>`);
+            }
+            if (stItem.totalLeaveCount > 0) {
+                badges.push(`<span class="stats-pill leave">因請假另外算 ${stItem.totalLeaveCount} 件（已補 ${stItem.leaveMakeup.length}／未繳 ${stItem.leaveMissing.length}）</span>`);
+            }
+
+            const detailsHtml = stItem.hasAnyRecord ? [
+                ...stItem.regularMakeup.map(it => renderDetailRow(stItem.studentId, it, '一般補繳', 'background:rgba(47,111,176,0.14);color:#2f6fb0;border:1px solid #2f6fb0;')),
+                ...stItem.regularMissing.map(it => renderDetailRow(stItem.studentId, it, '一般未繳', 'background:rgba(196,103,79,0.14);color:var(--danger);border:1px solid var(--danger);')),
+                ...stItem.leaveMakeup.map(it => renderDetailRow(stItem.studentId, it, '因請假・已補繳（另外算）', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;')),
+                ...stItem.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '因請假・未繳（另外算）', 'background:rgba(184,134,12,0.16);color:#946b00;border:1px solid #b8860c;'))
+            ].join('') : '<p style="margin:4px 0; font-size:0.88em; color:var(--muted);">全部準時繳交，無補繳或請假紀錄</p>';
+
+            return `
+                <div class="group-block" style="margin-bottom:10px; padding:10px 14px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <strong style="font-size:1.02em;">${escapeHtml(displayStudent)}</strong>
+                            ${badges.join('')}
+                        </div>
+                        ${stItem.hasAnyRecord ? `<button type="button" class="btn small outline" data-ms-toggle="${escapeHtml(stItem.studentId)}">${isExp ? '收合明細' : '明細 / 標記請假'}</button>` : ''}
+                    </div>
+                    <div style="display:${isExp ? 'block' : 'none'}; margin-top:8px; padding-top:6px; border-top:1px solid var(--line);">
+                        ${detailsHtml}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        bodyEl.scrollTop = scrollTop;
+
+        bodyEl.querySelectorAll('[data-ms-toggle]').forEach(btn => {
+            btn.onclick = () => {
+                const sid = btn.getAttribute('data-ms-toggle');
+                if (makeupStatsExpanded.has(sid)) makeupStatsExpanded.delete(sid);
+                else makeupStatsExpanded.add(sid);
+                renderStatsContent();
+            };
+        });
+
+        bodyEl.querySelectorAll('[data-ms-leave-student]').forEach(btn => {
+            btn.onclick = async () => {
+                const sid = btn.getAttribute('data-ms-leave-student');
+                const aid = btn.getAttribute('data-ms-leave-aid');
+                const docId = btn.getAttribute('data-ms-leave-doc');
+                const isActive = btn.getAttribute('data-ms-leave-active') === '1';
+                const aName = btn.getAttribute('data-ms-leave-name') || '';
+                const subjName = btn.getAttribute('data-ms-leave-subj') || '';
+
+                const stu = (st.students || []).find(x => x.id === sid);
+                const grp = (st.groups || []).find(x => x.id === stu?.groupId);
+                const subjObj = (st.subjects || []).find(x => x.name === subjName);
+
+                let archiveDoc = null;
+                if (!isActive) {
+                    if (docId && Array.isArray(state.archiveDocsList)) {
+                        archiveDoc = state.archiveDocsList.find(d => (d._id || d.id) === docId) || null;
+                    }
+                    if (!archiveDoc && state.archiveDocsMap) {
+                        archiveDoc = (docId && state.archiveDocsMap[docId]) || state.archiveDocsMap[aid] || null;
+                    }
+                }
+
+                const collidesWithActiveContact = !isActive && (st.assignments || []).some(a => a.name === '聯絡簿每日任務' && a.id === aid);
+                const liveRec = !collidesWithActiveContact ? recs.find(r => r.studentId === sid && r.assignmentId === aid) : null;
+                const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === sid && r.assignmentId === aid);
+
+                const curStatus = deriveRecordStatus(liveRec, archRec ? archRec.status : '未繳');
+                const curSign = deriveRecordSign(liveRec, archRec ? archRec.signStatus : '未簽名');
+                const curRemark = deriveRecordRemark(liveRec, archRec);
+                const curLeave = isRecordLeave(liveRec, archRec);
+                const curMakeup = isRecordMakeup(liveRec, archRec, curStatus);
+
+                const nextLeave = !curLeave;
+                const remarkText = toggleLeaveRemark(curRemark, nextLeave);
+
+                const payload = {
+                    groupId: grp ? grp.id : '',
+                    groupName: grp ? grp.name : '',
+                    studentId: sid,
+                    studentName: stu ? stu.name : '',
+                    subjectId: subjObj ? subjObj.id : '',
+                    subjectName: subjName,
+                    assignmentId: aid,
+                    assignmentName: aName,
+                    status: curStatus,
+                    signStatus: curSign,
+                    remark: remarkText,
+                    isLeave: nextLeave,
+                    isMakeup: curMakeup
+                };
+
+                if (!collidesWithActiveContact) {
+                    let r = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
+                    if (r) Object.assign(r, payload); else recs.push(payload);
+                }
+
+                if (archiveDoc) {
+                    if (!archiveDoc.records) archiveDoc.records = [];
+                    const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                    if (archIdx !== -1) {
+                        Object.assign(archiveDoc.records[archIdx], {
+                            status: curStatus,
+                            signStatus: curSign,
+                            remark: remarkText,
+                            isLeave: nextLeave,
+                            isMakeup: curMakeup
+                        });
+                    } else {
+                        archiveDoc.records.push({ ...payload });
+                    }
+                    archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
+                    const realDocId = archiveDoc._id || archiveDoc.id || docId;
+                    if (state.archiveDocsMap && realDocId) {
+                        if (state.archiveDocsMap[realDocId]) state.archiveDocsMap[realDocId].records = archiveDoc.records;
+                        if (state.archiveDocsMap[aid] === archiveDoc) state.archiveDocsMap[aid].records = archiveDoc.records;
+                    }
+                    if (state.refreshOpenArchiveDetail && realDocId) {
+                        state.refreshOpenArchiveDetail(realDocId);
+                    }
+                }
+
+                renderStatsContent();
+                renderGradingTab(gradingRecs, recs, st, state);
+
+                if (!collidesWithActiveContact) {
+                    await adminSetStatus(payload);
+                }
+                if (archiveDoc) {
+                    const realDocId = archiveDoc._id || archiveDoc.id || docId;
+                    if (realDocId) {
+                        await setDoc(doc(db, 'archives', realDocId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_LEAVE_FAILED', e));
+                    }
+                }
+            };
+        });
+    };
+
+    if (startInp) startInp.onchange = renderStatsContent;
+    if (endInp) endInp.onchange = renderStatsContent;
+    if (resetDateBtn) {
+        resetDateBtn.onclick = () => {
+            if (startInp) startInp.value = '';
+            if (endInp) endInp.value = '';
+            renderStatsContent();
+        };
+    }
+    if (includeContactChk) includeContactChk.onchange = renderStatsContent;
+    if (includeActiveChk) includeActiveChk.onchange = renderStatsContent;
+    if (showAllChk) showAllChk.onchange = renderStatsContent;
+
+    if (expandAllBtn) {
+        expandAllBtn.onclick = () => {
+            if (!latestStats) return;
+            const withRecords = latestStats.students.filter(s => s.hasAnyRecord);
+            const allExp = withRecords.every(s => makeupStatsExpanded.has(s.studentId));
+            if (allExp) {
+                withRecords.forEach(s => makeupStatsExpanded.delete(s.studentId));
+            } else {
+                withRecords.forEach(s => makeupStatsExpanded.add(s.studentId));
+            }
+            renderStatsContent();
+        };
+    }
+
+    if (copyBtn) {
+        copyBtn.onclick = async () => {
+            const opts = getOptions();
+            const stats = computeMakeupAndLeaveStats(opts);
+            const reportText = formatMakeupAndLeaveReport(stats, {
+                className: st.className || '',
+                startDate: opts.startDate,
+                endDate: opts.endDate,
+                includeContactBook: opts.includeContactBook
+            });
+            try {
+                await navigator.clipboard.writeText(reportText);
+                showAlert('補繳與請假統計報表已複製！');
+            } catch (e) {
+                showAlert('複製失敗，請檢查瀏覽器權限');
+            }
+        };
+    }
+
+    if (closeBtn) {
+        closeBtn.onclick = () => { modal.style.display = 'none'; };
+    }
+
+    renderStatsContent();
+    modal.style.display = 'flex';
 }
 

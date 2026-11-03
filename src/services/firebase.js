@@ -181,9 +181,11 @@ export function adminSetStatus(item) {
         assignmentName: item.assignmentName || '',
         status: item.status || '未繳',
         signStatus: item.signStatus || '未簽名',
-        remark: item.remark || '',
         [ORDER_FIELD]: Date.now()
     };
+    if (item.remark !== undefined) safeItem.remark = item.remark || '';
+    if (item.isLeave !== undefined) safeItem.isLeave = !!item.isLeave;
+    if (item.isMakeup !== undefined) safeItem.isMakeup = !!item.isMakeup;
     return setDoc(ref, safeItem, { merge: true }).catch(e => {
         logger.error('ADMIN_SET_STATUS_FAILED', e);
         showAlert('操作失敗，請檢查網路後重試');
