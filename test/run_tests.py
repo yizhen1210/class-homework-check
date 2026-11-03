@@ -744,7 +744,8 @@ def run_tests():
     for txt in ('補繳次數統計', '期中／期末 作業補繳與未繳統計', 'btn-leave', 'btn-stats', 'subjectGroups', 'resolveStatsSubjectName'):
         t.assert_equal(txt in index_text, True, f"index.html 應包含更新文案/樣式 {txt}")
     t.assert_equal('subjectGroups' in rules_text and 'subjectGroups' in grading_text, True, "src/ 應支援依科目排列統計明細")
-    t.assert_equal('#fbf1e6' in index_text and '#fbf7ee' in index_text and '#5e4a1a' in index_text, True, "按鈕應套用淡色底與同色系深色字")
+    t.assert_equal('.btn.btn-stats { border-color: #b4bab2; background: #e8e8e2; color: #2e3a35;' in index_text, True, "補繳次數統計按鈕應為原科目框底色 #e8e8e2 與同色系深色字 #2e3a35")
+    t.assert_equal('background:#f7f7f4; border:1px solid #dcded8;' in index_text and 'background:#f7f7f4; border:1px solid #dcded8;' in grading_text, True, "統計彈窗科目框底色應調淺為 #f7f7f4")
     t.assert_equal('border:2.5px dashed var(--line)' in index_text and 'border:2.5px dashed var(--line)' in app_text, True, "今日請假學生框應為粗虛線且無底色")
     t.assert_equal('.leave-btn.active { background: #d5c38d;' in index_text, True, "✓請假底色應填滿邊框色 #d5c38d")
     t.assert_equal('.leave-tag { display: inline-block; padding: 1px 7px; border-radius: 10px; background: #fbf7ee; border: 1px solid #d5c38d; color: #5e4a1a; font-size: 0.72em; white-space: nowrap;' in index_text, True, "請假標籤不應為粗體")

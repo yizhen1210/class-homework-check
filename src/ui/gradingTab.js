@@ -1171,7 +1171,7 @@ export function openMakeupStatsModal({ settings, records, gradingRecords, state 
         const leaveBtnLabel = item.isLeave ? '✓請假' : '請假';
         const remarkSpan = item.remark ? `<span style="font-size:0.82em; color:var(--muted); margin-left:6px;">（${escapeHtml(item.remark)}）</span>` : '';
         return `
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); font-size:0.92em;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed #e4e6e0; font-size:0.92em;">
                 <div style="flex:1; min-width:0; line-height:1.4;">
                     <span style="display:inline-block; padding:1px 8px; border-radius:10px; font-size:0.8em; margin-right:6px; ${categoryStyle}">${categoryLabel}</span>
                     <strong>${escapeHtml(item.displayName)}</strong>${remarkSpan}
@@ -1237,8 +1237,8 @@ export function openMakeupStatsModal({ settings, records, gradingRecords, state 
                     ...sg.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;'))
                 ].join('');
                 return `
-                    <div style="margin-top:8px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:8px 12px;">
-                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-bottom:5px; margin-bottom:2px; border-bottom:1px solid var(--line);">
+                    <div style="margin-top:8px; background:#f7f7f4; border:1px solid #dcded8; border-radius:10px; padding:8px 12px;">
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-bottom:5px; margin-bottom:2px; border-bottom:1px solid #e4e6e0;">
                             <strong style="font-size:0.92em; color:var(--text);">【${escapeHtml(sg.subjectName)}】</strong>
                             ${sgBadges.join('')}
                         </div>
