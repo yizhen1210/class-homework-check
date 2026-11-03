@@ -744,7 +744,9 @@ def run_tests():
     for txt in ('補繳次數統計', '期中／期末 作業補繳與未繳統計', 'btn-leave', 'btn-stats', 'subjectGroups', 'resolveStatsSubjectName'):
         t.assert_equal(txt in index_text, True, f"index.html 應包含更新文案/樣式 {txt}")
     t.assert_equal('subjectGroups' in rules_text and 'subjectGroups' in grading_text, True, "src/ 應支援依科目排列統計明細")
-    t.assert_equal('#f2dec4' in index_text and '#f8f1d8' in index_text, True, "按鈕應套用調淺後配色與米黃底深字配色")
+    t.assert_equal('#f2dec4' in index_text and '#fbf7ee' in index_text, True, "按鈕應套用交換後配色與淡色底")
+    t.assert_equal('明細 / 標記請假' not in index_text, True, "index.html 應已將明細/標記請假簡化為明細")
+    t.assert_equal('isAllPurpleSubject' in rules_text or 'aAllPurple' in rules_text, True, "應支援全紫色科目排到最後之排序")
     t.assert_equal('展開學生明細即可一鍵標記或取消「請假」' not in index_text, True, "index.html 應已移除提示文字")
     t.assert_equal('展開學生明細即可一鍵標記或取消「請假」' not in grading_text, True, "gradingTab.js 應已移除提示文字")
 

@@ -76,10 +76,10 @@
         .btn.danger:hover { background: color-mix(in srgb, var(--danger) 82%, #000); border-color: color-mix(in srgb, var(--danger) 82%, #000); }
         .btn.outline.danger { background: transparent; color: var(--danger); }
         .btn.outline.danger:hover { background: var(--danger); color: #fff; }
-        .btn.btn-leave { border-color: #d6b38a; background: #f2dec4; color: #593b18; }
-        .btn.btn-leave:hover { background: #e8cda9; border-color: #c59d6f; color: #422b10; }
-        .btn.btn-stats { border-color: #d8ca9c; background: #f8f1d8; color: #473d21; }
-        .btn.btn-stats:hover { background: #efe4be; border-color: #c7b57e; color: #332b15; }
+        .btn.btn-stats { border-color: #d6b38a; background: #f2dec4; color: #593b18; }
+        .btn.btn-stats:hover { background: #e8cda9; border-color: #c59d6f; color: #422b10; }
+        .btn.btn-leave { border-color: #dfd5b5; background: #fbf7ee; color: #473d21; }
+        .btn.btn-leave:hover { background: #f4ecda; border-color: #cbbd92; color: #332b15; }
 
         .admin-only.hidden { display: none !important; }
 
@@ -197,11 +197,11 @@
         .corrected-btn:hover { background: rgba(123,94,167,0.12); }
         .corrected-btn.active { background: #7b5ea7; color: #fff; }
 
-        .leave-btn { padding: 4px 8px; border-radius: 16px; border: 2px solid #b8860c; background: transparent; color: #946b00; font-family: inherit; font-size: 0.75em; cursor: pointer; transition: background .15s, color .15s, transform 0.1s; white-space: nowrap; text-align: center; }
-        .leave-btn:hover { background: rgba(184,134,12,0.14); }
-        .leave-btn.active { background: #b8860c; border-color: #b8860c; color: #fff; }
+        .leave-btn { padding: 4px 8px; border-radius: 16px; border: 2px solid #dfd5b5; background: #ffffff; color: #473d21; font-family: inherit; font-size: 0.75em; cursor: pointer; transition: background .15s, color .15s, border-color .15s, transform 0.1s; white-space: nowrap; text-align: center; }
+        .leave-btn:hover { background: #fbf7ee; border-color: #cbbd92; }
+        .leave-btn.active { background: #fbf7ee; border-color: #cbbd92; color: #473d21; font-weight: bold; }
         .leave-btn.large { padding: 7px 14px; font-size: 0.9em; border-radius: 20px; }
-        .leave-tag { display: inline-block; padding: 1px 7px; border-radius: 10px; background: rgba(184,134,12,0.16); border: 1px solid #b8860c; color: #946b00; font-size: 0.72em; white-space: nowrap; vertical-align: middle; }
+        .leave-tag { display: inline-block; padding: 1px 7px; border-radius: 10px; background: #fbf7ee; border: 1px solid #dfd5b5; color: #473d21; font-size: 0.72em; white-space: nowrap; vertical-align: middle; }
         .stats-pill { display: inline-block; padding: 2px 10px; border-radius: 14px; font-size: 0.82em; white-space: nowrap; }
         .stats-pill.makeup { background: rgba(47,111,176,0.14); color: #2f6fb0; border: 1px solid #2f6fb0; }
         .stats-pill.missing { background: rgba(196,103,79,0.14); color: var(--danger); border: 1px solid var(--danger); }
@@ -1388,16 +1388,33 @@
                     configuredSubjectOrder.set(subj.name, idx);
                 }
             });
-            const compareSubjectNames = (a, b) => {
-                if (a === b) return 0;
-                if (a === '未分類') return 1;
-                if (b === '未分類') return -1;
-                if (a === '聯絡簿') return 1;
-                if (b === '聯絡簿') return -1;
-                const ia = configuredSubjectOrder.has(a) ? configuredSubjectOrder.get(a) : 9999;
-                const ib = configuredSubjectOrder.has(b) ? configuredSubjectOrder.get(b) : 9999;
-                if (ia !== ib) return ia - ib;
-                return a.localeCompare(b, 'zh-Hant');
+            const getSubjectBaseOrder = (name) => {
+                const n = String(name || '').trim();
+                if (n.includes('國')) return 1;
+                if (n.includes('數')) return 2;
+                if (configuredSubjectOrder.has(n)) return 10 + configuredSubjectOrder.get(n);
+                if (n.includes('社')) return 40;
+                if (n.includes('自')) return 50;
+                if (n.includes('英')) return 60;
+                if (n === '聯絡簿' || n.includes('聯絡簿')) return 100;
+                if (n === '未分類' || n === '其他') return 200;
+                return 80;
+            };
+
+            const isAllPurpleSubject = (sg) => {
+                const hasBlueOrRed = (sg.regularMakeup && sg.regularMakeup.length > 0) || (sg.regularMissing && sg.regularMissing.length > 0);
+                return !hasBlueOrRed;
+            };
+
+            const compareSubjectGroups = (a, b) => {
+                const aAllPurple = isAllPurpleSubject(a);
+                const bAllPurple = isAllPurpleSubject(b);
+                if (!aAllPurple && bAllPurple) return -1;
+                if (aAllPurple && !bAllPurple) return 1;
+                const rankA = getSubjectBaseOrder(a.subjectName);
+                const rankB = getSubjectBaseOrder(b.subjectName);
+                if (rankA !== rankB) return rankA - rankB;
+                return a.subjectName.localeCompare(b.subjectName, 'zh-Hant');
             };
 
             const allEntries = collectUnifiedAssignmentEntries({
@@ -1495,7 +1512,7 @@
                 });
 
                 const subjectGroups = Array.from(subjectMap.values())
-                    .sort((a, b) => compareSubjectNames(a.subjectName, b.subjectName));
+                    .sort(compareSubjectGroups);
                 const totalRegularCount = regularMakeup.length + regularMissing.length;
                 const totalLeaveCount = leaveMakeup.length + leaveMissing.length;
                 return {
@@ -3342,7 +3359,7 @@
             });
 
             const renderDetailRow = (studentId, item, categoryLabel, categoryStyle) => {
-                const leaveBtnLabel = item.isLeave ? '✓請假（取消）' : '標記請假';
+                const leaveBtnLabel = item.isLeave ? '✓請假' : '請假';
                 const remarkSpan = item.remark ? `<span style="font-size:0.82em; color:var(--muted); margin-left:6px;">（${escapeHtml(item.remark)}）</span>` : '';
                 return `
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); font-size:0.92em;">
@@ -3397,7 +3414,7 @@
                             ...sg.regularMakeup.map(it => renderDetailRow(stItem.studentId, it, '已補', 'background:rgba(47,111,176,0.14);color:#2f6fb0;border:1px solid #2f6fb0;')),
                             ...sg.regularMissing.map(it => renderDetailRow(stItem.studentId, it, '未繳', 'background:rgba(196,103,79,0.14);color:var(--danger);border:1px solid var(--danger);')),
                             ...sg.leaveMakeup.map(it => renderDetailRow(stItem.studentId, it, '請假・已補', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;')),
-                            ...sg.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(184,134,12,0.16);color:#946b00;border:1px solid #b8860c;'))
+                            ...sg.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;'))
                         ].join('');
                         return `
                             <div style="margin-top:8px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:8px 12px;">
@@ -3417,7 +3434,7 @@
                                     <strong style="font-size:1.02em;">${escapeHtml(displayStudent)}</strong>
                                     ${badges.join('')}
                                 </div>
-                                ${stItem.hasAnyRecord ? `<button type="button" class="btn small outline" data-ms-toggle="${escapeHtml(stItem.studentId)}">${isExp ? '收合明細' : '明細 / 標記請假'}</button>` : ''}
+                                ${stItem.hasAnyRecord ? `<button type="button" class="btn small outline" data-ms-toggle="${escapeHtml(stItem.studentId)}">${isExp ? '收合' : '明細'}</button>` : ''}
                             </div>
                             <div style="display:${isExp ? 'block' : 'none'}; margin-top:8px; padding-top:6px; border-top:1px solid var(--line);">
                                 ${detailsHtml}

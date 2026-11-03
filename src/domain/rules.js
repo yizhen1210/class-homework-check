@@ -989,16 +989,35 @@ export function computeMakeupAndLeaveStats({
             configuredSubjectOrder.set(subj.name, idx);
         }
     });
-    const compareSubjectNames = (a, b) => {
-        if (a === b) return 0;
-        if (a === '未分類') return 1;
-        if (b === '未分類') return -1;
-        if (a === '聯絡簿') return 1;
-        if (b === '聯絡簿') return -1;
-        const ia = configuredSubjectOrder.has(a) ? configuredSubjectOrder.get(a) : 9999;
-        const ib = configuredSubjectOrder.has(b) ? configuredSubjectOrder.get(b) : 9999;
-        if (ia !== ib) return ia - ib;
-        return a.localeCompare(b, 'zh-Hant');
+    const getSubjectBaseOrder = (name) => {
+        const n = String(name || '').trim();
+        if (n.includes('國')) return 1;
+        if (n.includes('數')) return 2;
+        if (configuredSubjectOrder.has(n)) return 10 + configuredSubjectOrder.get(n);
+        if (n.includes('社')) return 40;
+        if (n.includes('自')) return 50;
+        if (n.includes('英')) return 60;
+        if (n === '聯絡簿' || n.includes('聯絡簿')) return 100;
+        if (n === '未分類' || n === '其他') return 200;
+        return 80;
+    };
+
+    const isAllPurpleSubject = (sg) => {
+        const hasBlueOrRed = (sg.regularMakeup && sg.regularMakeup.length > 0) || (sg.regularMissing && sg.regularMissing.length > 0);
+        return !hasBlueOrRed;
+    };
+
+    const compareSubjectGroups = (a, b) => {
+        const aAllPurple = isAllPurpleSubject(a);
+        const bAllPurple = isAllPurpleSubject(b);
+        // 若該科目全部都是紫色，就排到最後，優先顯示含有藍、紅的科目
+        if (!aAllPurple && bAllPurple) return -1;
+        if (aAllPurple && !bAllPurple) return 1;
+        // 兩者皆有藍/紅或兩者皆全為紫色：依科目順序（國、數、聯絡簿、其他...）
+        const rankA = getSubjectBaseOrder(a.subjectName);
+        const rankB = getSubjectBaseOrder(b.subjectName);
+        if (rankA !== rankB) return rankA - rankB;
+        return a.subjectName.localeCompare(b.subjectName, 'zh-Hant');
     };
 
     const allEntries = collectUnifiedAssignmentEntries({
@@ -1096,7 +1115,7 @@ export function computeMakeupAndLeaveStats({
         });
 
         const subjectGroups = Array.from(subjectMap.values())
-            .sort((a, b) => compareSubjectNames(a.subjectName, b.subjectName));
+            .sort(compareSubjectGroups);
         const totalRegularCount = regularMakeup.length + regularMissing.length;
         const totalLeaveCount = leaveMakeup.length + leaveMissing.length;
 

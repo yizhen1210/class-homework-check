@@ -58,10 +58,10 @@ body:not(.ready) [data-gated] { visibility: hidden; }
 .btn.danger:hover { background: color-mix(in srgb, var(--danger) 82%, #000); border-color: color-mix(in srgb, var(--danger) 82%, #000); }
 .btn.outline.danger { background: transparent; color: var(--danger); }
 .btn.outline.danger:hover { background: var(--danger); color: #fff; }
-.btn.btn-leave { border-color: #d6b38a; background: #f2dec4; color: #593b18; }
-.btn.btn-leave:hover { background: #e8cda9; border-color: #c59d6f; color: #422b10; }
-.btn.btn-stats { border-color: #d8ca9c; background: #f8f1d8; color: #473d21; }
-.btn.btn-stats:hover { background: #efe4be; border-color: #c7b57e; color: #332b15; }
+.btn.btn-stats { border-color: #d6b38a; background: #f2dec4; color: #593b18; }
+.btn.btn-stats:hover { background: #e8cda9; border-color: #c59d6f; color: #422b10; }
+.btn.btn-leave { border-color: #dfd5b5; background: #fbf7ee; color: #473d21; }
+.btn.btn-leave:hover { background: #f4ecda; border-color: #cbbd92; color: #332b15; }
 
 .admin-only.hidden { display: none !important; }
 
@@ -179,11 +179,11 @@ input[type="date"].txt-input { box-sizing: border-box; -webkit-appearance: none;
 .corrected-btn:hover { background: rgba(123,94,167,0.12); }
 .corrected-btn.active { background: #7b5ea7; color: #fff; }
 
-.leave-btn { padding: 4px 8px; border-radius: 16px; border: 2px solid #b8860c; background: transparent; color: #946b00; font-family: inherit; font-size: 0.75em; cursor: pointer; transition: background .15s, color .15s, transform 0.1s; white-space: nowrap; text-align: center; }
-.leave-btn:hover { background: rgba(184,134,12,0.14); }
-.leave-btn.active { background: #b8860c; border-color: #b8860c; color: #fff; }
+.leave-btn { padding: 4px 8px; border-radius: 16px; border: 2px solid #dfd5b5; background: #ffffff; color: #473d21; font-family: inherit; font-size: 0.75em; cursor: pointer; transition: background .15s, color .15s, border-color .15s, transform 0.1s; white-space: nowrap; text-align: center; }
+.leave-btn:hover { background: #fbf7ee; border-color: #cbbd92; }
+.leave-btn.active { background: #fbf7ee; border-color: #cbbd92; color: #473d21; font-weight: bold; }
 .leave-btn.large { padding: 7px 14px; font-size: 0.9em; border-radius: 20px; }
-.leave-tag { display: inline-block; padding: 1px 7px; border-radius: 10px; background: rgba(184,134,12,0.16); border: 1px solid #b8860c; color: #946b00; font-size: 0.72em; white-space: nowrap; vertical-align: middle; }
+.leave-tag { display: inline-block; padding: 1px 7px; border-radius: 10px; background: #fbf7ee; border: 1px solid #dfd5b5; color: #473d21; font-size: 0.72em; white-space: nowrap; vertical-align: middle; }
 .stats-pill { display: inline-block; padding: 2px 10px; border-radius: 14px; font-size: 0.82em; white-space: nowrap; }
 .stats-pill.makeup { background: rgba(47,111,176,0.14); color: #2f6fb0; border: 1px solid #2f6fb0; }
 .stats-pill.missing { background: rgba(196,103,79,0.14); color: var(--danger); border: 1px solid var(--danger); }

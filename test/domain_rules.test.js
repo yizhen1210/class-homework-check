@@ -442,6 +442,27 @@ export function runAllDomainTests(assert) {
         assert.strictEqual(report.includes('請假 2（已補 1／未繳 1）'), true);
         assert.strictEqual(report.includes('【國語】未繳 1'), true);
         assert.strictEqual(report.includes('【數學】已補 1'), true);
+
+        // 測試：若科目全為紫色，排到最後，優先顯示含藍、紅的科目
+        const archMixed = {
+            id: 'arc_mixed',
+            timestamp: new Date('2026-10-25T16:00:00').getTime(),
+            dateLabel: '10/25',
+            assignments: [
+                { id: 'asg_ch_leave', name: '國習 L6', subjectName: '國語' },
+                { id: 'asg_soc_missing', name: '社習 U3', subjectName: '社會' }
+            ],
+            records: [
+                { studentId: 's4', assignmentId: 'asg_ch_leave', assignmentName: '國習 L6', status: '未繳', remark: '請假', isLeave: true },
+                { studentId: 's4', assignmentId: 'asg_soc_missing', assignmentName: '社習 U3', status: '未繳', remark: '', isLeave: false }
+            ]
+        };
+        const statsMixed = computeMakeupAndLeaveStats({
+            settings: { className: '608', students: [{ id: 's4', name: '陳同學', seat: '4' }], assignments: [] },
+            archiveDocsList: [archMixed]
+        });
+        const st4 = statsMixed.students[0];
+        assert.deepStrictEqual(st4.subjectGroups.map(g => g.subjectName), ['社會', '國語'], '含未繳(紅)的社會應優先於全為請假(紫)的國語');
     }
 }
 

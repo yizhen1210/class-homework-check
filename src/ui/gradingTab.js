@@ -1162,7 +1162,7 @@ export function openMakeupStatsModal({ settings, records, gradingRecords, state 
     });
 
     const renderDetailRow = (studentId, item, categoryLabel, categoryStyle) => {
-        const leaveBtnLabel = item.isLeave ? '✓請假（取消）' : '標記請假';
+        const leaveBtnLabel = item.isLeave ? '✓請假' : '請假';
         const remarkSpan = item.remark ? `<span style="font-size:0.82em; color:var(--muted); margin-left:6px;">（${escapeHtml(item.remark)}）</span>` : '';
         return `
             <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); font-size:0.92em;">
@@ -1228,7 +1228,7 @@ export function openMakeupStatsModal({ settings, records, gradingRecords, state 
                     ...sg.regularMakeup.map(it => renderDetailRow(stItem.studentId, it, '已補', 'background:rgba(47,111,176,0.14);color:#2f6fb0;border:1px solid #2f6fb0;')),
                     ...sg.regularMissing.map(it => renderDetailRow(stItem.studentId, it, '未繳', 'background:rgba(196,103,79,0.14);color:var(--danger);border:1px solid var(--danger);')),
                     ...sg.leaveMakeup.map(it => renderDetailRow(stItem.studentId, it, '請假・已補', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;')),
-                    ...sg.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(184,134,12,0.16);color:#946b00;border:1px solid #b8860c;'))
+                    ...sg.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;'))
                 ].join('');
                 return `
                     <div style="margin-top:8px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:8px 12px;">
@@ -1248,7 +1248,7 @@ export function openMakeupStatsModal({ settings, records, gradingRecords, state 
                             <strong style="font-size:1.02em;">${escapeHtml(displayStudent)}</strong>
                             ${badges.join('')}
                         </div>
-                        ${stItem.hasAnyRecord ? `<button type="button" class="btn small outline" data-ms-toggle="${escapeHtml(stItem.studentId)}">${isExp ? '收合明細' : '明細 / 標記請假'}</button>` : ''}
+                        ${stItem.hasAnyRecord ? `<button type="button" class="btn small outline" data-ms-toggle="${escapeHtml(stItem.studentId)}">${isExp ? '收合' : '明細'}</button>` : ''}
                     </div>
                     <div style="display:${isExp ? 'block' : 'none'}; margin-top:8px; padding-top:6px; border-top:1px solid var(--line);">
                         ${detailsHtml}
