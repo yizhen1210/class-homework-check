@@ -76,6 +76,10 @@
         .btn.danger:hover { background: color-mix(in srgb, var(--danger) 82%, #000); border-color: color-mix(in srgb, var(--danger) 82%, #000); }
         .btn.outline.danger { background: transparent; color: var(--danger); }
         .btn.outline.danger:hover { background: var(--danger); color: #fff; }
+        .btn.btn-leave { border-color: #b8843b; background: #b8843b; color: #fff; }
+        .btn.btn-leave:hover { background: #9c6d2c; border-color: #9c6d2c; color: #fff; }
+        .btn.btn-stats { border-color: #7b6898; background: #7b6898; color: #fff; }
+        .btn.btn-stats:hover { background: #645280; border-color: #645280; color: #fff; }
 
         .admin-only.hidden { display: none !important; }
 
@@ -1448,7 +1452,7 @@
         function formatMakeupAndLeaveReport(statsResult, { className = '', startDate = '', endDate = '', includeContactBook = true } = {}) {
             const rangeText = (startDate || endDate) ? `${startDate || '開學'} ~ ${endDate || '今日'}` : '全部期間';
             const scopeText = includeContactBook ? '含聯絡簿' : '不含聯絡簿';
-            const title = `【${className ? className + ' ' : ''}作業補繳與請假統計】`;
+            const title = `【${className ? className + ' ' : ''}期中／期末 作業補繳與未繳統計】`;
             const header = `${title}\n統計期間：${rangeText}（${scopeText}，共 ${statsResult.assignmentCount} 項作業）`;
             if (!statsResult.students || !statsResult.students.length) {
                 return `${header}\n目前期間內無補繳、缺交或請假紀錄。`;
@@ -1458,17 +1462,17 @@
                 const hasSeatPrefix = stItem.seat != null && stItem.seat !== '' && !sName.startsWith(String(stItem.seat));
                 const prefix = hasSeatPrefix ? `${stItem.seat}號 ${sName}` : sName;
                 const summaryParts = [
-                    `一般補繳 ${stItem.regularMakeup.length} 件`,
-                    `一般未繳 ${stItem.regularMissing.length} 件`
+                    `已補 ${stItem.regularMakeup.length}`,
+                    `未繳 ${stItem.regularMissing.length}`
                 ];
                 if (stItem.totalLeaveCount > 0) {
-                    summaryParts.push(`請假另外算 ${stItem.totalLeaveCount} 件（請假已補 ${stItem.leaveMakeup.length}、請假未繳 ${stItem.leaveMissing.length}）`);
+                    summaryParts.push(`請假 ${stItem.totalLeaveCount}（已補 ${stItem.leaveMakeup.length}／未繳 ${stItem.leaveMissing.length}）`);
                 }
                 const detailLines = [];
-                if (stItem.regularMakeup.length) detailLines.push(`  ・一般補繳：${stItem.regularMakeup.map(x => x.displayName).join('、')}`);
-                if (stItem.regularMissing.length) detailLines.push(`  ・一般未繳：${stItem.regularMissing.map(x => x.displayName).join('、')}`);
-                if (stItem.leaveMakeup.length) detailLines.push(`  ・因請假已補繳（另外算）：${stItem.leaveMakeup.map(x => x.displayName).join('、')}`);
-                if (stItem.leaveMissing.length) detailLines.push(`  ・因請假未繳（另外算）：${stItem.leaveMissing.map(x => x.displayName).join('、')}`);
+                if (stItem.regularMakeup.length) detailLines.push(`  ・已補：${stItem.regularMakeup.map(x => x.displayName).join('、')}`);
+                if (stItem.regularMissing.length) detailLines.push(`  ・未繳：${stItem.regularMissing.map(x => x.displayName).join('、')}`);
+                if (stItem.leaveMakeup.length) detailLines.push(`  ・請假（已補）：${stItem.leaveMakeup.map(x => x.displayName).join('、')}`);
+                if (stItem.leaveMissing.length) detailLines.push(`  ・請假（未繳）：${stItem.leaveMissing.map(x => x.displayName).join('、')}`);
                 return [`${prefix}｜${summaryParts.join('｜')}`, ...detailLines].join('\n');
             });
             return `${header}\n────────────────────\n${lines.join('\n')}`;
@@ -3189,7 +3193,7 @@
             modal.className = 'modal-overlay';
             modal.innerHTML = `
                 <div class="modal-content" style="width:min(760px, 94vw); max-width:760px; text-align:left; padding:26px 28px;">
-                    <p class="modal-title" style="text-align:center; margin-bottom:14px;">期中／期末 作業補繳與請假統計</p>
+                    <p class="modal-title" style="text-align:center; margin-bottom:14px; white-space:normal;">期中／期末 作業補繳與未繳統計</p>
                     <div style="background:var(--bg); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:14px;">
                         <div class="date-range-row" style="align-items:flex-end; margin-bottom:10px;">
                             <div class="field">
@@ -3213,9 +3217,6 @@
                                 <input type="checkbox" id="msShowAllStudentsChk" style="width:auto; margin:0;">顯示全班（含無缺補交紀錄者）
                             </label>
                         </div>
-                        <p style="margin:8px 0 0; font-size:0.82em; color:var(--muted); line-height:1.45;">
-                            💡 <strong>一般補繳／未繳</strong>與<strong>「因請假缺交／補繳（另外算）」</strong>已自動分開統計；展開學生明細即可一鍵標記或取消「請假」。
-                        </p>
                     </div>
                     <div id="msSummaryBanner" style="font-size:0.9em; color:var(--muted); margin-bottom:8px;"></div>
                     <div id="msResultBody" style="max-height:50vh; overflow-y:auto; margin-bottom:18px; padding-right:4px;"></div>
@@ -3302,16 +3303,16 @@
                     const isExp = makeupStatsExpanded.has(stItem.studentId);
 
                     const badges = [];
-                    if (stItem.regularMakeup.length > 0) badges.push(`<span class="stats-pill makeup">一般補繳 ${stItem.regularMakeup.length} 件</span>`);
-                    if (stItem.regularMissing.length > 0) badges.push(`<span class="stats-pill missing">一般未繳 ${stItem.regularMissing.length} 件</span>`);
-                    if (stItem.totalRegularCount === 0) badges.push(`<span class="stats-pill clean">一般無缺補交</span>`);
-                    if (stItem.totalLeaveCount > 0) badges.push(`<span class="stats-pill leave">因請假另外算 ${stItem.totalLeaveCount} 件（已補 ${stItem.leaveMakeup.length}／未繳 ${stItem.leaveMissing.length}）</span>`);
+                    if (stItem.regularMakeup.length > 0) badges.push(`<span class="stats-pill makeup">已補 ${stItem.regularMakeup.length}</span>`);
+                    if (stItem.regularMissing.length > 0) badges.push(`<span class="stats-pill missing">未繳 ${stItem.regularMissing.length}</span>`);
+                    if (stItem.totalRegularCount === 0 && stItem.totalLeaveCount === 0) badges.push(`<span class="stats-pill clean">無缺補交</span>`);
+                    if (stItem.totalLeaveCount > 0) badges.push(`<span class="stats-pill leave">請假 ${stItem.totalLeaveCount}（已補 ${stItem.leaveMakeup.length}／未繳 ${stItem.leaveMissing.length}）</span>`);
 
                     const detailsHtml = stItem.hasAnyRecord ? [
-                        ...stItem.regularMakeup.map(it => renderDetailRow(stItem.studentId, it, '一般補繳', 'background:rgba(47,111,176,0.14);color:#2f6fb0;border:1px solid #2f6fb0;')),
-                        ...stItem.regularMissing.map(it => renderDetailRow(stItem.studentId, it, '一般未繳', 'background:rgba(196,103,79,0.14);color:var(--danger);border:1px solid var(--danger);')),
-                        ...stItem.leaveMakeup.map(it => renderDetailRow(stItem.studentId, it, '因請假・已補繳（另外算）', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;')),
-                        ...stItem.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '因請假・未繳（另外算）', 'background:rgba(184,134,12,0.16);color:#946b00;border:1px solid #b8860c;'))
+                        ...stItem.regularMakeup.map(it => renderDetailRow(stItem.studentId, it, '已補', 'background:rgba(47,111,176,0.14);color:#2f6fb0;border:1px solid #2f6fb0;')),
+                        ...stItem.regularMissing.map(it => renderDetailRow(stItem.studentId, it, '未繳', 'background:rgba(196,103,79,0.14);color:var(--danger);border:1px solid var(--danger);')),
+                        ...stItem.leaveMakeup.map(it => renderDetailRow(stItem.studentId, it, '請假・已補', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;')),
+                        ...stItem.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(184,134,12,0.16);color:#946b00;border:1px solid #b8860c;'))
                     ].join('') : '<p style="margin:4px 0; font-size:0.88em; color:var(--muted);">全部準時繳交，無補繳或請假紀錄</p>';
 
                     return `
@@ -3475,7 +3476,7 @@
                     });
                     try {
                         await navigator.clipboard.writeText(reportText);
-                        window.showAlert('補繳與請假統計報表已複製！');
+                        window.showAlert('作業補繳與未繳統計報表已複製！');
                     } catch (e) {
                         window.showAlert('複製失敗，請檢查瀏覽器權限');
                     }
@@ -3643,7 +3644,7 @@
                             </div>
                             <button class="btn" id="quickAddAssignmentBtn">＋ 新增作業</button>
                             <button class="btn outline" id="copyMissingBtn">複製未繳名單</button>
-                            <button class="btn outline" id="markTodayLeaveBtn">今日請假登記</button>
+                            <button class="btn btn-leave" id="markTodayLeaveBtn">今日請假登記</button>
                         </div>
                     </div>
                     <div class="card">
@@ -3677,7 +3678,7 @@
                         <h2>歷史封存紀錄</h2>
                         <div class="row" style="flex-wrap:wrap; margin-bottom:0">
                             <button class="btn outline" id="loadArchivesBtn">重新整理歷史封存</button>
-                            <button class="btn" id="recordsMakeupStatsBtn">補繳與請假統計（期中／期末）</button>
+                            <button class="btn btn-stats" id="recordsMakeupStatsBtn">補繳次數統計</button>
                         </div>
                         <div id="archivesList" style="margin-top:14px"></div>
                     </div>
@@ -3692,7 +3693,7 @@
                         <div class="row" style="margin-bottom:14px; flex-wrap:wrap">
                             <button class="btn small" id="contactViewSeatBtn">依座號</button>
                             <button class="btn small outline" id="contactViewGroupBtn">依小組</button>
-                            <button class="btn small outline" id="contactLeaveBtn">今日請假登記</button>
+                            <button class="btn small btn-leave" id="contactLeaveBtn">今日請假登記</button>
                         </div>
                         <div id="dailyQuickGradeList"></div>
                     </div>
@@ -3709,7 +3710,7 @@
                             <button class="btn outline" id="globalUncorrectedListBtn">未訂正清單</button>
                             <button class="btn outline" id="globalUnsignedListBtn">未簽名清單</button>
                             <button class="btn outline" id="globalLostListBtn">遺失作業清單</button>
-                            <button class="btn" id="globalMakeupStatsBtn">補繳與請假統計</button>
+                            <button class="btn btn-stats" id="globalMakeupStatsBtn">補繳次數統計</button>
                         </div>
                     </div>
                     <div class="card">

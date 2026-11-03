@@ -1063,7 +1063,7 @@ export function computeMakeupAndLeaveStats({
 export function formatMakeupAndLeaveReport(statsResult, { className = '', startDate = '', endDate = '', includeContactBook = true } = {}) {
     const rangeText = (startDate || endDate) ? `${startDate || '開學'} ~ ${endDate || '今日'}` : '全部期間';
     const scopeText = includeContactBook ? '含聯絡簿' : '不含聯絡簿';
-    const title = `【${className ? className + ' ' : ''}作業補繳與請假統計】`;
+    const title = `【${className ? className + ' ' : ''}期中／期末 作業補繳與未繳統計】`;
     const header = `${title}\n統計期間：${rangeText}（${scopeText}，共 ${statsResult.assignmentCount} 項作業）`;
 
     if (!statsResult.students || !statsResult.students.length) {
@@ -1075,24 +1075,24 @@ export function formatMakeupAndLeaveReport(statsResult, { className = '', startD
         const hasSeatPrefix = stItem.seat != null && stItem.seat !== '' && !sName.startsWith(String(stItem.seat));
         const prefix = hasSeatPrefix ? `${stItem.seat}號 ${sName}` : sName;
         const summaryParts = [
-            `一般補繳 ${stItem.regularMakeup.length} 件`,
-            `一般未繳 ${stItem.regularMissing.length} 件`
+            `已補 ${stItem.regularMakeup.length}`,
+            `未繳 ${stItem.regularMissing.length}`
         ];
         if (stItem.totalLeaveCount > 0) {
-            summaryParts.push(`請假另外算 ${stItem.totalLeaveCount} 件（請假已補 ${stItem.leaveMakeup.length}、請假未繳 ${stItem.leaveMissing.length}）`);
+            summaryParts.push(`請假 ${stItem.totalLeaveCount}（已補 ${stItem.leaveMakeup.length}／未繳 ${stItem.leaveMissing.length}）`);
         }
         const detailLines = [];
         if (stItem.regularMakeup.length) {
-            detailLines.push(`  ・一般補繳：${stItem.regularMakeup.map(x => x.displayName).join('、')}`);
+            detailLines.push(`  ・已補：${stItem.regularMakeup.map(x => x.displayName).join('、')}`);
         }
         if (stItem.regularMissing.length) {
-            detailLines.push(`  ・一般未繳：${stItem.regularMissing.map(x => x.displayName).join('、')}`);
+            detailLines.push(`  ・未繳：${stItem.regularMissing.map(x => x.displayName).join('、')}`);
         }
         if (stItem.leaveMakeup.length) {
-            detailLines.push(`  ・因請假已補繳（另外算）：${stItem.leaveMakeup.map(x => x.displayName).join('、')}`);
+            detailLines.push(`  ・請假（已補）：${stItem.leaveMakeup.map(x => x.displayName).join('、')}`);
         }
         if (stItem.leaveMissing.length) {
-            detailLines.push(`  ・因請假未繳（另外算）：${stItem.leaveMissing.map(x => x.displayName).join('、')}`);
+            detailLines.push(`  ・請假（未繳）：${stItem.leaveMissing.map(x => x.displayName).join('、')}`);
         }
         return [`${prefix}｜${summaryParts.join('｜')}`, ...detailLines].join('\n');
     });

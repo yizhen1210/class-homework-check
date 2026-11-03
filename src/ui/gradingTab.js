@@ -1089,7 +1089,7 @@ function ensureMakeupStatsModalElement() {
     modal.className = 'modal-overlay';
     modal.innerHTML = `
         <div class="modal-content" style="width:min(760px, 94vw); max-width:760px; text-align:left; padding:26px 28px;">
-            <p class="modal-title" style="text-align:center; margin-bottom:14px;">期中／期末 作業補繳與請假統計</p>
+            <p class="modal-title" style="text-align:center; margin-bottom:14px; white-space:normal;">期中／期末 作業補繳與未繳統計</p>
             <div style="background:var(--bg); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:14px;">
                 <div class="date-range-row" style="align-items:flex-end; margin-bottom:10px;">
                     <div class="field">
@@ -1113,9 +1113,6 @@ function ensureMakeupStatsModalElement() {
                         <input type="checkbox" id="msShowAllStudentsChk" style="width:auto; margin:0;">顯示全班（含無缺補交紀錄者）
                     </label>
                 </div>
-                <p style="margin:8px 0 0; font-size:0.82em; color:var(--muted); line-height:1.45;">
-                    💡 <strong>一般補繳／未繳</strong>與<strong>「因請假缺交／補繳（另外算）」</strong>已自動分開統計；展開學生明細即可一鍵標記或取消「請假」。
-                </p>
             </div>
             <div id="msSummaryBanner" style="font-size:0.9em; color:var(--muted); margin-bottom:8px;"></div>
             <div id="msResultBody" style="max-height:50vh; overflow-y:auto; margin-bottom:18px; padding-right:4px;"></div>
@@ -1210,23 +1207,23 @@ export function openMakeupStatsModal({ settings, records, gradingRecords, state 
 
             const badges = [];
             if (stItem.regularMakeup.length > 0) {
-                badges.push(`<span class="stats-pill makeup">一般補繳 ${stItem.regularMakeup.length} 件</span>`);
+                badges.push(`<span class="stats-pill makeup">已補 ${stItem.regularMakeup.length}</span>`);
             }
             if (stItem.regularMissing.length > 0) {
-                badges.push(`<span class="stats-pill missing">一般未繳 ${stItem.regularMissing.length} 件</span>`);
+                badges.push(`<span class="stats-pill missing">未繳 ${stItem.regularMissing.length}</span>`);
             }
-            if (stItem.totalRegularCount === 0) {
-                badges.push(`<span class="stats-pill clean">一般無缺補交</span>`);
+            if (stItem.totalRegularCount === 0 && stItem.totalLeaveCount === 0) {
+                badges.push(`<span class="stats-pill clean">無缺補交</span>`);
             }
             if (stItem.totalLeaveCount > 0) {
-                badges.push(`<span class="stats-pill leave">因請假另外算 ${stItem.totalLeaveCount} 件（已補 ${stItem.leaveMakeup.length}／未繳 ${stItem.leaveMissing.length}）</span>`);
+                badges.push(`<span class="stats-pill leave">請假 ${stItem.totalLeaveCount}（已補 ${stItem.leaveMakeup.length}／未繳 ${stItem.leaveMissing.length}）</span>`);
             }
 
             const detailsHtml = stItem.hasAnyRecord ? [
-                ...stItem.regularMakeup.map(it => renderDetailRow(stItem.studentId, it, '一般補繳', 'background:rgba(47,111,176,0.14);color:#2f6fb0;border:1px solid #2f6fb0;')),
-                ...stItem.regularMissing.map(it => renderDetailRow(stItem.studentId, it, '一般未繳', 'background:rgba(196,103,79,0.14);color:var(--danger);border:1px solid var(--danger);')),
-                ...stItem.leaveMakeup.map(it => renderDetailRow(stItem.studentId, it, '因請假・已補繳（另外算）', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;')),
-                ...stItem.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '因請假・未繳（另外算）', 'background:rgba(184,134,12,0.16);color:#946b00;border:1px solid #b8860c;'))
+                ...stItem.regularMakeup.map(it => renderDetailRow(stItem.studentId, it, '已補', 'background:rgba(47,111,176,0.14);color:#2f6fb0;border:1px solid #2f6fb0;')),
+                ...stItem.regularMissing.map(it => renderDetailRow(stItem.studentId, it, '未繳', 'background:rgba(196,103,79,0.14);color:var(--danger);border:1px solid var(--danger);')),
+                ...stItem.leaveMakeup.map(it => renderDetailRow(stItem.studentId, it, '請假・已補', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;')),
+                ...stItem.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(184,134,12,0.16);color:#946b00;border:1px solid #b8860c;'))
             ].join('') : '<p style="margin:4px 0; font-size:0.88em; color:var(--muted);">全部準時繳交，無補繳或請假紀錄</p>';
 
             return `
@@ -1393,7 +1390,7 @@ export function openMakeupStatsModal({ settings, records, gradingRecords, state 
             });
             try {
                 await navigator.clipboard.writeText(reportText);
-                showAlert('補繳與請假統計報表已複製！');
+                showAlert('作業補繳與未繳統計報表已複製！');
             } catch (e) {
                 showAlert('複製失敗，請檢查瀏覽器權限');
             }

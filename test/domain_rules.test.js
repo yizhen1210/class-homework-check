@@ -429,8 +429,9 @@ export function runAllDomainTests(assert) {
         assert.strictEqual(st2.leaveMissing.length, 1, '李小華因請假未繳另外算 1 件');
 
         const report = formatMakeupAndLeaveReport(stats, { className: '608', startDate: '2026-09-01', endDate: '2026-11-05' });
-        assert.strictEqual(report.includes('因請假已補繳（另外算）'), true);
-        assert.strictEqual(report.includes('因請假未繳（另外算）'), true);
+        assert.strictEqual(report.includes('期中／期末 作業補繳與未繳統計'), true);
+        assert.strictEqual(report.includes('已補 1｜未繳 1'), true);
+        assert.strictEqual(report.includes('請假 2（已補 1／未繳 1）'), true);
     }
 }
 

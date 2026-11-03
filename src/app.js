@@ -860,7 +860,7 @@ function loadEditor() {
                     </div>
                     <button class="btn" id="quickAddAssignmentBtn">＋ 新增作業</button>
                     <button class="btn outline" id="copyMissingBtn">複製未繳名單</button>
-                    <button class="btn outline" id="markTodayLeaveBtn">今日請假登記</button>
+                    <button class="btn btn-leave" id="markTodayLeaveBtn">今日請假登記</button>
                 </div>
             </div>
             <div class="card">
@@ -894,7 +894,7 @@ function loadEditor() {
                 <h2>歷史封存紀錄</h2>
                 <div class="row" style="flex-wrap:wrap; margin-bottom:0">
                     <button class="btn outline" id="loadArchivesBtn">重新整理歷史封存</button>
-                    <button class="btn" id="recordsMakeupStatsBtn">補繳與請假統計（期中／期末）</button>
+                    <button class="btn btn-stats" id="recordsMakeupStatsBtn">補繳次數統計</button>
                 </div>
                 <div id="archivesList" style="margin-top:14px"></div>
             </div>
@@ -909,7 +909,7 @@ function loadEditor() {
                 <div class="row" style="margin-bottom:14px; flex-wrap:wrap">
                     <button class="btn small" id="contactViewSeatBtn">依座號</button>
                     <button class="btn small outline" id="contactViewGroupBtn">依小組</button>
-                    <button class="btn small outline" id="contactLeaveBtn">今日請假登記</button>
+                    <button class="btn small btn-leave" id="contactLeaveBtn">今日請假登記</button>
                 </div>
                 <div id="dailyQuickGradeList"></div>
             </div>
@@ -926,7 +926,7 @@ function loadEditor() {
                     <button class="btn outline" id="globalUncorrectedListBtn">未訂正清單</button>
                     <button class="btn outline" id="globalUnsignedListBtn">未簽名清單</button>
                     <button class="btn outline" id="globalLostListBtn">遺失作業清單</button>
-                    <button class="btn" id="globalMakeupStatsBtn">補繳與請假統計</button>
+                    <button class="btn btn-stats" id="globalMakeupStatsBtn">補繳次數統計</button>
                 </div>
             </div>
             <div class="card">
