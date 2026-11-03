@@ -58,10 +58,10 @@ body:not(.ready) [data-gated] { visibility: hidden; }
 .btn.danger:hover { background: color-mix(in srgb, var(--danger) 82%, #000); border-color: color-mix(in srgb, var(--danger) 82%, #000); }
 .btn.outline.danger { background: transparent; color: var(--danger); }
 .btn.outline.danger:hover { background: var(--danger); color: #fff; }
-.btn.btn-leave { border-color: #b8843b; background: #b8843b; color: #fff; }
-.btn.btn-leave:hover { background: #9c6d2c; border-color: #9c6d2c; color: #fff; }
-.btn.btn-stats { border-color: #7b6898; background: #7b6898; color: #fff; }
-.btn.btn-stats:hover { background: #645280; border-color: #645280; color: #fff; }
+.btn.btn-leave { border-color: #d6b38a; background: #f2dec4; color: #593b18; }
+.btn.btn-leave:hover { background: #e8cda9; border-color: #c59d6f; color: #422b10; }
+.btn.btn-stats { border-color: #d8ca9c; background: #f8f1d8; color: #473d21; }
+.btn.btn-stats:hover { background: #efe4be; border-color: #c7b57e; color: #332b15; }
 
 .admin-only.hidden { display: none !important; }
 

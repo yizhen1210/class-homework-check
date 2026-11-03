@@ -404,7 +404,12 @@ export function runAllDomainTests(assert) {
         assert.strictEqual(resolveAssignmentISODate({ dateLabel: '9/25', timestamp: archSep.timestamp }, 'hw_sep'), '2026-09-25');
 
         const stats = computeMakeupAndLeaveStats({
-            settings: { className: '608', students, assignments: [] },
+            settings: {
+                className: '608',
+                students,
+                subjects: [{ id: 'sub_ch', name: '國語' }, { id: 'sub_ma', name: '數學' }],
+                assignments: []
+            },
             records: [],
             gradingRecords: [],
             archiveDocsList: [archOct, archSep],
@@ -422,6 +427,9 @@ export function runAllDomainTests(assert) {
         assert.strictEqual(st1.regularMakeup.length, 1, '王小明一般補繳 1 件');
         assert.strictEqual(st1.regularMissing.length, 1, '王小明一般未繳 1 件');
         assert.strictEqual(st1.totalLeaveCount, 0);
+        assert.deepStrictEqual(st1.subjectGroups.map(g => g.subjectName), ['國語', '數學'], '明細應依科目設定順序排列');
+        assert.strictEqual(st1.subjectGroups[0].regularMissing.length, 1, '國語分組應統計未繳 1');
+        assert.strictEqual(st1.subjectGroups[1].regularMakeup.length, 1, '數學分組應統計已補 1');
 
         assert.strictEqual(st2.regularMakeup.length, 0, '李小華因請假補繳不計入一般補繳');
         assert.strictEqual(st2.regularMissing.length, 0, '李小華因請假未繳不計入一般未繳');
@@ -432,6 +440,8 @@ export function runAllDomainTests(assert) {
         assert.strictEqual(report.includes('期中／期末 作業補繳與未繳統計'), true);
         assert.strictEqual(report.includes('已補 1｜未繳 1'), true);
         assert.strictEqual(report.includes('請假 2（已補 1／未繳 1）'), true);
+        assert.strictEqual(report.includes('【國語】未繳 1'), true);
+        assert.strictEqual(report.includes('【數學】已補 1'), true);
     }
 }
 

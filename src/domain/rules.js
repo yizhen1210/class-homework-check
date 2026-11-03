@@ -948,6 +948,26 @@ export function computeGlobalPopupLists({
 /**
  * 期中/期末作業成績結算：統計每位學生的「一般補繳 / 一般缺交」與「因請假補繳 / 因請假缺交（另外算）」
  */
+function resolveStatsSubjectName(rawSubj, assignmentName, archRec, liveRec, subjects = []) {
+    const explicit = String(rawSubj || (archRec && archRec.subjectName) || (liveRec && liveRec.subjectName) || '').trim();
+    if (explicit && explicit !== '未分類') return explicit;
+    const aName = String(assignmentName || '').trim();
+    if (aName === '聯絡簿每日任務' || aName.includes('聯絡簿')) return '聯絡簿';
+    const nonSystem = (subjects || []).filter(sub => sub && !sub.isSystem && sub.name);
+    const exactMatch = nonSystem.find(sub => aName.includes(sub.name));
+    if (exactMatch) return exactMatch.name;
+    const pickConfiguredOr = (keyword, fallback) => {
+        const found = nonSystem.find(sub => sub.name.includes(keyword));
+        return found ? found.name : fallback;
+    };
+    if (/(?:國語|國習|國卷|國甲|國乙|國作|國練|圈詞|生字|造句|聽寫|聽考|作文)/.test(aName)) return pickConfiguredOr('國', '國語');
+    if (/(?:數學|數習|數卷|數作|數練|數格|數單)/.test(aName)) return pickConfiguredOr('數', '數學');
+    if (/(?:社會|社習|社卷|社作|社單)/.test(aName)) return pickConfiguredOr('社', '社會');
+    if (/(?:自然|自習|自卷|自作|自單)/.test(aName)) return pickConfiguredOr('自', '自然');
+    if (/(?:英語|英文|英習|英卷)/.test(aName)) return pickConfiguredOr('英', '英語');
+    return '未分類';
+}
+
 export function computeMakeupAndLeaveStats({
     settings = {},
     records = [],
@@ -962,6 +982,25 @@ export function computeMakeupAndLeaveStats({
     includeCleanStudents = false
 } = {}) {
     const students = sortBySeat((settings && settings.students) || []);
+    const subjectsList = (settings && settings.subjects) || [];
+    const configuredSubjectOrder = new Map();
+    subjectsList.forEach((subj, idx) => {
+        if (subj && subj.name && !subj.isSystem && !configuredSubjectOrder.has(subj.name)) {
+            configuredSubjectOrder.set(subj.name, idx);
+        }
+    });
+    const compareSubjectNames = (a, b) => {
+        if (a === b) return 0;
+        if (a === '未分類') return 1;
+        if (b === '未分類') return -1;
+        if (a === '聯絡簿') return 1;
+        if (b === '聯絡簿') return -1;
+        const ia = configuredSubjectOrder.has(a) ? configuredSubjectOrder.get(a) : 9999;
+        const ib = configuredSubjectOrder.has(b) ? configuredSubjectOrder.get(b) : 9999;
+        if (ia !== ib) return ia - ib;
+        return a.localeCompare(b, 'zh-Hant');
+    };
+
     const allEntries = collectUnifiedAssignmentEntries({
         settings,
         records,
@@ -982,6 +1021,22 @@ export function computeMakeupAndLeaveStats({
         const regularMissing = [];
         const leaveMakeup = [];
         const leaveMissing = [];
+        const subjectMap = new Map();
+
+        const getOrCreateSubjectGroup = (subjLabel) => {
+            if (!subjectMap.has(subjLabel)) {
+                subjectMap.set(subjLabel, {
+                    subjectName: subjLabel,
+                    regularMakeup: [],
+                    regularMissing: [],
+                    leaveMakeup: [],
+                    leaveMissing: [],
+                    totalRegularCount: 0,
+                    totalLeaveCount: 0
+                });
+            }
+            return subjectMap.get(subjLabel);
+        };
 
         allEntries.forEach(entry => {
             const id = entry.assignmentId;
@@ -999,6 +1054,7 @@ export function computeMakeupAndLeaveStats({
             const displayName = (!entry.isActive && entry.dateLabel && !entry.name.includes(entry.dateLabel))
                 ? `${entry.dateLabel} ${entry.name}`
                 : (entry.isActive ? `今日 ${entry.name}` : entry.name);
+            const displaySubject = resolveStatsSubjectName(entry.subjectName, entry.name, archRec, liveRec, subjectsList);
 
             const detailItem = {
                 entryKey: entry.entryKey,
@@ -1008,7 +1064,7 @@ export function computeMakeupAndLeaveStats({
                 dateLabel: entry.dateLabel || '',
                 isoDate: entry.isoDate || '',
                 assignmentName: entry.name,
-                subjectName: entry.subjectName || '',
+                subjectName: displaySubject,
                 displayName,
                 status: effStatus,
                 remark: effRemark,
@@ -1017,18 +1073,30 @@ export function computeMakeupAndLeaveStats({
             };
 
             if (leave) {
+                const sg = getOrCreateSubjectGroup(displaySubject);
+                sg.totalLeaveCount++;
                 if (effStatus === '已繳') {
                     leaveMakeup.push(detailItem);
+                    sg.leaveMakeup.push(detailItem);
                 } else {
                     leaveMissing.push(detailItem);
+                    sg.leaveMissing.push(detailItem);
                 }
             } else if (effStatus === '已繳' && makeup) {
+                const sg = getOrCreateSubjectGroup(displaySubject);
+                sg.totalRegularCount++;
                 regularMakeup.push(detailItem);
+                sg.regularMakeup.push(detailItem);
             } else if (effStatus !== '已繳') {
+                const sg = getOrCreateSubjectGroup(displaySubject);
+                sg.totalRegularCount++;
                 regularMissing.push(detailItem);
+                sg.regularMissing.push(detailItem);
             }
         });
 
+        const subjectGroups = Array.from(subjectMap.values())
+            .sort((a, b) => compareSubjectNames(a.subjectName, b.subjectName));
         const totalRegularCount = regularMakeup.length + regularMissing.length;
         const totalLeaveCount = leaveMakeup.length + leaveMissing.length;
 
@@ -1040,6 +1108,7 @@ export function computeMakeupAndLeaveStats({
             regularMissing,
             leaveMakeup,
             leaveMissing,
+            subjectGroups,
             totalRegularCount,
             totalLeaveCount,
             hasAnyRecord: (totalRegularCount + totalLeaveCount) > 0
@@ -1058,7 +1127,7 @@ export function computeMakeupAndLeaveStats({
 }
 
 /**
- * 將補繳與請假統計格式化為可一鍵複製的純文字報表
+ * 將補繳與請假統計格式化為可一鍵複製的純文字報表（依科目分組排列）
  */
 export function formatMakeupAndLeaveReport(statsResult, { className = '', startDate = '', endDate = '', includeContactBook = true } = {}) {
     const rangeText = (startDate || endDate) ? `${startDate || '開學'} ~ ${endDate || '今日'}` : '全部期間';
@@ -1082,18 +1151,26 @@ export function formatMakeupAndLeaveReport(statsResult, { className = '', startD
             summaryParts.push(`請假 ${stItem.totalLeaveCount}（已補 ${stItem.leaveMakeup.length}／未繳 ${stItem.leaveMissing.length}）`);
         }
         const detailLines = [];
-        if (stItem.regularMakeup.length) {
-            detailLines.push(`  ・已補：${stItem.regularMakeup.map(x => x.displayName).join('、')}`);
-        }
-        if (stItem.regularMissing.length) {
-            detailLines.push(`  ・未繳：${stItem.regularMissing.map(x => x.displayName).join('、')}`);
-        }
-        if (stItem.leaveMakeup.length) {
-            detailLines.push(`  ・請假（已補）：${stItem.leaveMakeup.map(x => x.displayName).join('、')}`);
-        }
-        if (stItem.leaveMissing.length) {
-            detailLines.push(`  ・請假（未繳）：${stItem.leaveMissing.map(x => x.displayName).join('、')}`);
-        }
+        const groups = Array.isArray(stItem.subjectGroups) ? stItem.subjectGroups : [];
+        groups.forEach(sg => {
+            const sgParts = [];
+            if (sg.regularMakeup.length > 0) sgParts.push(`已補 ${sg.regularMakeup.length}`);
+            if (sg.regularMissing.length > 0) sgParts.push(`未繳 ${sg.regularMissing.length}`);
+            if (sg.totalLeaveCount > 0) sgParts.push(`請假 ${sg.totalLeaveCount}（已補 ${sg.leaveMakeup.length}／未繳 ${sg.leaveMissing.length}）`);
+            detailLines.push(`  【${sg.subjectName}】${sgParts.join('｜')}`);
+            if (sg.regularMakeup.length) {
+                detailLines.push(`    ・已補：${sg.regularMakeup.map(x => x.displayName).join('、')}`);
+            }
+            if (sg.regularMissing.length) {
+                detailLines.push(`    ・未繳：${sg.regularMissing.map(x => x.displayName).join('、')}`);
+            }
+            if (sg.leaveMakeup.length) {
+                detailLines.push(`    ・請假（已補）：${sg.leaveMakeup.map(x => x.displayName).join('、')}`);
+            }
+            if (sg.leaveMissing.length) {
+                detailLines.push(`    ・請假（未繳）：${sg.leaveMissing.map(x => x.displayName).join('、')}`);
+            }
+        });
         return [`${prefix}｜${summaryParts.join('｜')}`, ...detailLines].join('\n');
     });
 

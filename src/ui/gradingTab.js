@@ -1219,12 +1219,27 @@ export function openMakeupStatsModal({ settings, records, gradingRecords, state 
                 badges.push(`<span class="stats-pill leave">請假 ${stItem.totalLeaveCount}（已補 ${stItem.leaveMakeup.length}／未繳 ${stItem.leaveMissing.length}）</span>`);
             }
 
-            const detailsHtml = stItem.hasAnyRecord ? [
-                ...stItem.regularMakeup.map(it => renderDetailRow(stItem.studentId, it, '已補', 'background:rgba(47,111,176,0.14);color:#2f6fb0;border:1px solid #2f6fb0;')),
-                ...stItem.regularMissing.map(it => renderDetailRow(stItem.studentId, it, '未繳', 'background:rgba(196,103,79,0.14);color:var(--danger);border:1px solid var(--danger);')),
-                ...stItem.leaveMakeup.map(it => renderDetailRow(stItem.studentId, it, '請假・已補', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;')),
-                ...stItem.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(184,134,12,0.16);color:#946b00;border:1px solid #b8860c;'))
-            ].join('') : '<p style="margin:4px 0; font-size:0.88em; color:var(--muted);">全部準時繳交，無補繳或請假紀錄</p>';
+            const detailsHtml = stItem.hasAnyRecord ? (stItem.subjectGroups || []).map(sg => {
+                const sgBadges = [];
+                if (sg.regularMakeup.length > 0) sgBadges.push(`<span class="stats-pill makeup" style="font-size:0.76em; padding:1px 8px;">已補 ${sg.regularMakeup.length}</span>`);
+                if (sg.regularMissing.length > 0) sgBadges.push(`<span class="stats-pill missing" style="font-size:0.76em; padding:1px 8px;">未繳 ${sg.regularMissing.length}</span>`);
+                if (sg.totalLeaveCount > 0) sgBadges.push(`<span class="stats-pill leave" style="font-size:0.76em; padding:1px 8px;">請假 ${sg.totalLeaveCount}（已補 ${sg.leaveMakeup.length}／未繳 ${sg.leaveMissing.length}）</span>`);
+                const sgRows = [
+                    ...sg.regularMakeup.map(it => renderDetailRow(stItem.studentId, it, '已補', 'background:rgba(47,111,176,0.14);color:#2f6fb0;border:1px solid #2f6fb0;')),
+                    ...sg.regularMissing.map(it => renderDetailRow(stItem.studentId, it, '未繳', 'background:rgba(196,103,79,0.14);color:var(--danger);border:1px solid var(--danger);')),
+                    ...sg.leaveMakeup.map(it => renderDetailRow(stItem.studentId, it, '請假・已補', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;')),
+                    ...sg.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(184,134,12,0.16);color:#946b00;border:1px solid #b8860c;'))
+                ].join('');
+                return `
+                    <div style="margin-top:8px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:8px 12px;">
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-bottom:5px; margin-bottom:2px; border-bottom:1px solid var(--line);">
+                            <strong style="font-size:0.92em; color:var(--text);">【${escapeHtml(sg.subjectName)}】</strong>
+                            ${sgBadges.join('')}
+                        </div>
+                        <div>${sgRows}</div>
+                    </div>
+                `;
+            }).join('') : '<p style="margin:4px 0; font-size:0.88em; color:var(--muted);">全部準時繳交，無補繳或請假紀錄</p>';
 
             return `
                 <div class="group-block" style="margin-bottom:10px; padding:10px 14px;">
