@@ -713,6 +713,7 @@ def run_tests():
     rules_text = (root / 'src' / 'domain' / 'rules.js').read_text(encoding='utf-8')
     grading_text = (root / 'src' / 'ui' / 'gradingTab.js').read_text(encoding='utf-8')
     app_text = (root / 'src' / 'app.js').read_text(encoding='utf-8')
+    records_text = (root / 'src' / 'ui' / 'recordsTab.js').read_text(encoding='utf-8')
 
     required_symbols = [
         'computeGlobalPopupLists',
@@ -755,6 +756,11 @@ def run_tests():
     t.assert_equal('isAllPurpleSubject' in rules_text or 'aAllPurple' in rules_text, True, "應支援全紫色科目排到最後之排序")
     t.assert_equal('展開學生明細即可一鍵標記或取消「請假」' not in index_text, True, "index.html 應已移除提示文字")
     t.assert_equal('展開學生明細即可一鍵標記或取消「請假」' not in grading_text, True, "gradingTab.js 應已移除提示文字")
+
+    # 驗證刪除作業與未繳/未訂正清單排除孤立作業機制
+    t.assert_equal('cleanOrphanedAssignmentRecords' in index_text and 'cleanOrphanedAssignmentRecords' in app_text, True, "應提供自動清理孤立作業紀錄函式")
+    t.assert_equal('isGradingMissingExempt' in rules_text and 'isGradingMissingExempt' in index_text, True, "應支援未繳清單豁免聽考與複卷判斷")
+    t.assert_equal('clearGradingForAssignment(aid)' in index_text and 'clearGradingForAssignment(aid)' in records_text, True, "刪除作業時應同步清理批改紀錄")
 
     print(f"✓ 恭喜！全數 {t.passes} 項領域業務與結構測試斷言通過！")
 

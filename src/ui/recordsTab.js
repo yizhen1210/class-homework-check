@@ -21,6 +21,7 @@ import {
 import {
     db,
     coll,
+    gradingColl,
     archivesColl,
     adminSetStatus,
     submitGroupRecords,
@@ -224,8 +225,13 @@ export function renderRecordsTab(records, settings, isAdmin, callbacks = {}) {
                 st.assignments = st.assignments.filter(x => x.id !== aid);
                 await saveSettings({ assignments: st.assignments }, isAdmin);
                 const batch = writeBatch(db);
-                students.forEach(s => batch.delete(doc(coll, recordDocId(s.id, aid))));
+                students.forEach(s => {
+                    batch.delete(doc(coll, recordDocId(s.id, aid)));
+                    batch.delete(doc(gradingColl, recordDocId(s.id, aid)));
+                });
                 await batch.commit().catch(e => logger.warn('DELETE_ASSIGNMENT_BATCH_FAILED', e));
+                await clearRecordsForAssignment(aid);
+                await clearGradingForAssignment(aid);
             };
         });
     }

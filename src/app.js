@@ -232,6 +232,7 @@ export function autoLoadArchives() {
 
             renderGradingTab(gradingRecords, records, settings, appState);
             renderArchivesList(nextList);
+            if (isAdmin) cleanOrphanedAssignmentRecords();
 
             if (isAdmin && settings && Array.isArray(settings.students)) {
                 (async () => {
@@ -715,10 +716,53 @@ function stopRecordsListenerIfAny() {
     recordsArrived = true;
 }
 
+export async function cleanOrphanedAssignmentRecords() {
+    if (!isAdmin || !settings || !Array.isArray(settings.assignments)) return;
+    const activeIds = new Set(settings.assignments.map(a => a.id));
+    const archiveDocs = (appState && appState.archiveDocsList) || [];
+    const archivedIds = new Set();
+    archiveDocs.forEach(d => {
+        (d.assignments || []).forEach(a => { if (a && a.id) archivedIds.add(a.id); });
+        (d.records || []).forEach(r => { if (r && r.assignmentId) archivedIds.add(r.assignmentId); });
+    });
+
+    const orphanAids = new Set();
+    (gradingRecords || []).forEach(g => {
+        if (!g || !g.assignmentId) return;
+        const aid = g.assignmentId;
+        const name = g.assignmentName || '';
+        const isContact = name === '聯絡簿每日任務' || aid.startsWith('daily-');
+        if (name.includes('國複A卷') || (!activeIds.has(aid) && !archivedIds.has(aid) && !isContact)) {
+            orphanAids.add(aid);
+        }
+    });
+    (records || []).forEach(r => {
+        if (!r || !r.assignmentId) return;
+        const aid = r.assignmentId;
+        const name = r.assignmentName || '';
+        const isContact = name === '聯絡簿每日任務' || aid.startsWith('daily-');
+        if (name.includes('國複A卷') || (!activeIds.has(aid) && !archivedIds.has(aid) && !isContact)) {
+            orphanAids.add(aid);
+        }
+    });
+
+    if (orphanAids.size > 0) {
+        orphanAids.forEach(async aid => {
+            await clearGradingForAssignment(aid);
+            await clearRecordsForAssignment(aid);
+            if (appState.extraPastAssignments) delete appState.extraPastAssignments[aid];
+        });
+        gradingRecords = gradingRecords.filter(g => !orphanAids.has(g.assignmentId) && (!g.assignmentName || !g.assignmentName.includes('國複A卷')));
+        records = records.filter(r => !orphanAids.has(r.assignmentId) && (!r.assignmentName || !r.assignmentName.includes('國複A卷')));
+        renderGradingTab(gradingRecords, records, settings, appState);
+    }
+}
+
 function startGradingListener() {
     if (stopGradingListener) return;
     stopGradingListener = onSnapshot(gradingColl, snap => {
         gradingRecords = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (isAdmin) cleanOrphanedAssignmentRecords();
         renderGradingTab(gradingRecords, records, settings, appState);
         renderContactTab(records, gradingRecords, settings, isAdmin);
     }, err => logger.warn('GRADING_LISTENER_ERROR', err));

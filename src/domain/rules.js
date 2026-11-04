@@ -791,8 +791,11 @@ export function collectUnifiedAssignmentEntries({
         if (!g || !g.assignmentId || !g.assignmentName) return;
         const aid = g.assignmentId;
         if (coveredArchiveAids.has(aid) || activeNonContactIds.has(aid) || activeContactIds.has(aid)) return;
+        // 只有歷史聯絡簿每日任務才允許在無封存文件時向下相容；一般科目作業若已被教師刪除，絕不可作為歷史作業復活
+        const isContact = g.assignmentName === '聯絡簿每日任務' || aid.startsWith('daily-');
+        if (!isContact) return;
+
         coveredArchiveAids.add(aid);
-        const isContact = g.assignmentName === '聯絡簿每日任務';
         const m = aid.match(/^daily-.+-(\d{4})-(\d{2})-(\d{2})/);
         const dateLabel = m ? `${m[1]}/${m[2]}/${m[3]}` : '';
         const infoObj = { dateLabel, name: g.assignmentName, timestamp: g.updatedAt };
@@ -801,8 +804,8 @@ export function collectUnifiedAssignmentEntries({
             assignmentId: aid,
             archiveDocId: '',
             name: g.assignmentName,
-            subjectName: isContact ? '聯絡簿' : '未分類',
-            needsSign: isContact,
+            subjectName: '聯絡簿',
+            needsSign: true,
             signOnly: false,
             dateLabel,
             isoDate: resolveAssignmentISODate(infoObj, aid),
@@ -867,8 +870,10 @@ export function computeGlobalPopupLists({
         const hasGrading = entry.useLive && (gradingRecords || []).some(g => g.assignmentId === id);
         const hasRecord = entry.useLive && (records || []).some(r => r.assignmentId === id);
 
-        // 1. 未繳清單
-        if (entry.isActive || archDoc || hasGrading || hasRecord) {
+        // 1. 未繳清單（非活動且非封存的孤立作業不列入；豁免聽考/複卷不列入未繳）
+        const isMissingExempt = isGradingMissingExempt(entry.name);
+        const isValidMissingTarget = (entry.isActive || archDoc) && !isMissingExempt;
+        if (isValidMissingTarget) {
             const missing = students.filter(s => {
                 if (isPulledOut(s, entry.subjectName, entry.name)) return false;
                 const archRec = archDoc && (archDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === id);
@@ -890,8 +895,8 @@ export function computeGlobalPopupLists({
             }
         }
 
-        // 2. 未訂正清單
-        if (!entry.signOnly) {
+        // 2. 未訂正清單（非活動且非封存的孤立作業不列入）
+        if (!entry.signOnly && (entry.isActive || archDoc)) {
             const hasAnyGrading = hasGrading || (archDoc && (archDoc.records || []).some(r => r.assignmentId === id && (r.correctness || r.corrected)));
             if (hasAnyGrading) {
                 const uncorrected = students.filter(s => {
@@ -914,8 +919,8 @@ export function computeGlobalPopupLists({
             }
         }
 
-        // 3. 未簽名清單
-        if (entry.needsSign || entry.signOnly || isContact) {
+        // 3. 未簽名清單（非活動且非封存的孤立作業不列入）
+        if ((entry.needsSign || entry.signOnly || isContact) && (entry.isActive || archDoc)) {
             const unsigned = students.filter(s => {
                 if (isPulledOut(s, entry.subjectName, entry.name)) return false;
                 const archRec = archDoc && (archDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === id);

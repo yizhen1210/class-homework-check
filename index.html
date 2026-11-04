@@ -517,11 +517,54 @@
             records = []; recordsArrived = true;
         }
         let gradingRecords = [];
+        async function cleanOrphanedAssignmentRecords(){
+            if(!isAdmin || !settings || !Array.isArray(settings.assignments)) return;
+            const activeIds = new Set(settings.assignments.map(a => a.id));
+            const archiveDocs = window.__archiveDocsList || [];
+            const archivedIds = new Set();
+            archiveDocs.forEach(d => {
+                (d.assignments || []).forEach(a => { if (a && a.id) archivedIds.add(a.id); });
+                (d.records || []).forEach(r => { if (r && r.assignmentId) archivedIds.add(r.assignmentId); });
+            });
+
+            const orphanAids = new Set();
+            (gradingRecords || []).forEach(g => {
+                if(!g || !g.assignmentId) return;
+                const aid = g.assignmentId;
+                const name = g.assignmentName || '';
+                const isContact = name === '聯絡簿每日任務' || aid.startsWith('daily-');
+                if(name.includes('國複A卷') || (!activeIds.has(aid) && !archivedIds.has(aid) && !isContact)){
+                    orphanAids.add(aid);
+                }
+            });
+            (records || []).forEach(r => {
+                if(!r || !r.assignmentId) return;
+                const aid = r.assignmentId;
+                const name = r.assignmentName || '';
+                const isContact = name === '聯絡簿每日任務' || aid.startsWith('daily-');
+                if(name.includes('國複A卷') || (!activeIds.has(aid) && !archivedIds.has(aid) && !isContact)){
+                    orphanAids.add(aid);
+                }
+            });
+
+            if(orphanAids.size > 0){
+                orphanAids.forEach(async aid => {
+                    await clearGradingForAssignment(aid);
+                    await clearRecordsForAssignment(aid);
+                    if(window.__extraPastAssignments) delete window.__extraPastAssignments[aid];
+                });
+                gradingRecords = gradingRecords.filter(g => !orphanAids.has(g.assignmentId) && (!g.assignmentName || !g.assignmentName.includes('國複A卷')));
+                records = records.filter(r => !orphanAids.has(r.assignmentId) && (!r.assignmentName || !r.assignmentName.includes('國複A卷')));
+                renderGradingTab(gradingRecords, records, settings);
+            }
+        }
+
         let stopGradingListener = null;
         function startGradingListener(){
             if(stopGradingListener) return;
             stopGradingListener = onSnapshot(gradingColl, snap => {
                 gradingRecords = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                if(isAdmin) cleanOrphanedAssignmentRecords();
                 renderGradingTab(gradingRecords, records, settings);
                 renderContactTab(records, gradingRecords, settings);
             }, err => console.warn(err));
@@ -611,6 +654,7 @@
                 if (typeof window.__renderArchivesListFromAuto === 'function') {
                     window.__renderArchivesListFromAuto(nextList);
                 }
+                if (isAdmin) cleanOrphanedAssignmentRecords();
 
                 // 自動遷移更名與修復歷史抽離：在背景執行以確保 UI 立即呈現
                 if (isAdmin) {
@@ -1230,8 +1274,11 @@
                 if (!g || !g.assignmentId || !g.assignmentName) return;
                 const aid = g.assignmentId;
                 if (coveredArchiveAids.has(aid) || activeNonContactIds.has(aid) || activeContactIds.has(aid)) return;
+                // 只有歷史聯絡簿每日任務才允許在無封存文件時向下相容；一般科目作業若已被教師刪除，絕不可作為歷史作業復活
+                const isContact = g.assignmentName === '聯絡簿每日任務' || aid.startsWith('daily-');
+                if (!isContact) return;
+
                 coveredArchiveAids.add(aid);
-                const isContact = g.assignmentName === '聯絡簿每日任務';
                 const m = aid.match(/^daily-.+-(\d{4})-(\d{2})-(\d{2})/);
                 const dateLabel = m ? `${m[1]}/${m[2]}/${m[3]}` : '';
                 const infoObj = { dateLabel, name: g.assignmentName, timestamp: g.updatedAt };
@@ -1240,8 +1287,8 @@
                     assignmentId: aid,
                     archiveDocId: '',
                     name: g.assignmentName,
-                    subjectName: isContact ? '聯絡簿' : '未分類',
-                    needsSign: isContact,
+                    subjectName: '聯絡簿',
+                    needsSign: true,
                     signOnly: false,
                     dateLabel,
                     isoDate: resolveAssignmentISODate(infoObj, aid),
@@ -1262,6 +1309,10 @@
             });
 
             return [...entries, ...archivedEntries];
+        }
+
+        function isGradingMissingExempt(name) {
+            return /(?:聽考|複[AaＡａ]卷|複[BbＢｂ]卷)/.test(name || '');
         }
 
         function computeGlobalPopupLists({
@@ -1302,7 +1353,10 @@
                 const hasGrading = entry.useLive && (gradingRecords || []).some(g => g.assignmentId === id);
                 const hasRecord = entry.useLive && (records || []).some(r => r.assignmentId === id);
 
-                if (entry.isActive || archDoc || hasGrading || hasRecord) {
+                // 1. 未繳清單（非活動且非封存的孤立作業不列入；豁免聽考/複卷不列入未繳）
+                const isMissingExempt = isGradingMissingExempt(entry.name);
+                const isValidMissingTarget = (entry.isActive || archDoc) && !isMissingExempt;
+                if (isValidMissingTarget) {
                     const missing = students.filter(s => {
                         if (isPulledOut(s, entry.subjectName, entry.name)) return false;
                         const archRec = archDoc && (archDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === id);
@@ -1319,7 +1373,8 @@
                     }
                 }
 
-                if (!entry.signOnly) {
+                // 2. 未訂正清單（非活動且非封存的孤立作業不列入）
+                if (!entry.signOnly && (entry.isActive || archDoc)) {
                     const hasAnyGrading = hasGrading || (archDoc && (archDoc.records || []).some(r => r.assignmentId === id && (r.correctness || r.corrected)));
                     if (hasAnyGrading) {
                         const uncorrected = students.filter(s => {
@@ -1337,7 +1392,8 @@
                     }
                 }
 
-                if (entry.needsSign || entry.signOnly || isContact) {
+                // 3. 未簽名清單（非活動且非封存的孤立作業不列入）
+                if ((entry.needsSign || entry.signOnly || isContact) && (entry.isActive || archDoc)) {
                     const unsigned = students.filter(s => {
                         if (isPulledOut(s, entry.subjectName, entry.name)) return false;
                         const archRec = archDoc && (archDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === id);
@@ -2079,8 +2135,13 @@
                 st.assignments = st.assignments.filter(x=>x.id!==aid);
                 saveSettings({ assignments: st.assignments });
                 const batch = writeBatch(db);
-                students.forEach(s => batch.delete(doc(coll, recordDocId(s.id, aid))));
+                students.forEach(s => {
+                    batch.delete(doc(coll, recordDocId(s.id, aid)));
+                    batch.delete(doc(gradingColl, recordDocId(s.id, aid)));
+                });
                 await batch.commit().catch(e=>console.warn(e));
+                await clearRecordsForAssignment(aid);
+                await clearGradingForAssignment(aid);
             });
 
             const compactCols = window.innerWidth <= 680 && assignments.length > 3;
