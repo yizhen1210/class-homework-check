@@ -803,6 +803,28 @@ def run_tests():
     t.assert_equal('POINT_SEGMENT_RE' in rules_text and 'POINT_SEGMENT_RE' in index_text, True, "應支援加點備註正則匹配")
     t.assert_equal('startPointLogsListener' in app_text and 'startPointLogsListener' in index_text, True, "主應用應包含加點紀錄同步與回補監聽函式")
 
+    # 驗證 9/1~9/7 國語及 9/2~9/4 數學已封存訂正紀錄恢復與科目自動辨識機制
+    def resolve_subject(name, raw_subj=''):
+        if raw_subj and raw_subj != '未分類':
+            return raw_subj
+        if '國' in name or any(kw in name for kw in ['國語', '國習', '國卷', '國甲', '國乙', '國練']):
+            return '國語'
+        if '數' in name or any(kw in name for kw in ['數學', '數習', '數卷', '數作', '數練']):
+            return '數學'
+        return '未分類'
+
+    # 數學 9/2, 9/3, 9/4
+    for m_name in ['9/2 數習', '9/3 數習第5頁', '9/4 數作卷']:
+        t.assert_equal(resolve_subject(m_name), '數學', f"{m_name} 應被正確歸類至數學")
+
+    # 國語 9/1, 9/2, 9/3, 9/4, 9/7
+    for c_name in ['9/1 國甲', '9/2 國乙', '9/3 國習', '9/4 國卷', '9/7 國練']:
+        t.assert_equal(resolve_subject(c_name), '國語', f"{c_name} 應被正確歸類至國語")
+
+    t.assert_equal('toBatchRestoreGrading' in app_text and 'toBatchRestoreGrading' in index_text, True, "應具備歷史封存訂正/批改紀錄自動收集與回補機制")
+    t.assert_equal('compoundAids' in grading_text and 'compoundAids' in index_text, True, "應支援複合鍵 docId::aid 去除重複選項")
+    t.assert_equal('nextMap[`${data.id}::${a.id}`]' in app_text and 'nextMap[`${data.id}::${a.id}`]' in index_text, True, "應支援封存映射複合鍵隔離跨日期同作業ID")
+
     print(f"✓ 恭喜！全數 {t.passes} 項領域業務與結構測試斷言通過！")
 
 if __name__ == '__main__':

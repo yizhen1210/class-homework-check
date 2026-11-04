@@ -750,12 +750,15 @@ export function collectUnifiedAssignmentEntries({
             const collidesWithActiveContact = isContact && activeContactIds.has(a.id);
             const hasDuplicateArchiveId = (aidArchiveCount.get(a.id) || 0) > 1;
             const infoObj = { dateLabel, name: a.name, timestamp: docItem.timestamp };
+            const resolvedSubj = (a.subjectName && a.subjectName !== '未分類')
+                ? a.subjectName
+                : resolveStatsSubjectName('', a.name, null, null, subjects);
             archivedEntries.push({
                 entryKey: `arch_${docId}_${a.id}`,
                 assignmentId: a.id,
                 archiveDocId: docId,
                 name: a.name,
-                subjectName: a.subjectName || (isContact ? '聯絡簿' : subjNameOf(a)),
+                subjectName: isContact ? '聯絡簿' : (resolvedSubj || subjNameOf(a)),
                 needsSign: !!(a.needsSign || a.signOnly || isContact || (docItem.records || []).some(r => r.assignmentId === a.id && r.signStatus && r.signStatus !== '未簽名')),
                 signOnly: !!a.signOnly,
                 dateLabel,
@@ -961,7 +964,7 @@ export function computeGlobalPopupLists({
 /**
  * 期中/期末作業成績結算：統計每位學生的「一般補繳 / 一般缺交」與「因請假補繳 / 因請假缺交（另外算）」
  */
-function resolveStatsSubjectName(rawSubj, assignmentName, archRec, liveRec, subjects = []) {
+export function resolveStatsSubjectName(rawSubj, assignmentName, archRec, liveRec, subjects = []) {
     const explicit = String(rawSubj || (archRec && archRec.subjectName) || (liveRec && liveRec.subjectName) || '').trim();
     if (explicit && explicit !== '未分類') return explicit;
     const aName = String(assignmentName || '').trim();
@@ -973,11 +976,11 @@ function resolveStatsSubjectName(rawSubj, assignmentName, archRec, liveRec, subj
         const found = nonSystem.find(sub => sub.name.includes(keyword));
         return found ? found.name : fallback;
     };
-    if (/(?:國語|國習|國卷|國甲|國乙|國作|國練|圈詞|生字|造句|聽寫|聽考|作文)/.test(aName)) return pickConfiguredOr('國', '國語');
-    if (/(?:數學|數習|數卷|數作|數練|數格|數單)/.test(aName)) return pickConfiguredOr('數', '數學');
-    if (/(?:社會|社習|社卷|社作|社單)/.test(aName)) return pickConfiguredOr('社', '社會');
-    if (/(?:自然|自習|自卷|自作|自單)/.test(aName)) return pickConfiguredOr('自', '自然');
-    if (/(?:英語|英文|英習|英卷)/.test(aName)) return pickConfiguredOr('英', '英語');
+    if (aName.includes('國') || /(?:國語|國習|國卷|國甲|國乙|國作|國練|圈詞|生字|造句|聽寫|聽考|作文)/.test(aName)) return pickConfiguredOr('國', '國語');
+    if (aName.includes('數') || /(?:數學|數習|數卷|數作|數練|數格|數單)/.test(aName)) return pickConfiguredOr('數', '數學');
+    if (aName.includes('社') || /(?:社會|社習|社卷|社作|社單)/.test(aName)) return pickConfiguredOr('社', '社會');
+    if (aName.includes('自') || /(?:自然|自習|自卷|自作|自單)/.test(aName)) return pickConfiguredOr('自', '自然');
+    if (aName.includes('英') || /(?:英語|英文|英習|英卷)/.test(aName)) return pickConfiguredOr('英', '英語');
     return '未分類';
 }
 

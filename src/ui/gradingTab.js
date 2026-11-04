@@ -31,7 +31,8 @@ import {
     computeGlobalPopupLists,
     computeMakeupAndLeaveStats,
     formatMakeupAndLeaveReport,
-    sanitizeArchiveRecords
+    sanitizeArchiveRecords,
+    resolveStatsSubjectName
 } from '../domain/rules.js';
 
 import {
@@ -90,20 +91,38 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
         gradingRecs.forEach(g => {
             if (currentIds.has(g.assignmentId) || !g.assignmentName || knownPast[g.assignmentId]) return;
             const m = g.assignmentId.match(/^daily-.+-(\d{4})-(\d{2})-(\d{2})$/);
-            if (g.assignmentName === '聯絡簿每日任務') {
-                knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: m ? `${m[1]}/${m[2]}/${m[3]}` : '', subjectName: '聯絡簿', signOnly: false, needsSign: true };
-            } else {
-                knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: '', subjectName: '未分類' };
-            }
+            const isContact = g.assignmentName === '聯絡簿每日任務';
+            const sName = isContact ? '聯絡簿' : resolveStatsSubjectName('', g.assignmentName, null, null, st.subjects || []);
+            knownPast[g.assignmentId] = {
+                name: g.assignmentName,
+                dateLabel: m ? `${m[1]}/${m[2]}/${m[3]}` : '',
+                subjectName: sName,
+                signOnly: false,
+                needsSign: isContact
+            };
         });
         Object.assign(knownPast, state.extraPastAssignments || {});
-        const pastOptions = Object.entries(knownPast);
+        // 若存在 docId::aid 複合鍵，避免重複顯示純 aid 的重複選項
+        const compoundAids = new Set();
+        Object.keys(knownPast).forEach(k => {
+            if (k.includes('::')) {
+                compoundAids.add(k.split('::')[1]);
+            }
+        });
+        const pastOptions = Object.entries(knownPast).filter(([key]) => {
+            if (!key.includes('::') && compoundAids.has(key)) {
+                return false;
+            }
+            return true;
+        });
 
         const selSubj = $('pastSubjectSelect');
         const selPast = $('pastAssignmentSelect');
         const bySubject = {};
         pastOptions.forEach(([id, info]) => {
-            const sn = info.subjectName || '未分類';
+            const sn = (info.subjectName && info.subjectName !== '未分類')
+                ? info.subjectName
+                : resolveStatsSubjectName('', info.name || '', null, null, st.subjects || []);
             (bySubject[sn] = bySubject[sn] || []).push([id, info]);
         });
 
@@ -140,74 +159,80 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
         }
 
         function renderPastAssignmentGrader() {
-            const aid = selPast.value;
+            const rawSel = selPast.value;
             const box = $('pastAssignmentGradeList');
             if (!box) return;
-            if (!aid) { box.innerHTML = ''; return; }
+            if (!rawSel) { box.innerHTML = ''; return; }
 
-            const aName = knownPast[aid] ? knownPast[aid].name : '';
+            const [docId, aid] = rawSel.includes('::') ? rawSel.split('::') : ['', rawSel];
+            const pastInfo = knownPast[rawSel] || knownPast[aid];
+            const aName = pastInfo ? pastInfo.name : '';
             const isPastDaily = aName === '聯絡簿每日任務';
-            const archiveDoc = state.archiveDocsMap ? state.archiveDocsMap[aid] : null;
+            const archiveDoc = docId
+                ? (state.archiveDocsMap ? (state.archiveDocsMap[docId] || state.archiveDocsMap[rawSel]) : null)
+                : (state.archiveDocsMap ? (state.archiveDocsMap[aid] || state.archiveDocsMap[rawSel]) : null);
+
             const gradeOfPast = sid => {
-                const live = gradingRecs.find(x => x.studentId === sid && x.assignmentId === aid);
                 const isAwarded = !!(
-                    (state.awardedPointsSet && state.awardedPointsSet.has(`${sid}_${aid}`)) ||
-                    (window.__awardedPointsSet && window.__awardedPointsSet.has(`${sid}_${aid}`))
+                    (state.awardedPointsSet && (state.awardedPointsSet.has(`${sid}_${aid}`) || state.awardedPointsSet.has(`${sid}_${rawSel}`))) ||
+                    (window.__awardedPointsSet && (window.__awardedPointsSet.has(`${sid}_${aid}`) || window.__awardedPointsSet.has(`${sid}_${rawSel}`)))
                 );
-                if (live) {
-                    if (isAwarded && !live.pointsGiven) live.pointsGiven = true;
-                    return live;
-                }
+                // 優先從該封存文件的 records 快照中讀取紀錄，避免不同日期同作業 ID 互相覆蓋
                 if (archiveDoc && archiveDoc.records) {
-                    const arch = archiveDoc.records.find(x => x.studentId === sid && x.assignmentId === aid);
+                    const arch = archiveDoc.records.find(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                     if (arch) {
                         if (isAwarded && !arch.pointsGiven) arch.pointsGiven = true;
                         if (arch.correctness || arch.corrected || isAwarded) return arch;
                     }
+                }
+                const live = gradingRecs.find(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
+                if (live) {
+                    if (isAwarded && !live.pointsGiven) live.pointsGiven = true;
+                    return live;
                 }
                 if (isAwarded) {
                     return { studentId: sid, assignmentId: aid, pointsGiven: true, correctness: '全對' };
                 }
                 return null;
             };
-            const pastSubjName = knownPast[aid] ? (knownPast[aid].subjectName || '') : '';
+            const pastSubjName = pastInfo ? (pastInfo.subjectName || '') : '';
             const dSubj = isPastDaily
                 ? (st.subjects || []).find(x => x.id === (st.assignments.find(a => a.name === '聯絡簿每日任務') || {}).subjectId)
                 : (st.subjects || []).find(x => x.name === pastSubjName);
-            const pastInfo = knownPast[aid];
-            const foundAsg = archiveDoc ? (archiveDoc.assignments || []).find(a => a.id === aid) : null;
+            const foundAsg = archiveDoc ? (archiveDoc.assignments || []).find(a => a.id === aid || a.id === rawSel) : null;
             const pastNeedsSign = !!(
                 (foundAsg && (foundAsg.needsSign || foundAsg.signOnly)) ||
                 (pastInfo && (pastInfo.needsSign || pastInfo.signOnly)) ||
                 isPastDaily ||
-                recs.some(r => r.assignmentId === aid && r.signStatus && r.signStatus !== '未簽名') ||
-                (archiveDoc && (archiveDoc.records || []).some(r => r.assignmentId === aid && r.signStatus && r.signStatus !== '未簽名'))
+                recs.some(r => (r.assignmentId === aid || r.assignmentId === rawSel) && r.signStatus && r.signStatus !== '未簽名') ||
+                (archiveDoc && (archiveDoc.records || []).some(r => (r.assignmentId === aid || r.assignmentId === rawSel) && r.signStatus && r.signStatus !== '未簽名'))
             );
             const isExam = isExamAssignment(aName);
             const isContact = aName === '聯絡簿每日任務';
             const pastNeedsPoints = !isExam && !isContact;
 
             const syncArchiveDocToFirestore = async (targetDoc) => {
-                const docId = targetDoc ? (targetDoc._id || targetDoc.id) : null;
-                if (!targetDoc || !docId) return;
+                const targetDocId = targetDoc ? (targetDoc._id || targetDoc.id) : null;
+                if (!targetDoc || !targetDocId) return;
                 targetDoc.records = sanitizeArchiveRecords(targetDoc.records);
                 if (state.archiveDocsMap) {
-                    if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = targetDoc.records;
+                    if (state.archiveDocsMap[targetDocId]) state.archiveDocsMap[targetDocId].records = targetDoc.records;
                     if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = targetDoc.records;
+                    if (state.archiveDocsMap[rawSel]) state.archiveDocsMap[rawSel].records = targetDoc.records;
                 }
                 if (Array.isArray(state.archiveDocsList)) {
-                    const listDoc = state.archiveDocsList.find(d => (d._id || d.id) === docId);
+                    const listDoc = state.archiveDocsList.find(d => (d._id || d.id) === targetDocId);
                     if (listDoc) listDoc.records = targetDoc.records;
                 }
                 if (state.refreshOpenArchiveDetail) {
-                    state.refreshOpenArchiveDetail(docId);
+                    state.refreshOpenArchiveDetail(targetDocId);
                 }
-                await setDoc(doc(db, 'archives', docId), { records: targetDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                await setDoc(doc(db, 'archives', targetDocId), { records: targetDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
             };
 
             box.innerHTML = sortBySeat(st.students).map(s => {
                 const sName = escapeHtml(s.name);
-                const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === aid);
+                const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === s.id && (r.assignmentId === aid || r.assignmentId === rawSel));
                 const isPull = isRecordPulledOut(archRec, s, pastSubjName, aName) || isPulledOut(s, foundAsg ? foundAsg.subjectName : '', foundAsg ? foundAsg.name : '');
                 if (isPull) {
                     return `<div class="daily-row ${pastNeedsSign ? '' : 'no-sign'} ${pastNeedsPoints ? 'has-points' : ''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign ? '140px ' : ''}58px 38px 38px 76px 38px ${pastNeedsPoints ? '72px' : ''}">
@@ -227,7 +252,7 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 const cur = g ? g.correctness : '';
                 const thirdVal = isPastDaily ? '沒寫任務' : '遺失';
                 const thirdIcon = isPastDaily ? '－' : '✗';
-                const rec = recs.find(r => r.studentId === s.id && r.assignmentId === aid);
+                const rec = recs.find(r => r.studentId === s.id && (r.assignmentId === aid || r.assignmentId === rawSel));
                 const dStatus = deriveRecordStatus(rec, archRec ? archRec.status : '未繳');
                 const dSign = deriveRecordSign(rec, archRec ? archRec.signStatus : '未簽名');
                 const dLeave = isRecordLeave(rec, archRec);
@@ -247,8 +272,8 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 const isPointsGiven = !!(
                     (g && g.pointsGiven) ||
                     (archRec && archRec.pointsGiven) ||
-                    (state.awardedPointsSet && state.awardedPointsSet.has(`${s.id}_${aid}`)) ||
-                    (window.__awardedPointsSet && window.__awardedPointsSet.has(`${s.id}_${aid}`))
+                    (state.awardedPointsSet && (state.awardedPointsSet.has(`${s.id}_${aid}`) || state.awardedPointsSet.has(`${s.id}_${rawSel}`))) ||
+                    (window.__awardedPointsSet && (window.__awardedPointsSet.has(`${s.id}_${aid}`) || window.__awardedPointsSet.has(`${s.id}_${rawSel}`)))
                 );
                 const pointsSlot = pastNeedsPoints ? `<span class="row-slot-points" style="visibility:${pts > 0 || isPointsGiven ? 'visible' : 'hidden'}">${(pts > 0 || isPointsGiven) ? (isPointsGiven ? '已加點' : '尚未加點') : '尚未加點'}</span>` : '';
 
@@ -271,8 +296,8 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     const sid = row.getAttribute('data-past-student');
                     const stu = st.students.find(x => x.id === sid);
                     const grp = st.groups.find(x => x.id === stu?.groupId);
-                    const cur2 = recs.find(r => r.studentId === sid && r.assignmentId === aid);
-                    const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === sid && r.assignmentId === aid);
+                    const cur2 = recs.find(r => r.studentId === sid && (r.assignmentId === aid || r.assignmentId === rawSel));
+                    const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === sid && (r.assignmentId === aid || r.assignmentId === rawSel));
                     const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
                     const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
                     const curRemark = deriveRecordRemark(cur2, archRec);
@@ -296,12 +321,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         isLeave: curLeave,
                         isMakeup: nextMakeup
                     };
-                    let r = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
+                    let r = recs.find(rx => rx.studentId === sid && (rx.assignmentId === aid || rx.assignmentId === rawSel));
                     if (r) Object.assign(r, payload); else recs.push(payload);
 
                     if (archiveDoc) {
                         if (!archiveDoc.records) archiveDoc.records = [];
-                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                         if (archIdx !== -1) {
                             Object.assign(archiveDoc.records[archIdx], {
                                 status: nv,
@@ -326,8 +351,8 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     const sid = row.getAttribute('data-past-student');
                     const stu = st.students.find(x => x.id === sid);
                     const grp = st.groups.find(x => x.id === stu?.groupId);
-                    const cur2 = recs.find(r => r.studentId === sid && r.assignmentId === aid);
-                    const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === sid && r.assignmentId === aid);
+                    const cur2 = recs.find(r => r.studentId === sid && (r.assignmentId === aid || r.assignmentId === rawSel));
+                    const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === sid && (r.assignmentId === aid || r.assignmentId === rawSel));
                     const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
                     const curRemark = deriveRecordRemark(cur2, archRec);
                     const curLeave = isRecordLeave(cur2, archRec);
@@ -348,12 +373,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         isLeave: curLeave,
                         isMakeup: true
                     };
-                    let r = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
+                    let r = recs.find(rx => rx.studentId === sid && (rx.assignmentId === aid || rx.assignmentId === rawSel));
                     if (r) Object.assign(r, payload); else recs.push(payload);
 
                     if (archiveDoc) {
                         if (!archiveDoc.records) archiveDoc.records = [];
-                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                         if (archIdx !== -1) {
                             Object.assign(archiveDoc.records[archIdx], {
                                 status: '已繳',
@@ -378,8 +403,8 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     const sid = row.getAttribute('data-past-student');
                     const stu = st.students.find(x => x.id === sid);
                     const grp = st.groups.find(x => x.id === stu?.groupId);
-                    const cur2 = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
-                    const archRec = archiveDoc && (archiveDoc.records || []).find(rx => rx.studentId === sid && rx.assignmentId === aid);
+                    const cur2 = recs.find(rx => rx.studentId === sid && (rx.assignmentId === aid || rx.assignmentId === rawSel));
+                    const archRec = archiveDoc && (archiveDoc.records || []).find(rx => rx.studentId === sid && (rx.assignmentId === aid || rx.assignmentId === rawSel));
                     const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
                     const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
                     const curRemark = deriveRecordRemark(cur2, archRec);
@@ -403,12 +428,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         isLeave: curLeave,
                         isMakeup: curMakeup
                     };
-                    let r = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
+                    let r = recs.find(rx => rx.studentId === sid && (rx.assignmentId === aid || rx.assignmentId === rawSel));
                     if (r) Object.assign(r, payload); else recs.push(payload);
 
                     if (archiveDoc) {
                         if (!archiveDoc.records) archiveDoc.records = [];
-                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                         if (archIdx !== -1) {
                             Object.assign(archiveDoc.records[archIdx], {
                                 status: curStatus,
@@ -434,8 +459,8 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     const stu = st.students.find(x => x.id === sid);
                     const grp = st.groups.find(x => x.id === stu?.groupId);
                     const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                    const cur2 = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
-                    const archRec = archiveDoc && (archiveDoc.records || []).find(rx => rx.studentId === sid && rx.assignmentId === aid);
+                    const cur2 = recs.find(rx => rx.studentId === sid && (rx.assignmentId === aid || rx.assignmentId === rawSel));
+                    const archRec = archiveDoc && (archiveDoc.records || []).find(rx => rx.studentId === sid && (rx.assignmentId === aid || rx.assignmentId === rawSel));
                     const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
                     const curRemark = deriveRecordRemark(cur2, archRec);
                     const curLeave = isRecordLeave(cur2, archRec);
@@ -456,12 +481,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         isLeave: curLeave,
                         isMakeup: curMakeup
                     };
-                    let r = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
+                    let r = recs.find(rx => rx.studentId === sid && (rx.assignmentId === aid || rx.assignmentId === rawSel));
                     if (r) Object.assign(r, payload); else recs.push(payload);
 
                     if (archiveDoc) {
                         if (!archiveDoc.records) archiveDoc.records = [];
-                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                         if (archIdx !== -1) {
                             Object.assign(archiveDoc.records[archIdx], {
                                 status: curStatus,
@@ -486,8 +511,8 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     const sid = row.getAttribute('data-past-student');
                     const stu = st.students.find(x => x.id === sid);
                     const grp = st.groups.find(x => x.id === stu?.groupId);
-                    const cur2 = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
-                    const archRec = archiveDoc && (archiveDoc.records || []).find(rx => rx.studentId === sid && rx.assignmentId === aid);
+                    const cur2 = recs.find(rx => rx.studentId === sid && (rx.assignmentId === aid || rx.assignmentId === rawSel));
+                    const archRec = archiveDoc && (archiveDoc.records || []).find(rx => rx.studentId === sid && (rx.assignmentId === aid || rx.assignmentId === rawSel));
                     const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
                     const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
                     const curRemark = deriveRecordRemark(cur2, archRec);
@@ -510,12 +535,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         isLeave: nextLeave,
                         isMakeup: curMakeup
                     };
-                    let r = recs.find(rx => rx.studentId === sid && rx.assignmentId === aid);
+                    let r = recs.find(rx => rx.studentId === sid && (rx.assignmentId === aid || rx.assignmentId === rawSel));
                     if (r) Object.assign(r, payload); else recs.push(payload);
 
                     if (archiveDoc) {
                         if (!archiveDoc.records) archiveDoc.records = [];
-                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                         if (archIdx !== -1) {
                             Object.assign(archiveDoc.records[archIdx], {
                                 status: curStatus,
@@ -551,12 +576,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         correctness: nextVal,
                         corrected: nextCorrected
                     };
-                    let gItem = gradingRecs.find(x => x.studentId === sid && x.assignmentId === aid);
+                    let gItem = gradingRecs.find(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                     if (gItem) Object.assign(gItem, payload); else gradingRecs.push(payload);
 
                     if (archiveDoc) {
                         if (!archiveDoc.records) archiveDoc.records = [];
-                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                         if (archIdx !== -1) {
                             archiveDoc.records[archIdx].correctness = nextVal;
                             archiveDoc.records[archIdx].corrected = nextCorrected;
@@ -574,17 +599,18 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     renderPastAssignmentGrader();
 
                     await adminSetGrading(payload);
-                    const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
-                    if (archiveDoc && docId) {
+                    const targetDocId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                    if (archiveDoc && targetDocId) {
                         archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
                         if (state.archiveDocsMap) {
-                            if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
+                            if (state.archiveDocsMap[targetDocId]) state.archiveDocsMap[targetDocId].records = archiveDoc.records;
                             if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
+                            if (state.archiveDocsMap[rawSel]) state.archiveDocsMap[rawSel].records = archiveDoc.records;
                         }
-                        if (state.refreshOpenArchiveDetail && docId) {
-                            state.refreshOpenArchiveDetail(docId);
+                        if (state.refreshOpenArchiveDetail && targetDocId) {
+                            state.refreshOpenArchiveDetail(targetDocId);
                         }
-                        await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                        await setDoc(doc(db, 'archives', targetDocId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     }
                 };
             });
@@ -604,12 +630,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         correctness: '有錯',
                         corrected: nextCorrected
                     };
-                    let gItem = gradingRecs.find(x => x.studentId === sid && x.assignmentId === aid);
+                    let gItem = gradingRecs.find(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                     if (gItem) Object.assign(gItem, payload); else gradingRecs.push(payload);
 
                     if (archiveDoc) {
                         if (!archiveDoc.records) archiveDoc.records = [];
-                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                        const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                         if (archIdx !== -1) {
                             archiveDoc.records[archIdx].correctness = '有錯';
                             archiveDoc.records[archIdx].corrected = nextCorrected;
@@ -627,17 +653,18 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     renderPastAssignmentGrader();
 
                     await adminSetGrading(payload);
-                    const docId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
-                    if (archiveDoc && docId) {
+                    const targetDocId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                    if (archiveDoc && targetDocId) {
                         archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
                         if (state.archiveDocsMap) {
-                            if (state.archiveDocsMap[docId]) state.archiveDocsMap[docId].records = archiveDoc.records;
+                            if (state.archiveDocsMap[targetDocId]) state.archiveDocsMap[targetDocId].records = archiveDoc.records;
                             if (state.archiveDocsMap[aid]) state.archiveDocsMap[aid].records = archiveDoc.records;
+                            if (state.archiveDocsMap[rawSel]) state.archiveDocsMap[rawSel].records = archiveDoc.records;
                         }
-                        if (state.refreshOpenArchiveDetail && docId) {
-                            state.refreshOpenArchiveDetail(docId);
+                        if (state.refreshOpenArchiveDetail && targetDocId) {
+                            state.refreshOpenArchiveDetail(targetDocId);
                         }
-                        await setDoc(doc(db, 'archives', docId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
+                        await setDoc(doc(db, 'archives', targetDocId), { records: archiveDoc.records }, { merge: true }).catch(e => logger.warn('UPDATE_ARCHIVE_FAILED', e));
                     }
                 };
             });
@@ -651,11 +678,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
         const renameSelectedPastBtn = $('renameSelectedPastBtn');
         if (renameSelectedPastBtn) {
             renameSelectedPastBtn.onclick = async () => {
-                const aid = selPast.value;
-                if (!aid) { showAlert('請先在上面選一筆要重新命名的作業'); return; }
-                const info = knownPast[aid];
+                const rawSel = selPast.value;
+                if (!rawSel) { showAlert('請先在上面選一筆要重新命名的作業'); return; }
+                const [targetDocId, targetAid] = rawSel.includes('::') ? rawSel.split('::') : ['', rawSel];
+                const info = knownPast[rawSel] || knownPast[targetAid];
                 const currentName = info ? info.name : '';
-                const label = info ? `${info.dateLabel ? info.dateLabel + ' ' : ''}${info.name}` : aid;
+                const label = info ? `${info.dateLabel ? info.dateLabel + ' ' : ''}${info.name}` : targetAid;
                 const newName = await askInput(`請輸入「${label}」的新作業名稱：`, currentName);
                 if (newName === null) return;
                 let trimmed = newName.trim();
@@ -668,17 +696,18 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 try {
                     const snap = await getDocs(archivesColl);
                     for (const d of snap.docs) {
+                        if (targetDocId && d.id !== targetDocId) continue;
                         const data = d.data();
                         let changed = false;
                         (data.assignments || []).forEach(a => {
-                            if (a.id === aid) {
+                            if (a.id === targetAid) {
                                 a.name = trimmed;
                                 changed = true;
                             }
                         });
                         if (changed) {
                             (data.records || []).forEach(r => {
-                                if (r.assignmentId === aid) {
+                                if (r.assignmentId === targetAid) {
                                     r.assignmentName = trimmed;
                                 }
                             });
@@ -693,7 +722,7 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         }
                     }
 
-                    const gSnap = await getDocs(query(gradingColl, where('assignmentId', '==', aid)));
+                    const gSnap = await getDocs(query(gradingColl, where('assignmentId', '==', targetAid)));
                     if (!gSnap.empty) {
                         const batch = writeBatch(db);
                         gSnap.docs.forEach(gd => batch.update(gd.ref, { assignmentName: trimmed }));
@@ -701,23 +730,25 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                     }
 
                     if (st && Array.isArray(st.assignments)) {
-                        const curA = st.assignments.find(x => x.id === aid);
+                        const curA = st.assignments.find(x => x.id === targetAid);
                         if (curA) {
                             curA.name = trimmed;
                             saveSettings({ assignments: st.assignments }, true);
                         }
                     }
 
-                    if (knownPast[aid]) knownPast[aid].name = trimmed;
-                    if (state.extraPastAssignments && state.extraPastAssignments[aid]) {
-                        state.extraPastAssignments[aid].name = trimmed;
+                    if (knownPast[rawSel]) knownPast[rawSel].name = trimmed;
+                    if (knownPast[targetAid]) knownPast[targetAid].name = trimmed;
+                    if (state.extraPastAssignments) {
+                        if (state.extraPastAssignments[rawSel]) state.extraPastAssignments[rawSel].name = trimmed;
+                        if (state.extraPastAssignments[targetAid]) state.extraPastAssignments[targetAid].name = trimmed;
                     }
                     gradingRecs.forEach(g => {
-                        if (g.assignmentId === aid) g.assignmentName = trimmed;
+                        if (g.assignmentId === targetAid) g.assignmentName = trimmed;
                     });
 
                     refreshPastAssignmentOptions();
-                    selPast.value = aid;
+                    selPast.value = rawSel;
                     renderPastAssignmentGrader();
                     showAlert(`作業名稱已成功修改為：「${trimmed}」`);
                 } catch (e) {
@@ -730,15 +761,24 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
         const deleteSelectedPastBtn = $('deleteSelectedPastBtn');
         if (deleteSelectedPastBtn) {
             deleteSelectedPastBtn.onclick = async () => {
-                const aid = selPast.value;
-                if (!aid) { showAlert('請先在上面選一筆要刪除的作業'); return; }
-                const info = knownPast[aid];
-                const label = info ? `${info.dateLabel ? info.dateLabel + ' ' : ''}${info.name}` : aid;
+                const rawSel = selPast.value;
+                if (!rawSel) { showAlert('請先在上面選一筆要刪除的作業'); return; }
+                const [targetDocId, targetAid] = rawSel.includes('::') ? rawSel.split('::') : ['', rawSel];
+                const info = knownPast[rawSel] || knownPast[targetAid];
+                const label = info ? `${info.dateLabel ? info.dateLabel + ' ' : ''}${info.name}` : targetAid;
                 const ok2 = await askConfirm(`確定要刪除「${label}」這筆紀錄嗎？裡面的訂正與繳交資料都會刪除，無法復原。`);
                 if (!ok2) return;
-                await clearGradingForAssignment(aid);
-                await clearRecordsForAssignment(aid);
-                if (state.extraPastAssignments) delete state.extraPastAssignments[aid];
+                await clearGradingForAssignment(targetAid);
+                await clearRecordsForAssignment(targetAid);
+                if (state.extraPastAssignments) {
+                    delete state.extraPastAssignments[rawSel];
+                    delete state.extraPastAssignments[targetAid];
+                }
+                delete knownPast[rawSel];
+                delete knownPast[targetAid];
+                refreshPastAssignmentOptions();
+                selPast.value = '';
+                renderPastAssignmentGrader();
                 showAlert(`已刪除「${label}」`);
             };
         }

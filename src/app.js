@@ -45,7 +45,8 @@ import {
     deriveRecordRemark,
     isRecordLeave,
     isRecordMakeup,
-    sanitizeArchiveRecords
+    sanitizeArchiveRecords,
+    resolveStatsSubjectName
 } from './domain/rules.js';
 
 import { logger, initGlobalErrorMonitoring } from './utils/logger.js';
@@ -175,6 +176,8 @@ export function autoLoadArchives() {
                     .map(a => a.id)
             );
 
+            const toBatchRestoreGrading = [];
+
             snap.docs.forEach(d => {
                 const data = d.data();
                 data._id = d.id;
@@ -182,50 +185,112 @@ export function autoLoadArchives() {
                 nextList.push(data);
                 nextMap[d.id] = data;
                 const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
-                (data.assignments || []).forEach(a => {
-                    if (!nextMap[a.id]) nextMap[a.id] = data;
-                    const isContact = a.name === '聯絡簿每日任務';
-                    const isCurrentlyActive = isContact ? activeContactIds.has(a.id) : activeNonContactIds.has(a.id);
-                    if (!isCurrentlyActive) {
-                        if (!nextExtra[a.id]) {
-                            nextExtra[a.id] = {
-                                name: a.name,
-                                dateLabel,
-                                timestamp: data.timestamp,
-                                subjectName: a.subjectName || (isContact ? '聯絡簿' : '未分類'),
-                                needsSign: !!(a.needsSign || isContact),
-                                signOnly: !!a.signOnly
-                            };
-                        }
-                    }
-                });
-                if ((!data.assignments || !data.assignments.length) && Array.isArray(data.records)) {
-                    const uniqueAids = new Set();
+
+                let docAssignments = Array.isArray(data.assignments) ? data.assignments : [];
+                if (!docAssignments.length && Array.isArray(data.records)) {
+                    const seenAids = new Set();
+                    docAssignments = [];
                     data.records.forEach(r => {
-                        if (r.assignmentId && !uniqueAids.has(r.assignmentId)) {
-                            uniqueAids.add(r.assignmentId);
-                            const aName = r.assignmentName || '未命名作業';
-                            const isContact = aName === '聯絡簿每日任務';
-                            const isCurrentlyActive = isContact ? activeContactIds.has(r.assignmentId) : activeNonContactIds.has(r.assignmentId);
-                            if (!isCurrentlyActive && !nextExtra[r.assignmentId]) {
-                                nextExtra[r.assignmentId] = {
-                                    name: aName,
-                                    dateLabel,
-                                    timestamp: data.timestamp,
-                                    subjectName: isContact ? '聯絡簿' : '未分類',
-                                    needsSign: isContact,
-                                    signOnly: false
-                                };
-                            }
+                        if (r && r.assignmentId && !seenAids.has(r.assignmentId)) {
+                            seenAids.add(r.assignmentId);
+                            docAssignments.push({
+                                id: r.assignmentId,
+                                name: r.assignmentName || '未命名作業',
+                                subjectName: r.subjectName || '',
+                                needsSign: !!r.signStatus,
+                                signOnly: false
+                            });
                         }
                     });
                 }
+
+                docAssignments.forEach(a => {
+                    if (!a || !a.id) return;
+                    const aName = a.name || '';
+                    const isContact = aName === '聯絡簿每日任務' || a.id.startsWith('daily-');
+                    const isCurrentlyActive = isContact ? activeContactIds.has(a.id) : activeNonContactIds.has(a.id);
+
+                    let sName = (a.subjectName && a.subjectName !== '未分類') ? a.subjectName : '';
+                    if (!sName) {
+                        const matchingRec = (data.records || []).find(r => r.assignmentId === a.id && r.subjectName && r.subjectName !== '未分類');
+                        if (matchingRec) sName = matchingRec.subjectName;
+                    }
+                    if (!sName) {
+                        sName = resolveStatsSubjectName('', aName, null, null, (settings && settings.subjects) || []);
+                    }
+                    if (isContact) sName = '聯絡簿';
+                    a.subjectName = sName;
+
+                    if (!nextMap[a.id]) nextMap[a.id] = data;
+                    nextMap[`${data.id}::${a.id}`] = data;
+
+                    if (!isCurrentlyActive) {
+                        const pastKey = `${data.id}::${a.id}`;
+                        const infoObj = {
+                            id: a.id,
+                            docId: data.id,
+                            name: aName,
+                            dateLabel,
+                            timestamp: data.timestamp,
+                            subjectName: sName,
+                            needsSign: !!(a.needsSign || isContact),
+                            signOnly: !!a.signOnly
+                        };
+                        nextExtra[pastKey] = infoObj;
+                        if (!nextExtra[a.id]) {
+                            nextExtra[a.id] = infoObj;
+                        }
+                    }
+                });
+
                 (data.records || []).forEach(r => {
-                    if (r.assignmentId && !nextMap[r.assignmentId]) {
+                    if (!r || !r.assignmentId) return;
+                    if (!r.subjectName || r.subjectName === '未分類') {
+                        r.subjectName = resolveStatsSubjectName(r.subjectName, r.assignmentName, null, null, (settings && settings.subjects) || []);
+                    }
+                    if (!nextMap[r.assignmentId]) {
                         nextMap[r.assignmentId] = data;
+                    }
+                    nextMap[`${data.id}::${r.assignmentId}`] = data;
+
+                    // 自動檢查並收集在封存中存在但可能在 gradingColl 遺失的訂正/批改紀錄
+                    if (r.studentId && (r.correctness || r.corrected || r.pointsGiven)) {
+                        let g = gradingRecords.find(x => x.studentId === r.studentId && x.assignmentId === r.assignmentId);
+                        if (!g) {
+                            g = {
+                                studentId: r.studentId,
+                                studentName: r.studentName || '',
+                                assignmentId: r.assignmentId,
+                                assignmentName: r.assignmentName || '',
+                                correctness: r.correctness || '',
+                                corrected: !!r.corrected,
+                                pointsGiven: !!r.pointsGiven,
+                                updatedAt: data.timestamp || Date.now()
+                            };
+                            gradingRecords.push(g);
+                            toBatchRestoreGrading.push(g);
+                        } else {
+                            let changed = false;
+                            if (!g.correctness && r.correctness) { g.correctness = r.correctness; changed = true; }
+                            if (!g.corrected && r.corrected) { g.corrected = true; changed = true; }
+                            if (!g.pointsGiven && r.pointsGiven) { g.pointsGiven = true; changed = true; }
+                            if (changed) toBatchRestoreGrading.push(g);
+                        }
                     }
                 });
             });
+
+            if (toBatchRestoreGrading.length > 0 && isAdmin) {
+                try {
+                    const batch = writeBatch(db);
+                    toBatchRestoreGrading.forEach(g => {
+                        batch.set(doc(gradingColl, recordDocId(g.studentId, g.assignmentId)), g, { merge: true });
+                    });
+                    batch.commit().catch(e => logger.warn('AUTO_RESTORE_GRADING_BATCH_FAILED', e));
+                } catch (e) {
+                    logger.warn('AUTO_RESTORE_GRADING_ERROR', e);
+                }
+            }
 
             appState.archiveDocsList = nextList;
             appState.archiveDocsMap = nextMap;

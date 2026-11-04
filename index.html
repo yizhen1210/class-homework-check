@@ -673,6 +673,8 @@
                         .map(a => a.id)
                 );
 
+                const toBatchRestoreGrading = [];
+
                 snap.docs.forEach(d => {
                     const data = d.data();
                     data._id = d.id;
@@ -680,48 +682,112 @@
                     nextList.push(data);
                     nextMap[d.id] = data;
                     const dateLabel = data.dateLabel || new Date(data.timestamp).toLocaleDateString('zh-TW');
-                    (data.assignments||[]).forEach(a => {
-                        if (!nextMap[a.id]) nextMap[a.id] = data;
-                        const isContact = a.name === '聯絡簿每日任務';
-                        const isCurrentlyActive = isContact ? activeContactIds.has(a.id) : activeNonContactIds.has(a.id);
-                        if (!isCurrentlyActive && !nextExtra[a.id]) {
-                            nextExtra[a.id] = {
-                                name: a.name,
-                                dateLabel,
-                                timestamp: data.timestamp,
-                                subjectName: a.subjectName || (isContact ? '聯絡簿' : '未分類'),
-                                needsSign: !!(a.needsSign || isContact),
-                                signOnly: !!a.signOnly
-                            };
-                        }
-                    });
-                    if ((!data.assignments || !data.assignments.length) && Array.isArray(data.records)) {
-                        const uniqueAids = new Set();
+
+                    let docAssignments = Array.isArray(data.assignments) ? data.assignments : [];
+                    if (!docAssignments.length && Array.isArray(data.records)) {
+                        const seenAids = new Set();
+                        docAssignments = [];
                         data.records.forEach(r => {
-                            if (r.assignmentId && !uniqueAids.has(r.assignmentId)) {
-                                uniqueAids.add(r.assignmentId);
-                                const aName = r.assignmentName || '未命名作業';
-                                const isContact = aName === '聯絡簿每日任務';
-                                const isCurrentlyActive = isContact ? activeContactIds.has(r.assignmentId) : activeNonContactIds.has(r.assignmentId);
-                                if (!isCurrentlyActive && !nextExtra[r.assignmentId]) {
-                                    nextExtra[r.assignmentId] = {
-                                        name: aName,
-                                        dateLabel,
-                                        timestamp: data.timestamp,
-                                        subjectName: isContact ? '聯絡簿' : '未分類',
-                                        needsSign: isContact,
-                                        signOnly: false
-                                    };
-                                }
+                            if (r && r.assignmentId && !seenAids.has(r.assignmentId)) {
+                                seenAids.add(r.assignmentId);
+                                docAssignments.push({
+                                    id: r.assignmentId,
+                                    name: r.assignmentName || '未命名作業',
+                                    subjectName: r.subjectName || '',
+                                    needsSign: !!r.signStatus,
+                                    signOnly: false
+                                });
                             }
                         });
                     }
+
+                    docAssignments.forEach(a => {
+                        if (!a || !a.id) return;
+                        const aName = a.name || '';
+                        const isContact = aName === '聯絡簿每日任務' || a.id.startsWith('daily-');
+                        const isCurrentlyActive = isContact ? activeContactIds.has(a.id) : activeNonContactIds.has(a.id);
+
+                        let sName = (a.subjectName && a.subjectName !== '未分類') ? a.subjectName : '';
+                        if (!sName) {
+                            const matchingRec = (data.records || []).find(r => r.assignmentId === a.id && r.subjectName && r.subjectName !== '未分類');
+                            if (matchingRec) sName = matchingRec.subjectName;
+                        }
+                        if (!sName) {
+                            sName = resolveStatsSubjectName('', aName, null, null, (settings && settings.subjects) || []);
+                        }
+                        if (isContact) sName = '聯絡簿';
+                        a.subjectName = sName;
+
+                        if (!nextMap[a.id]) nextMap[a.id] = data;
+                        nextMap[`${data.id}::${a.id}`] = data;
+
+                        if (!isCurrentlyActive) {
+                            const pastKey = `${data.id}::${a.id}`;
+                            const infoObj = {
+                                id: a.id,
+                                docId: data.id,
+                                name: aName,
+                                dateLabel,
+                                timestamp: data.timestamp,
+                                subjectName: sName,
+                                needsSign: !!(a.needsSign || isContact),
+                                signOnly: !!a.signOnly
+                            };
+                            nextExtra[pastKey] = infoObj;
+                            if (!nextExtra[a.id]) {
+                                nextExtra[a.id] = infoObj;
+                            }
+                        }
+                    });
+
                     (data.records || []).forEach(r => {
-                        if (r.assignmentId && !nextMap[r.assignmentId]) {
+                        if (!r || !r.assignmentId) return;
+                        if (!r.subjectName || r.subjectName === '未分類') {
+                            r.subjectName = resolveStatsSubjectName(r.subjectName, r.assignmentName, null, null, (settings && settings.subjects) || []);
+                        }
+                        if (!nextMap[r.assignmentId]) {
                             nextMap[r.assignmentId] = data;
+                        }
+                        nextMap[`${data.id}::${r.assignmentId}`] = data;
+
+                        // 自動檢查並收集在封存中存在但可能在 gradingColl 遺失的訂正/批改紀錄
+                        if (r.studentId && (r.correctness || r.corrected || r.pointsGiven)) {
+                            let g = gradingRecords.find(x => x.studentId === r.studentId && x.assignmentId === r.assignmentId);
+                            if (!g) {
+                                g = {
+                                    studentId: r.studentId,
+                                    studentName: r.studentName || '',
+                                    assignmentId: r.assignmentId,
+                                    assignmentName: r.assignmentName || '',
+                                    correctness: r.correctness || '',
+                                    corrected: !!r.corrected,
+                                    pointsGiven: !!r.pointsGiven,
+                                    updatedAt: data.timestamp || Date.now()
+                                };
+                                gradingRecords.push(g);
+                                toBatchRestoreGrading.push(g);
+                            } else {
+                                let changed = false;
+                                if (!g.correctness && r.correctness) { g.correctness = r.correctness; changed = true; }
+                                if (!g.corrected && r.corrected) { g.corrected = true; changed = true; }
+                                if (!g.pointsGiven && r.pointsGiven) { g.pointsGiven = true; changed = true; }
+                                if (changed) toBatchRestoreGrading.push(g);
+                            }
                         }
                     });
                 });
+
+                if (toBatchRestoreGrading.length > 0 && isAdmin) {
+                    try {
+                        const batch = writeBatch(db);
+                        toBatchRestoreGrading.forEach(g => {
+                            batch.set(doc(gradingColl, recordDocId(g.studentId, g.assignmentId)), g, { merge: true });
+                        });
+                        batch.commit().catch(e => console.warn('AUTO_RESTORE_GRADING_BATCH_FAILED', e));
+                    } catch (e) {
+                        console.warn('AUTO_RESTORE_GRADING_ERROR', e);
+                    }
+                }
                 window.__archiveDocsList = nextList;
                 window.__archiveDocsMap = nextMap;
                 window.__extraPastAssignments = nextExtra;
@@ -1321,12 +1387,15 @@
                     const collidesWithActiveContact = isContact && activeContactIds.has(a.id);
                     const hasDuplicateArchiveId = (aidArchiveCount.get(a.id) || 0) > 1;
                     const infoObj = { dateLabel, name: a.name, timestamp: docItem.timestamp };
+                    const resolvedSubj = (a.subjectName && a.subjectName !== '未分類')
+                        ? a.subjectName
+                        : resolveStatsSubjectName('', a.name, null, null, subjects);
                     archivedEntries.push({
                         entryKey: `arch_${docId}_${a.id}`,
                         assignmentId: a.id,
                         archiveDocId: docId,
                         name: a.name,
-                        subjectName: a.subjectName || (isContact ? '聯絡簿' : subjNameOf(a)),
+                        subjectName: isContact ? '聯絡簿' : (resolvedSubj || subjNameOf(a)),
                         needsSign: !!(a.needsSign || a.signOnly || isContact || (docItem.records || []).some(r => r.assignmentId === a.id && r.signStatus && r.signStatus !== '未簽名')),
                         signOnly: !!a.signOnly,
                         dateLabel,
@@ -1342,7 +1411,8 @@
 
             if (extraPastAssignments && typeof extraPastAssignments === 'object') {
                 Object.entries(extraPastAssignments).forEach(([aid, info]) => {
-                    if (coveredArchiveAids.has(aid) || activeNonContactIds.has(aid) || activeContactIds.has(aid)) return;
+                    const actualId = (info && info.id) || (aid.includes('::') ? aid.split('::')[1] : aid);
+                    if (coveredArchiveAids.has(actualId) || coveredArchiveAids.has(aid) || activeNonContactIds.has(actualId) || activeContactIds.has(actualId)) return;
                     const isContact = info.name === '聯絡簿每日任務';
                     coveredArchiveAids.add(aid);
                     const archDoc = archiveDocsMap ? archiveDocsMap[aid] : null;
@@ -1525,11 +1595,11 @@
                 const found = nonSystem.find(sub => sub.name.includes(keyword));
                 return found ? found.name : fallback;
             };
-            if (/(?:國語|國習|國卷|國甲|國乙|國作|國練|圈詞|生字|造句|聽寫|聽考|作文)/.test(aName)) return pickConfiguredOr('國', '國語');
-            if (/(?:數學|數習|數卷|數作|數練|數格|數單)/.test(aName)) return pickConfiguredOr('數', '數學');
-            if (/(?:社會|社習|社卷|社作|社單)/.test(aName)) return pickConfiguredOr('社', '社會');
-            if (/(?:自然|自習|自卷|自作|自單)/.test(aName)) return pickConfiguredOr('自', '自然');
-            if (/(?:英語|英文|英習|英卷)/.test(aName)) return pickConfiguredOr('英', '英語');
+            if (aName.includes('國') || /(?:國語|國習|國卷|國甲|國乙|國作|國練|圈詞|生字|造句|聽寫|聽考|作文)/.test(aName)) return pickConfiguredOr('國', '國語');
+            if (aName.includes('數') || /(?:數學|數習|數卷|數作|數練|數格|數單)/.test(aName)) return pickConfiguredOr('數', '數學');
+            if (aName.includes('社') || /(?:社會|社習|社卷|社作|社單)/.test(aName)) return pickConfiguredOr('社', '社會');
+            if (aName.includes('自') || /(?:自然|自習|自卷|自作|自單)/.test(aName)) return pickConfiguredOr('自', '自然');
+            if (aName.includes('英') || /(?:英語|英文|英習|英卷)/.test(aName)) return pickConfiguredOr('英', '英語');
             return '未分類';
         }
 
@@ -2553,19 +2623,39 @@
                 gradingRecs.forEach(g => {
                     if(currentIds.has(g.assignmentId) || !g.assignmentName || knownPast[g.assignmentId]) return;
                     const m = g.assignmentId.match(/^daily-.+-(\d{4})-(\d{2})-(\d{2})/);
-                    if(g.assignmentName === '聯絡簿每日任務'){
-                        knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: m ? `${m[1]}/${m[2]}/${m[3]}` : '', subjectName: '聯絡簿', signOnly: false, needsSign: true };
-                    } else {
-                        knownPast[g.assignmentId] = { name: g.assignmentName, dateLabel: '', subjectName: '未分類' };
-                    }
+                    const isContact = g.assignmentName === '聯絡簿每日任務';
+                    const sName = isContact ? '聯絡簿' : resolveStatsSubjectName('', g.assignmentName, null, null, st.subjects || []);
+                    knownPast[g.assignmentId] = {
+                        name: g.assignmentName,
+                        dateLabel: m ? `${m[1]}/${m[2]}/${m[3]}` : '',
+                        subjectName: sName,
+                        signOnly: false,
+                        needsSign: isContact
+                    };
                 });
                 Object.assign(knownPast, window.__extraPastAssignments || {});
-                const pastOptions = Object.entries(knownPast);
+                const compoundAids = new Set();
+                Object.keys(knownPast).forEach(k => {
+                    if (k.includes('::')) {
+                        compoundAids.add(k.split('::')[1]);
+                    }
+                });
+                const pastOptions = Object.entries(knownPast).filter(([key]) => {
+                    if (!key.includes('::') && compoundAids.has(key)) {
+                        return false;
+                    }
+                    return true;
+                });
 
                 const selSubj = $('pastSubjectSelect');
                 const selPast = $('pastAssignmentSelect');
                 const bySubject = {};
-                pastOptions.forEach(([id,info]) => { (bySubject[info.subjectName||'未分類'] = bySubject[info.subjectName||'未分類'] || []).push([id,info]); });
+                pastOptions.forEach(([id,info]) => {
+                    const sn = (info.subjectName && info.subjectName !== '未分類')
+                        ? info.subjectName
+                        : resolveStatsSubjectName('', info.name || '', null, null, st.subjects || []);
+                    (bySubject[sn] = bySubject[sn] || []).push([id,info]);
+                });
 
                 function refreshPastAssignmentOptions(){
                     const curPastSel = selPast.value;
@@ -2584,7 +2674,7 @@
                         }
                         return (infoB.name || '').localeCompare(infoA.name || '', 'zh-Hant');
                     });
-                    const newHtml = '<option value="">請選擇作業</option>' + opts.map(([id,info])=>`<option value="${id}">${info.dateLabel ? info.dateLabel+' ' : ''}${info.name}</option>`).join('');
+                    const newHtml = '<option value="">請選擇作業</option>' + opts.map(([id,info])=>`<option value="${escapeHtml(id)}">${info.dateLabel ? escapeHtml(info.dateLabel)+' ' : ''}${escapeHtml(info.name)}</option>`).join('');
                     if(selPast.innerHTML !== newHtml){
                         selPast.innerHTML = newHtml;
                     }
@@ -2597,7 +2687,7 @@
                 if(selSubj){
                     const curSubjSel = selSubj.value;
                     const subjKeys = Object.keys(bySubject);
-                    const newSubjHtml = '<option value="">請先選擇科目</option>' + subjKeys.map(subjName=>`<option value="${subjName}">${subjName}</option>`).join('');
+                    const newSubjHtml = '<option value="">請先選擇科目</option>' + subjKeys.map(subjName=>`<option value="${escapeHtml(subjName)}">${escapeHtml(subjName)}</option>`).join('');
                     if(selSubj.innerHTML !== newSubjHtml){
                         selSubj.innerHTML = newSubjHtml;
                     }
@@ -2611,69 +2701,78 @@
                 }
 
                 function renderPastAssignmentGrader(){
-                    const aid = selPast.value;
+                    const rawSel = selPast.value;
                     const box = $('pastAssignmentGradeList');
-                    if(!aid){ box.innerHTML = ''; return; }
-                    const aName = knownPast[aid] ? knownPast[aid].name : '';
+                    if(!rawSel){ if(box) box.innerHTML = ''; return; }
+                    if(!box) return;
+
+                    const [docId, aid] = rawSel.includes('::') ? rawSel.split('::') : ['', rawSel];
+                    const pastInfo = knownPast[rawSel] || knownPast[aid];
+                    const aName = pastInfo ? pastInfo.name : '';
                     const isPastDaily = aName === '聯絡簿每日任務';
-                    const archiveDoc = window.__archiveDocsMap ? window.__archiveDocsMap[aid] : null;
+                    const archiveDoc = docId
+                        ? (window.__archiveDocsMap ? (window.__archiveDocsMap[docId] || window.__archiveDocsMap[rawSel]) : null)
+                        : (window.__archiveDocsMap ? (window.__archiveDocsMap[aid] || window.__archiveDocsMap[rawSel]) : null);
+
                     const gradeOfPast = sid => {
-                        const live = gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
-                        const isAwarded = !!(window.__awardedPointsSet && window.__awardedPointsSet.has(`${sid}_${aid}`));
-                        if(live) {
-                            if(isAwarded && !live.pointsGiven) live.pointsGiven = true;
-                            return live;
-                        }
+                        const isAwarded = !!(
+                            (window.__awardedPointsSet && (window.__awardedPointsSet.has(`${sid}_${aid}`) || window.__awardedPointsSet.has(`${sid}_${rawSel}`)))
+                        );
                         if(archiveDoc && archiveDoc.records){
-                            const arch = archiveDoc.records.find(x=>x.studentId===sid && x.assignmentId===aid);
+                            const arch = archiveDoc.records.find(x=>x.studentId===sid && (x.assignmentId===aid || x.assignmentId===rawSel));
                             if(arch) {
                                 if(isAwarded && !arch.pointsGiven) arch.pointsGiven = true;
                                 if(arch.correctness || arch.corrected || isAwarded) return arch;
                             }
+                        }
+                        const live = gradingRecs.find(x=>x.studentId===sid && (x.assignmentId===aid || x.assignmentId===rawSel));
+                        if(live) {
+                            if(isAwarded && !live.pointsGiven) live.pointsGiven = true;
+                            return live;
                         }
                         if(isAwarded) {
                             return { studentId: sid, assignmentId: aid, pointsGiven: true, correctness: '全對' };
                         }
                         return null;
                     };
-                    const pastSubjName = knownPast[aid] ? (knownPast[aid].subjectName||'') : '';
+                    const pastSubjName = pastInfo ? (pastInfo.subjectName||'') : '';
                     const dSubj = isPastDaily ? st.subjects.find(x=>x.id===(st.assignments.find(a=>a.name==='聯絡簿每日任務')||{}).subjectId) : st.subjects.find(x=>x.name===pastSubjName);
-                    const pastInfo = knownPast[aid];
-                    const foundAsg = archiveDoc ? (archiveDoc.assignments||[]).find(a=>a.id===aid) : null;
+                    const foundAsg = archiveDoc ? (archiveDoc.assignments||[]).find(a=>a.id===aid || a.id===rawSel) : null;
                     const pastNeedsSign = !!(
                         (foundAsg && (foundAsg.needsSign || foundAsg.signOnly)) ||
                         (pastInfo && (pastInfo.needsSign || pastInfo.signOnly)) ||
                         isPastDaily ||
-                        records.some(r => r.assignmentId === aid && r.signStatus && r.signStatus !== '未簽名') ||
-                        (archiveDoc && (archiveDoc.records || []).some(r => r.assignmentId === aid && r.signStatus && r.signStatus !== '未簽名'))
+                        records.some(r => (r.assignmentId === aid || r.assignmentId === rawSel) && r.signStatus && r.signStatus !== '未簽名') ||
+                        (archiveDoc && (archiveDoc.records || []).some(r => (r.assignmentId === aid || r.assignmentId === rawSel) && r.signStatus && r.signStatus !== '未簽名'))
                     );
                     const isExam = isExamAssignment(aName);
                     const isContact = aName === '聯絡簿每日任務';
                     const pastNeedsPoints = !isExam && !isContact;
 
                     const syncArchiveDocToFirestore = async (targetDoc) => {
-                        const docId = targetDoc ? (targetDoc._id || targetDoc.id) : null;
-                        if (!targetDoc || !docId) return;
+                        const targetDocId = targetDoc ? (targetDoc._id || targetDoc.id) : null;
+                        if (!targetDoc || !targetDocId) return;
                         targetDoc.records = sanitizeArchiveRecords(targetDoc.records);
                         if (window.__archiveDocsMap) {
-                            if (window.__archiveDocsMap[docId]) window.__archiveDocsMap[docId].records = targetDoc.records;
+                            if (window.__archiveDocsMap[targetDocId]) window.__archiveDocsMap[targetDocId].records = targetDoc.records;
                             if (window.__archiveDocsMap[aid]) window.__archiveDocsMap[aid].records = targetDoc.records;
+                            if (window.__archiveDocsMap[rawSel]) window.__archiveDocsMap[rawSel].records = targetDoc.records;
                         }
                         if (Array.isArray(window.__archiveDocsList)) {
-                            const listDoc = window.__archiveDocsList.find(d => (d._id || d.id) === docId);
+                            const listDoc = window.__archiveDocsList.find(d => (d._id || d.id) === targetDocId);
                             if (listDoc) listDoc.records = targetDoc.records;
                         }
                         if (window.__refreshOpenArchiveDetail) {
-                            window.__refreshOpenArchiveDetail(docId);
+                            window.__refreshOpenArchiveDetail(targetDocId);
                         }
-                        await setDoc(doc(db, 'archives', docId), { records: targetDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                        await setDoc(doc(db, 'archives', targetDocId), { records: targetDoc.records }, { merge: true }).catch(e=>console.warn(e));
                     };
 
                     box.innerHTML = sortBySeat(st.students).map(s => {
-                        const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === s.id && r.assignmentId === aid);
+                        const archRec = archiveDoc && (archiveDoc.records || []).find(r => r.studentId === s.id && (r.assignmentId === aid || r.assignmentId === rawSel));
                         const isPull = isRecordPulledOut(archRec, s, pastSubjName, aName) || isPulledOut(s, foundAsg ? foundAsg.subjectName : '', foundAsg ? foundAsg.name : '');
                         if(isPull) return `<div class="daily-row ${pastNeedsSign?'':'no-sign'} ${pastNeedsPoints?'has-points':''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign?'140px ':''}58px 38px 38px 76px 38px ${pastNeedsPoints?'72px':''}">
-                            <span class="student-name">${s.name}</span>
+                            <span class="student-name">${escapeHtml(s.name)}</span>
                             <span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%"><button type="button" class="cell-status-btn" style="background:transparent; color:var(--muted); font-weight:bold; pointer-events:none; box-shadow:none;">抽離</button><button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button></div></span>
                             ${pastNeedsSign ? `<span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%"><button type="button" class="cell-status-btn" style="background:transparent; color:var(--muted); font-weight:bold; pointer-events:none; box-shadow:none;">抽離</button><button class="btn small outline" style="visibility:hidden;pointer-events:none;">補簽</button></div></span>` : ''}
                             <span class="row-slot-leave"></span>
@@ -2687,39 +2786,39 @@
                         const cur = g ? g.correctness : '';
                         const thirdVal = isPastDaily ? '沒寫任務' : '遺失';
                         const thirdIcon = isPastDaily ? '－' : '✗';
-                        const rec = records.find(r=>r.studentId===s.id && r.assignmentId===aid);
+                        const rec = records.find(r=>r.studentId===s.id && (r.assignmentId===aid || r.assignmentId===rawSel));
                         const dStatus = deriveRecordStatus(rec, archRec ? archRec.status : '未繳');
                         const dSign = deriveRecordSign(rec, archRec ? archRec.signStatus : '未簽名');
                         const dLeave = isRecordLeave(rec, archRec);
                         const dSignDisplay = dSign === '未簽名' ? '未簽' : (dSign === '已簽名' ? '已簽' : dSign);
                         const isSigned = dSign === '已簽名';
                         const showCorrected = cur==='有錯';
-                        const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(dStatus)}" data-past-status-toggle>${dStatus}</button>`;
-                        const isExamOrTest = aName.includes('卷') || aName.includes('考') || aName.includes('聽') || aName.includes('測驗');
+                        const statusBtn = `<button type="button" class="cell-status-btn ${badgeClass(dStatus)}" data-past-status-toggle>${escapeHtml(dStatus)}</button>`;
+                        const isExamOrTest = isExamAssignment(aName);
                         const showSign = pastNeedsSign && (isExamOrTest || dStatus === '已繳');
-                        const signBtn = pastNeedsSign ? `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(dSign)}" data-past-sign-toggle style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${dSignDisplay}</button>` : '';
+                        const signBtn = pastNeedsSign ? `<button type="button" class="cell-status-btn cell-sign-btn ${signClass(dSign)}" data-past-sign-toggle style="visibility:${showSign?'visible':'hidden'};pointer-events:${showSign?'auto':'none'}">${escapeHtml(dSignDisplay)}</button>` : '';
                         const makeupSignBtn = (pastNeedsSign && !isSigned && showSign) ? `<button class="btn small outline" data-past-makeup-sign="1">補簽</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補簽</button>`;
                         const leaveBtn = `<button type="button" class="leave-btn ${dLeave ? 'active' : ''}" data-past-leave="1" title="標記請假（期中期末另外算）">${dLeave ? '✓請假' : '請假'}</button>`;
                         const correctedBtn = `<button type="button" class="corrected-btn ${g&&g.corrected?'active':''}" data-past-corrected="1" style="visibility:${showCorrected?'visible':'hidden'};pointer-events:${showCorrected?'auto':'none'}">${g&&g.corrected?'✓訂正':'訂正'}</button>`;
                         const makeupBtn = (dStatus !== '已繳') ? `<button class="btn small outline" data-past-makeup="1">補交</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button>`;
                         
-                        const pts = pointsOf(g, st);
+                        const pts = pointsOf(g, st, pastInfo);
                         const isPointsGiven = !!(
                             (g && g.pointsGiven) ||
                             (archRec && archRec.pointsGiven) ||
-                            (window.__awardedPointsSet && window.__awardedPointsSet.has(`${s.id}_${aid}`))
+                            (window.__awardedPointsSet && (window.__awardedPointsSet.has(`${s.id}_${aid}`) || window.__awardedPointsSet.has(`${s.id}_${rawSel}`)))
                         );
                         const pointsSlot = pastNeedsPoints ? `<span class="row-slot-points" style="visibility:${pts > 0 || isPointsGiven ? 'visible' : 'hidden'}">${(pts > 0 || isPointsGiven) ? (isPointsGiven ? '已加點' : '尚未加點') : '尚未加點'}</span>` : '';
                         
-                        return `<div class="daily-row ${pastNeedsSign?'':'no-sign'} ${pastNeedsPoints?'has-points':''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign?'140px ':''}58px 38px 38px 76px 38px ${pastNeedsPoints?'72px':''}" data-past-student="${s.id}">
-                            <span class="student-name">${s.name}</span>
+                        return `<div class="daily-row ${pastNeedsSign?'':'no-sign'} ${pastNeedsPoints?'has-points':''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign?'140px ':''}58px 38px 38px 76px 38px ${pastNeedsPoints?'72px':''}" data-past-student="${escapeHtml(s.id)}">
+                            <span class="student-name">${escapeHtml(s.name)}</span>
                             <span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%">${statusBtn}${makeupBtn}</div></span>
                             ${pastNeedsSign ? `<span class="row-slot-pill"><div style="display:flex;gap:6px;align-items:center;justify-content:center;width:100%">${signBtn}${makeupSignBtn}</div></span>` : ''}
                             <span class="row-slot-leave">${leaveBtn}</span>
                             <span class="row-slot-icon"><button type="button" class="grade-btn ${cur==='全對'?'active g-ok':''}" data-past-grade="全對" title="全對">✓</button></span>
                             <span class="row-slot-icon"><button type="button" class="grade-btn ${cur==='有錯'?'active g-err':''}" data-past-grade="有錯" title="有錯">▲</button></span>
                             <span class="row-slot-corrected">${correctedBtn}</span>
-                            <span class="row-slot-icon"><button type="button" class="grade-btn ${cur===thirdVal?'active g-lost':''}" data-past-grade="${thirdVal}" title="${thirdVal}">${thirdIcon}</button></span>
+                            <span class="row-slot-icon"><button type="button" class="grade-btn ${cur===thirdVal?'active g-lost':''}" data-past-grade="${escapeHtml(thirdVal)}" title="${escapeHtml(thirdVal)}">${thirdIcon}</button></span>
                             ${pointsSlot}
                         </div>`;
                     }).join('');
@@ -2728,8 +2827,8 @@
                         const sid = row.getAttribute('data-past-student');
                         const stu = st.students.find(x=>x.id===sid);
                         const grp = st.groups.find(x=>x.id===stu?.groupId);
-                        const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
-                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && r.assignmentId === aid);
+                        const cur2 = records.find(r=>r.studentId===sid && (r.assignmentId===aid || r.assignmentId===rawSel));
+                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && (r.assignmentId===aid || r.assignmentId===rawSel));
                         const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
                         const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
                         const curRemark = deriveRecordRemark(cur2, archRec);
@@ -2749,11 +2848,11 @@
                             isLeave: curLeave,
                             isMakeup: nextMakeup
                         };
-                        let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        let r = records.find(rx=>rx.studentId===sid && (rx.assignmentId===aid || rx.assignmentId===rawSel));
                         if(r) Object.assign(r, payload); else records.push(payload);
                         if (archiveDoc) {
                             if (!archiveDoc.records) archiveDoc.records = [];
-                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                             if (archIdx !== -1) {
                                 Object.assign(archiveDoc.records[archIdx], {
                                     status: nv,
@@ -2775,8 +2874,8 @@
                         const sid = row.getAttribute('data-past-student');
                         const stu = st.students.find(x=>x.id===sid);
                         const grp = st.groups.find(x=>x.id===stu?.groupId);
-                        const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
-                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && r.assignmentId === aid);
+                        const cur2 = records.find(r=>r.studentId===sid && (r.assignmentId===aid || r.assignmentId===rawSel));
+                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && (r.assignmentId===aid || r.assignmentId===rawSel));
                         const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
                         const curRemark = deriveRecordRemark(cur2, archRec);
                         const curLeave = isRecordLeave(cur2, archRec);
@@ -2793,11 +2892,11 @@
                             isLeave: curLeave,
                             isMakeup: true
                         };
-                        let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        let r = records.find(rx=>rx.studentId===sid && (rx.assignmentId===aid || rx.assignmentId===rawSel));
                         if(r) Object.assign(r, payload); else records.push(payload);
                         if (archiveDoc) {
                             if (!archiveDoc.records) archiveDoc.records = [];
-                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                             if (archIdx !== -1) {
                                 Object.assign(archiveDoc.records[archIdx], {
                                     status: '已繳',
@@ -2819,8 +2918,8 @@
                         const sid = row.getAttribute('data-past-student');
                         const stu = st.students.find(x=>x.id===sid);
                         const grp = st.groups.find(x=>x.id===stu?.groupId);
-                        const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
-                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && r.assignmentId === aid);
+                        const cur2 = records.find(r=>r.studentId===sid && (r.assignmentId===aid || r.assignmentId===rawSel));
+                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && (r.assignmentId===aid || r.assignmentId===rawSel));
                         const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
                         const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
                         const curRemark = deriveRecordRemark(cur2, archRec);
@@ -2840,11 +2939,11 @@
                             isLeave: curLeave,
                             isMakeup: curMakeup
                         };
-                        let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        let r = records.find(rx=>rx.studentId===sid && (rx.assignmentId===aid || rx.assignmentId===rawSel));
                         if(r) Object.assign(r, payload); else records.push(payload);
                         if (archiveDoc) {
                             if (!archiveDoc.records) archiveDoc.records = [];
-                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                             if (archIdx !== -1) {
                                 Object.assign(archiveDoc.records[archIdx], {
                                     status: curStatus,
@@ -2867,8 +2966,8 @@
                         const stu = st.students.find(x=>x.id===sid);
                         const grp = st.groups.find(x=>x.id===stu?.groupId);
                         const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                        const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
-                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && r.assignmentId === aid);
+                        const cur2 = records.find(r=>r.studentId===sid && (r.assignmentId===aid || r.assignmentId===rawSel));
+                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && (r.assignmentId===aid || r.assignmentId===rawSel));
                         const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
                         const curRemark = deriveRecordRemark(cur2, archRec);
                         const curLeave = isRecordLeave(cur2, archRec);
@@ -2885,11 +2984,11 @@
                             isLeave: curLeave,
                             isMakeup: curMakeup
                         };
-                        let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        let r = records.find(rx=>rx.studentId===sid && (rx.assignmentId===aid || rx.assignmentId===rawSel));
                         if(r) Object.assign(r, payload); else records.push(payload);
                         if (archiveDoc) {
                             if (!archiveDoc.records) archiveDoc.records = [];
-                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                             if (archIdx !== -1) {
                                 Object.assign(archiveDoc.records[archIdx], {
                                     status: curStatus,
@@ -2911,8 +3010,8 @@
                         const sid = row.getAttribute('data-past-student');
                         const stu = st.students.find(x=>x.id===sid);
                         const grp = st.groups.find(x=>x.id===stu?.groupId);
-                        const cur2 = records.find(r=>r.studentId===sid && r.assignmentId===aid);
-                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && r.assignmentId === aid);
+                        const cur2 = records.find(r=>r.studentId===sid && (r.assignmentId===aid || r.assignmentId===rawSel));
+                        const archRec = archiveDoc && (archiveDoc.records||[]).find(r => r.studentId === sid && (r.assignmentId===aid || r.assignmentId===rawSel));
                         const curStatus = deriveRecordStatus(cur2, archRec ? archRec.status : '未繳');
                         const curSignStatus = deriveRecordSign(cur2, archRec ? archRec.signStatus : '未簽名');
                         const curRemark = deriveRecordRemark(cur2, archRec);
@@ -2931,11 +3030,11 @@
                             isLeave: nextLeave,
                             isMakeup: curMakeup
                         };
-                        let r = records.find(r=>r.studentId===sid && r.assignmentId===aid);
+                        let r = records.find(rx=>rx.studentId===sid && (rx.assignmentId===aid || rx.assignmentId===rawSel));
                         if(r) Object.assign(r, payload); else records.push(payload);
                         if (archiveDoc) {
                             if (!archiveDoc.records) archiveDoc.records = [];
-                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                             if (archIdx !== -1) {
                                 Object.assign(archiveDoc.records[archIdx], {
                                     status: curStatus,
@@ -2966,11 +3065,11 @@
                             correctness: nextVal,
                             corrected: nextCorrected
                         };
-                        let gItem = gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
+                        let gItem = gradingRecs.find(x=>x.studentId===sid && (x.assignmentId===aid || x.assignmentId===rawSel));
                         if(gItem) Object.assign(gItem, payload); else gradingRecs.push(payload);
                         if (archiveDoc) {
                             if (!archiveDoc.records) archiveDoc.records = [];
-                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                             if (archIdx !== -1) {
                                 archiveDoc.records[archIdx].correctness = nextVal;
                                 archiveDoc.records[archIdx].corrected = nextCorrected;
@@ -2984,7 +3083,19 @@
                         }
                         renderPastAssignmentGrader();
                         await adminSetGrading(payload);
-                        await syncArchiveDocToFirestore(archiveDoc);
+                        const targetDocId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                        if (archiveDoc && targetDocId) {
+                            archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
+                            if (window.__archiveDocsMap) {
+                                if (window.__archiveDocsMap[targetDocId]) window.__archiveDocsMap[targetDocId].records = archiveDoc.records;
+                                if (window.__archiveDocsMap[aid]) window.__archiveDocsMap[aid].records = archiveDoc.records;
+                                if (window.__archiveDocsMap[rawSel]) window.__archiveDocsMap[rawSel].records = archiveDoc.records;
+                            }
+                            if (window.__refreshOpenArchiveDetail && targetDocId) {
+                                window.__refreshOpenArchiveDetail(targetDocId);
+                            }
+                            await setDoc(doc(db, 'archives', targetDocId), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                        }
                     });
                     box.querySelectorAll('[data-past-corrected]').forEach(btn => btn.onclick = async () => {
                         const row = btn.closest('.daily-row');
@@ -2998,11 +3109,11 @@
                             correctness: '有錯',
                             corrected: nextCorrected
                         };
-                        let gItem = gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
+                        let gItem = gradingRecs.find(x=>x.studentId===sid && (x.assignmentId===aid || x.assignmentId===rawSel));
                         if(gItem) Object.assign(gItem, payload); else gradingRecs.push(payload);
                         if (archiveDoc) {
                             if (!archiveDoc.records) archiveDoc.records = [];
-                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && x.assignmentId === aid);
+                            const archIdx = archiveDoc.records.findIndex(x => x.studentId === sid && (x.assignmentId === aid || x.assignmentId === rawSel));
                             if (archIdx !== -1) {
                                 archiveDoc.records[archIdx].correctness = '有錯';
                                 archiveDoc.records[archIdx].corrected = nextCorrected;
@@ -3016,7 +3127,19 @@
                         }
                         renderPastAssignmentGrader();
                         await adminSetGrading(payload);
-                        await syncArchiveDocToFirestore(archiveDoc);
+                        const targetDocId = archiveDoc ? (archiveDoc._id || archiveDoc.id) : null;
+                        if (archiveDoc && targetDocId) {
+                            archiveDoc.records = sanitizeArchiveRecords(archiveDoc.records);
+                            if (window.__archiveDocsMap) {
+                                if (window.__archiveDocsMap[targetDocId]) window.__archiveDocsMap[targetDocId].records = archiveDoc.records;
+                                if (window.__archiveDocsMap[aid]) window.__archiveDocsMap[aid].records = archiveDoc.records;
+                                if (window.__archiveDocsMap[rawSel]) window.__archiveDocsMap[rawSel].records = archiveDoc.records;
+                            }
+                            if (window.__refreshOpenArchiveDetail && targetDocId) {
+                                window.__refreshOpenArchiveDetail(targetDocId);
+                            }
+                            await setDoc(doc(db, 'archives', targetDocId), { records: archiveDoc.records }, { merge: true }).catch(e=>console.warn(e));
+                        }
                     });
                 }
                 if(selPast){ selPast.onchange = renderPastAssignmentGrader; renderPastAssignmentGrader(); }
@@ -3028,11 +3151,12 @@
                 const renamePastBtn = $('renameSelectedPastBtn');
                 if (renamePastBtn) {
                     renamePastBtn.onclick = async () => {
-                        const aid = selPast.value;
-                        if (!aid) { window.showAlert('請先在上面選一筆要重新命名的作業'); return; }
-                        const info = knownPast[aid];
+                        const rawSel = selPast.value;
+                        if (!rawSel) { window.showAlert('請先在上面選一筆要重新命名的作業'); return; }
+                        const [targetDocId, targetAid] = rawSel.includes('::') ? rawSel.split('::') : ['', rawSel];
+                        const info = knownPast[rawSel] || knownPast[targetAid];
                         const currentName = info ? info.name : '';
-                        const label = info ? `${info.dateLabel ? info.dateLabel + ' ' : ''}${info.name}` : aid;
+                        const label = info ? `${info.dateLabel ? info.dateLabel + ' ' : ''}${info.name}` : targetAid;
                         const newName = await window.askInput(`請輸入「${label}」的新作業名稱：`, currentName);
                         if (newName === null) return;
                         let trimmed = newName.trim();
@@ -3047,17 +3171,18 @@
                             // 1. 更新 Firestore archives 中的 assignment 與 records
                             const snap = await getDocs(archivesColl);
                             for (const d of snap.docs) {
+                                if (targetDocId && d.id !== targetDocId) continue;
                                 const data = d.data();
                                 let changed = false;
                                 (data.assignments || []).forEach(a => {
-                                    if (a.id === aid) {
+                                    if (a.id === targetAid) {
                                         a.name = trimmed;
                                         changed = true;
                                     }
                                 });
                                 if (changed) {
                                     (data.records || []).forEach(r => {
-                                        if (r.assignmentId === aid) {
+                                        if (r.assignmentId === targetAid) {
                                             r.assignmentName = trimmed;
                                         }
                                     });
@@ -3073,7 +3198,7 @@
                             }
 
                             // 2. 更新 Firestore gradingRecords 集合
-                            const gSnap = await getDocs(query(gradingColl, where('assignmentId', '==', aid)));
+                            const gSnap = await getDocs(query(gradingColl, where('assignmentId', '==', targetAid)));
                             if (!gSnap.empty) {
                                 const b = writeBatch(db);
                                 gSnap.docs.forEach(gd => b.update(gd.ref, { assignmentName: trimmed }));
@@ -3082,7 +3207,7 @@
 
                             // 3. 更新當前 settings 中的作業（若有的話）
                             if (settings && Array.isArray(settings.assignments)) {
-                                const curA = settings.assignments.find(x => x.id === aid);
+                                const curA = settings.assignments.find(x => x.id === targetAid);
                                 if (curA) {
                                     curA.name = trimmed;
                                     saveSettings({ assignments: settings.assignments });
@@ -3090,17 +3215,19 @@
                             }
 
                             // 4. 更新內存狀態
-                            if (knownPast[aid]) knownPast[aid].name = trimmed;
-                            if (window.__extraPastAssignments && window.__extraPastAssignments[aid]) {
-                                window.__extraPastAssignments[aid].name = trimmed;
+                            if (knownPast[rawSel]) knownPast[rawSel].name = trimmed;
+                            if (knownPast[targetAid]) knownPast[targetAid].name = trimmed;
+                            if (window.__extraPastAssignments) {
+                                if (window.__extraPastAssignments[rawSel]) window.__extraPastAssignments[rawSel].name = trimmed;
+                                if (window.__extraPastAssignments[targetAid]) window.__extraPastAssignments[targetAid].name = trimmed;
                             }
                             gradingRecords.forEach(g => {
-                                if (g.assignmentId === aid) g.assignmentName = trimmed;
+                                if (g.assignmentId === targetAid) g.assignmentName = trimmed;
                             });
 
                             // 5. 重新整理畫面
                             refreshPastAssignmentOptions();
-                            selPast.value = aid;
+                            selPast.value = rawSel;
                             renderPastAssignmentGrader();
                             window.showAlert(`作業名稱已成功修改為：「${trimmed}」`);
                         } catch(e) {
@@ -3110,15 +3237,24 @@
                     };
                 }
                 $('deleteSelectedPastBtn').onclick = async () => {
-                    const aid = selPast.value;
-                    if(!aid){ window.showAlert('請先在上面選一筆要刪除的作業'); return; }
-                    const info = knownPast[aid];
-                    const label = info ? `${info.dateLabel ? info.dateLabel+' ' : ''}${info.name}` : aid;
+                    const rawSel = selPast.value;
+                    if(!rawSel){ window.showAlert('請先在上面選一筆要刪除的作業'); return; }
+                    const [targetDocId, targetAid] = rawSel.includes('::') ? rawSel.split('::') : ['', rawSel];
+                    const info = knownPast[rawSel] || knownPast[targetAid];
+                    const label = info ? `${info.dateLabel ? info.dateLabel+' ' : ''}${info.name}` : targetAid;
                     const ok2 = await window.askConfirm(`確定要刪除「${label}」這筆紀錄嗎？裡面的訂正與繳交資料都會刪除，無法復原。`);
                     if(!ok2) return;
-                    await clearGradingForAssignment(aid);
-                    await clearRecordsForAssignment(aid);
-                    if(window.__extraPastAssignments) delete window.__extraPastAssignments[aid];
+                    await clearGradingForAssignment(targetAid);
+                    await clearRecordsForAssignment(targetAid);
+                    if (window.__extraPastAssignments) {
+                        delete window.__extraPastAssignments[rawSel];
+                        delete window.__extraPastAssignments[targetAid];
+                    }
+                    delete knownPast[rawSel];
+                    delete knownPast[targetAid];
+                    refreshPastAssignmentOptions();
+                    selPast.value = '';
+                    renderPastAssignmentGrader();
                     window.showAlert(`已刪除「${label}」`);
                 };
             }

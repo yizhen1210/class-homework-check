@@ -32,7 +32,9 @@ import {
     resolveAssignmentISODate,
     computeGlobalPopupLists,
     computeMakeupAndLeaveStats,
-    formatMakeupAndLeaveReport
+    formatMakeupAndLeaveReport,
+    resolveStatsSubjectName,
+    collectUnifiedAssignmentEntries
 } from '../src/domain/rules.js';
 
 export function runAllDomainTests(assert) {
@@ -476,6 +478,54 @@ export function runAllDomainTests(assert) {
         });
         const st4 = statsMixed.students[0];
         assert.deepStrictEqual(st4.subjectGroups.map(g => g.subjectName), ['社會', '國語'], '含未繳(紅)的社會應優先於全為請假(紫)的國語');
+    }
+
+    // 12. 歷史封存作業科目自動判定與修復測試 (數 9/2~9/4、國 9/1~9/7)
+    {
+        const subjects = [
+            { id: 'sub_ch', name: '國語' },
+            { id: 'sub_ma', name: '數學' },
+            { id: 'sub_en', name: '英語' }
+        ];
+
+        // 數 9/2, 9/3, 9/4 科目自動辨識
+        assert.strictEqual(resolveStatsSubjectName('', '9/2 數習', null, null, subjects), '數學');
+        assert.strictEqual(resolveStatsSubjectName('未分類', '9/3 數學習作第10頁', null, null, subjects), '數學');
+        assert.strictEqual(resolveStatsSubjectName(null, '9/4 數作卷', null, null, subjects), '數學');
+
+        // 國 9/1, 9/2, 9/3, 9/4, 9/7 科目自動辨識
+        assert.strictEqual(resolveStatsSubjectName('', '9/1 國甲本', null, null, subjects), '國語');
+        assert.strictEqual(resolveStatsSubjectName('未分類', '9/2 國乙本', null, null, subjects), '國語');
+        assert.strictEqual(resolveStatsSubjectName(null, '9/3 國習 L1', null, null, subjects), '國語');
+        assert.strictEqual(resolveStatsSubjectName('', '9/4 國卷', null, null, subjects), '國語');
+        assert.strictEqual(resolveStatsSubjectName('', '9/7 國練', null, null, subjects), '國語');
+
+        // 封存文件歷史無 subjectName 自動修復與統整作業 entries 測試
+        const mathArch = {
+            id: 'arc_math_902',
+            timestamp: new Date('2026-09-02T16:00:00').getTime(),
+            dateLabel: '2026/09/02',
+            assignments: [{ id: 'asg_m902', name: '9/2 數習' }],
+            records: [{ studentId: 's1', assignmentId: 'asg_m902', status: '已繳', correctness: '全對' }]
+        };
+        const chineseArch = {
+            id: 'arc_chi_901',
+            timestamp: new Date('2026-09-01T16:00:00').getTime(),
+            dateLabel: '2026/09/01',
+            assignments: [{ id: 'asg_c901', name: '9/1 國甲' }],
+            records: [{ studentId: 's1', assignmentId: 'asg_c901', status: '已繳', correctness: '有錯', corrected: true }]
+        };
+
+        const entries = collectUnifiedAssignmentEntries({
+            archiveDocsList: [mathArch, chineseArch],
+            subjects
+        });
+
+        assert.strictEqual(entries.length, 2, '應成功蒐集 2 筆歷史作業');
+        const mEntry = entries.find(e => e.assignmentId === 'asg_m902');
+        const cEntry = entries.find(e => e.assignmentId === 'asg_c901');
+        assert.strictEqual(mEntry.subjectName, '數學', '9/2 數習應自動歸類為數學而非未分類');
+        assert.strictEqual(cEntry.subjectName, '國語', '9/1 國甲應自動歸類為國語而非未分類');
     }
 }
 
