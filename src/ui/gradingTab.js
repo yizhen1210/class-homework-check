@@ -150,10 +150,23 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
             const archiveDoc = state.archiveDocsMap ? state.archiveDocsMap[aid] : null;
             const gradeOfPast = sid => {
                 const live = gradingRecs.find(x => x.studentId === sid && x.assignmentId === aid);
-                if (live) return live;
+                const isAwarded = !!(
+                    (state.awardedPointsSet && state.awardedPointsSet.has(`${sid}_${aid}`)) ||
+                    (window.__awardedPointsSet && window.__awardedPointsSet.has(`${sid}_${aid}`))
+                );
+                if (live) {
+                    if (isAwarded && !live.pointsGiven) live.pointsGiven = true;
+                    return live;
+                }
                 if (archiveDoc && archiveDoc.records) {
                     const arch = archiveDoc.records.find(x => x.studentId === sid && x.assignmentId === aid);
-                    if (arch && (arch.correctness || arch.corrected)) return arch;
+                    if (arch) {
+                        if (isAwarded && !arch.pointsGiven) arch.pointsGiven = true;
+                        if (arch.correctness || arch.corrected || isAwarded) return arch;
+                    }
+                }
+                if (isAwarded) {
+                    return { studentId: sid, assignmentId: aid, pointsGiven: true, correctness: '全對' };
                 }
                 return null;
             };
@@ -231,7 +244,13 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 const makeupBtn = (dStatus !== '已繳') ? `<button class="btn small outline" data-past-makeup="1">補交</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button>`;
 
                 const pts = pointsOf(g, st, pastInfo);
-                const pointsSlot = pastNeedsPoints ? `<span class="row-slot-points" style="visibility:${pts > 0 ? 'visible' : 'hidden'}">${pts > 0 ? (g.pointsGiven ? '已加點' : '尚未加點') : '尚未加點'}</span>` : '';
+                const isPointsGiven = !!(
+                    (g && g.pointsGiven) ||
+                    (archRec && archRec.pointsGiven) ||
+                    (state.awardedPointsSet && state.awardedPointsSet.has(`${s.id}_${aid}`)) ||
+                    (window.__awardedPointsSet && window.__awardedPointsSet.has(`${s.id}_${aid}`))
+                );
+                const pointsSlot = pastNeedsPoints ? `<span class="row-slot-points" style="visibility:${pts > 0 || isPointsGiven ? 'visible' : 'hidden'}">${(pts > 0 || isPointsGiven) ? (isPointsGiven ? '已加點' : '尚未加點') : '尚未加點'}</span>` : '';
 
                 return `<div class="daily-row ${pastNeedsSign ? '' : 'no-sign'} ${pastNeedsPoints ? 'has-points' : ''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign ? '140px ' : ''}58px 38px 38px 76px 38px ${pastNeedsPoints ? '72px' : ''}" data-past-student="${escapeHtml(s.id)}">
                     <span class="student-name">${sName}</span>
@@ -1008,8 +1027,13 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
             const stu = st.students.find(x => x.id === sid);
             if (!stu) return;
 
+            const isAwarded = (g) => !!(
+                g.pointsGiven ||
+                (state.awardedPointsSet && state.awardedPointsSet.has(`${g.studentId}_${g.assignmentId}`)) ||
+                (window.__awardedPointsSet && window.__awardedPointsSet.has(`${g.studentId}_${g.assignmentId}`))
+            );
             const eligible = gradingRecs.filter(g => {
-                if (g.studentId !== sid || g.pointsGiven || pointsOf(g, st) <= 0) return false;
+                if (g.studentId !== sid || isAwarded(g) || pointsOf(g, st) <= 0) return false;
                 return true;
             });
             if (!eligible.length) {
@@ -1029,7 +1053,12 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
             if (!ok) return;
 
             const batch = writeBatch(db);
-            eligible.forEach(g => batch.set(doc(gradingColl, recordDocId(sid, g.assignmentId)), { pointsGiven: true }, { merge: true }));
+            eligible.forEach(g => {
+                g.pointsGiven = true;
+                if (state.awardedPointsSet) state.awardedPointsSet.add(`${sid}_${g.assignmentId}`);
+                if (window.__awardedPointsSet) window.__awardedPointsSet.add(`${sid}_${g.assignmentId}`);
+                batch.set(doc(gradingColl, recordDocId(sid, g.assignmentId)), { pointsGiven: true }, { merge: true });
+            });
             await batch.commit().catch(e => logger.warn('CALC_POINTS_BATCH_FAILED', e));
             await addDoc(pointLogsColl, {
                 studentId: sid,
@@ -1039,6 +1068,7 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 totalPoints: total,
                 items
             }).catch(e => logger.warn('POINT_LOG_WRITE_FAILED', e));
+            renderGradingTab(gradingRecs, recs, st, state);
             const resultDateMsg = dateLimit ? `（計算到 ${dateLimit} 的作業）` : '';
             $('pointsResult').innerHTML = `<p>已幫「${escapeHtml(stu.name)}」加 <strong>${total}</strong> 點${resultDateMsg}</p>`;
         };
@@ -1066,9 +1096,16 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                         const ok2 = await askConfirm(`撤銷「${item.studentName} +${item.totalPoints}點」這筆加點紀錄嗎？`);
                         if (!ok2) return;
                         const undoBatch = writeBatch(db);
-                        (item.items || []).forEach(i => undoBatch.set(doc(gradingColl, recordDocId(item.studentId, i.assignmentId)), { pointsGiven: false }, { merge: true }));
+                        (item.items || []).forEach(i => {
+                            if (state.awardedPointsSet) state.awardedPointsSet.delete(`${item.studentId}_${i.assignmentId}`);
+                            if (window.__awardedPointsSet) window.__awardedPointsSet.delete(`${item.studentId}_${i.assignmentId}`);
+                            const gObj = gradingRecs.find(x => x.studentId === item.studentId && x.assignmentId === i.assignmentId);
+                            if (gObj) gObj.pointsGiven = false;
+                            undoBatch.set(doc(gradingColl, recordDocId(item.studentId, i.assignmentId)), { pointsGiven: false }, { merge: true });
+                        });
                         undoBatch.delete(doc(db, 'pointLogs', logId));
                         await undoBatch.commit().catch(e => logger.warn('UNDO_POINT_LOG_FAILED', e));
+                        renderGradingTab(gradingRecs, recs, st, state);
                         $('loadPointLogsBtn').click();
                     };
                 });

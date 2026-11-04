@@ -369,6 +369,19 @@ export function runAllDomainTests(assert) {
             { status: '已繳', signStatus: '未簽名', remark: '已補交（11/02）', isLeave: true }
         );
         assert.strictEqual(derived, '請假 / 已補繳（11/02） / 已補簽（11/03）');
+
+        // 已加點狀態或備註完整保留驗證
+        const derivedWithPoints = deriveRecordRemark(
+            { status: '已繳', signStatus: '已簽名', remark: '已補簽（11/03）', pointsGiven: true },
+            { status: '已繳', signStatus: '未簽名', remark: '已補繳（11/02）', isLeave: true }
+        );
+        assert.strictEqual(derivedWithPoints, '請假 / 已補繳（11/02） / 已補簽（11/03） / 已加點', '已加點應自動組合於備註中');
+
+        const derivedWithCustomPoints = deriveRecordRemark(
+            { status: '已繳', signStatus: '已簽名', remark: '已補繳（11/02） / +10點' },
+            null
+        );
+        assert.strictEqual(derivedWithCustomPoints, '已補繳（11/02） / +10點', '既有點數備註應完整保留');
     }
 
     // 15. 期中／期末補繳與請假（另外算）統計驗證

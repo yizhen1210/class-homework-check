@@ -670,6 +670,43 @@ def run_tests():
     t.assert_equal(normalize_seg('已補交（11/02）'), '已補繳（11/02）', '舊版已補交自動轉為已補繳')
     t.assert_equal(normalize_seg('補簽（11/02）'), '已補簽（11/02）', '舊版補簽自動轉為已補簽')
 
+    POINT_RE = re.compile(r'(?:已加點|加過點數|加點|\+\d+點)')
+    def derive_remark_test(l_rec, a_rec):
+        l_rmk = (l_rec or {}).get('remark', '')
+        a_rmk = (a_rec or {}).get('remark', '')
+        l_segs = split_segs(l_rmk)
+        a_segs = split_segs(a_rmk)
+        leave = bool((l_rec or {}).get('isLeave') or (a_rec or {}).get('isLeave') or LEAVE_RE.search(l_rmk) or LEAVE_RE.search(a_rmk))
+        points_given = bool((l_rec or {}).get('pointsGiven') or (a_rec or {}).get('pointsGiven'))
+
+        leave_seg = next((s for s in l_segs if LEAVE_RE.search(s)), None) or next((s for s in a_segs if LEAVE_RE.search(s)), None) or ('請假' if leave else '')
+        submit_seg = next((s for s in l_segs if MAKEUP_SUB_RE.search(s)), None) or next((s for s in a_segs if MAKEUP_SUB_RE.search(s)), None) or ''
+        sign_seg = next((s for s in l_segs if MAKEUP_SGN_RE.search(s)), None) or next((s for s in a_segs if MAKEUP_SGN_RE.search(s)), None) or ''
+        existing_point = next((s for s in l_segs if POINT_RE.search(s)), None) or next((s for s in a_segs if POINT_RE.search(s)), None)
+        point_seg = existing_point or ('已加點' if points_given else '')
+
+        others = []
+        for s in (a_segs + l_segs):
+            if LEAVE_RE.search(s) or MAKEUP_SUB_RE.search(s) or MAKEUP_SGN_RE.search(s) or POINT_RE.search(s):
+                continue
+            if s not in others:
+                others.append(s)
+
+        out = [s for s in [leave_seg, submit_seg, sign_seg, point_seg] + others if s]
+        return " / ".join(out)
+
+    derived_pts = derive_remark_test(
+        {'status': '已繳', 'signStatus': '已簽名', 'remark': '已補簽（11/03）', 'pointsGiven': True},
+        {'status': '已繳', 'signStatus': '未簽名', 'remark': '已補繳（11/02）', 'isLeave': True}
+    )
+    t.assert_equal(derived_pts, '請假 / 已補繳（11/02） / 已補簽（11/03） / 已加點', '已加點應自動組合於備註中')
+
+    derived_custom_pts = derive_remark_test(
+        {'status': '已繳', 'signStatus': '已簽名', 'remark': '已補繳（11/02） / +10點'},
+        None
+    )
+    t.assert_equal(derived_custom_pts, '已補繳（11/02） / +10點', '既有點數備註應完整保留')
+
     # 14. 期中／期末補繳與請假（另外算）分流驗證
     def classify_student_records(records_list):
         reg_makeup, reg_missing, leave_makeup, leave_missing = [], [], [], []
@@ -761,6 +798,10 @@ def run_tests():
     t.assert_equal('cleanOrphanedAssignmentRecords' in index_text and 'cleanOrphanedAssignmentRecords' in app_text, True, "應提供自動清理孤立作業紀錄函式")
     t.assert_equal('isGradingMissingExempt' in rules_text and 'isGradingMissingExempt' in index_text, True, "應支援未繳清單豁免聽考與複卷判斷")
     t.assert_equal('clearGradingForAssignment(aid)' in index_text and 'clearGradingForAssignment(aid)' in records_text, True, "刪除作業時應同步清理批改紀錄")
+
+    # 驗證已加點備註同步與修復機制
+    t.assert_equal('POINT_SEGMENT_RE' in rules_text and 'POINT_SEGMENT_RE' in index_text, True, "應支援加點備註正則匹配")
+    t.assert_equal('startPointLogsListener' in app_text and 'startPointLogsListener' in index_text, True, "主應用應包含加點紀錄同步與回補監聽函式")
 
     print(f"✓ 恭喜！全數 {t.passes} 項領域業務與結構測試斷言通過！")
 

@@ -519,13 +519,23 @@
         let gradingRecords = [];
         async function cleanOrphanedAssignmentRecords(){
             if(!isAdmin || !settings || !Array.isArray(settings.assignments)) return;
-            const activeIds = new Set(settings.assignments.map(a => a.id));
+            if(!window.__archiveDocsLoaded) return;
             const archiveDocs = window.__archiveDocsList || [];
+            if(!archiveDocs.length) return;
+
+            const activeIds = new Set(settings.assignments.map(a => a.id));
             const archivedIds = new Set();
             archiveDocs.forEach(d => {
                 (d.assignments || []).forEach(a => { if (a && a.id) archivedIds.add(a.id); });
                 (d.records || []).forEach(r => { if (r && r.assignmentId) archivedIds.add(r.assignmentId); });
             });
+            const awardedAids = new Set();
+            if (window.__awardedPointsSet) {
+                window.__awardedPointsSet.forEach(key => {
+                    const parts = key.split('_');
+                    if (parts.length >= 2) awardedAids.add(parts.slice(1).join('_'));
+                });
+            }
 
             const orphanAids = new Set();
             (gradingRecords || []).forEach(g => {
@@ -533,7 +543,7 @@
                 const aid = g.assignmentId;
                 const name = g.assignmentName || '';
                 const isContact = name === '聯絡簿每日任務' || aid.startsWith('daily-');
-                if(name.includes('國複A卷') || (!activeIds.has(aid) && !archivedIds.has(aid) && !isContact)){
+                if(name.includes('國複A卷') || (!activeIds.has(aid) && !archivedIds.has(aid) && !isContact && !awardedAids.has(aid))){
                     orphanAids.add(aid);
                 }
             });
@@ -542,7 +552,7 @@
                 const aid = r.assignmentId;
                 const name = r.assignmentName || '';
                 const isContact = name === '聯絡簿每日任務' || aid.startsWith('daily-');
-                if(name.includes('國複A卷') || (!activeIds.has(aid) && !archivedIds.has(aid) && !isContact)){
+                if(name.includes('國複A卷') || (!activeIds.has(aid) && !archivedIds.has(aid) && !isContact && !awardedAids.has(aid))){
                     orphanAids.add(aid);
                 }
             });
@@ -559,12 +569,79 @@
             }
         }
 
+        let stopPointLogsListener = null;
+        function startPointLogsListener(){
+            if(stopPointLogsListener) return;
+            stopPointLogsListener = onSnapshot(pointLogsColl, snap => {
+                const awardedSet = new Set();
+                const awardedItems = [];
+                snap.docs.forEach(d => {
+                    const data = d.data();
+                    const sid = data.studentId;
+                    (data.items || []).forEach(item => {
+                        if(sid && item && item.assignmentId){
+                            awardedSet.add(`${sid}_${item.assignmentId}`);
+                            awardedItems.push({ studentId: sid, assignmentId: item.assignmentId, assignmentName: item.assignmentName || '' });
+                        }
+                    });
+                });
+                window.__awardedPointsSet = awardedSet;
+
+                let changedAny = false;
+                const toBatchHeal = [];
+                awardedItems.forEach(({ studentId, assignmentId, assignmentName }) => {
+                    let g = (gradingRecords || []).find(x => x.studentId === studentId && x.assignmentId === assignmentId);
+                    if(!g){
+                        g = { studentId, assignmentId, assignmentName, pointsGiven: true };
+                        gradingRecords.push(g);
+                        changedAny = true;
+                        toBatchHeal.push({ studentId, assignmentId });
+                    } else if(!g.pointsGiven){
+                        g.pointsGiven = true;
+                        changedAny = true;
+                        toBatchHeal.push({ studentId, assignmentId });
+                    }
+                });
+
+                if(toBatchHeal.length > 0 && isAdmin){
+                    try {
+                        const batch = writeBatch(db);
+                        toBatchHeal.forEach(({ studentId, assignmentId }) => {
+                            batch.set(doc(gradingColl, recordDocId(studentId, assignmentId)), { pointsGiven: true }, { merge: true });
+                        });
+                        batch.commit().catch(e => console.warn('AUTO_HEAL_POINTS_GIVEN_FAILED', e));
+                    } catch(e){
+                        console.warn(e);
+                    }
+                }
+
+                const archiveDocs = window.__archiveDocsList || [];
+                archiveDocs.forEach(d => {
+                    (d.records || []).forEach(r => {
+                        if(r && r.studentId && r.assignmentId && awardedSet.has(`${r.studentId}_${r.assignmentId}`)){
+                            if(!r.pointsGiven){
+                                r.pointsGiven = true;
+                                changedAny = true;
+                            }
+                        }
+                    });
+                });
+
+                if(changedAny){
+                    renderGradingTab(gradingRecords, records, settings);
+                }
+            }, err => console.warn('POINT_LOGS_LISTENER_ERROR', err));
+        }
+
+        function stopPointLogsListenerIfAny(){
+            if(stopPointLogsListener){ stopPointLogsListener(); stopPointLogsListener = null; }
+        }
+
         let stopGradingListener = null;
         function startGradingListener(){
             if(stopGradingListener) return;
             stopGradingListener = onSnapshot(gradingColl, snap => {
                 gradingRecords = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                if(isAdmin) cleanOrphanedAssignmentRecords();
                 renderGradingTab(gradingRecords, records, settings);
                 renderContactTab(records, gradingRecords, settings);
             }, err => console.warn(err));
@@ -650,6 +727,7 @@
                 window.__extraPastAssignments = nextExtra;
                 archivesLoaded = true;
                 window.__archivesLoaded = true;
+                window.__archiveDocsLoaded = true;
                 renderGradingTab(gradingRecords, records, settings);
                 if (typeof window.__renderArchivesListFromAuto === 'function') {
                     window.__renderArchivesListFromAuto(nextList);
@@ -771,7 +849,16 @@
             document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin));
             $('loginBtn').style.display = isAdmin ? 'none' : '';
             $('content').style.display = isAdmin ? 'none' : '';
-            if(isAdmin){ startRecordsListener(); startGradingListener(); autoLoadArchives(); } else { stopRecordsListenerIfAny(); stopGradingListenerIfAny(); }
+            if(isAdmin){
+                startRecordsListener();
+                startGradingListener();
+                startPointLogsListener();
+                autoLoadArchives();
+            } else {
+                stopRecordsListenerIfAny();
+                stopGradingListenerIfAny();
+                stopPointLogsListenerIfAny();
+            }
             maybeLoadEditor();
         });
 
@@ -959,6 +1046,7 @@
         const LEAVE_SEGMENT_RE = /(?:請假|病假|事假|公假|喪假)/;
         const MAKEUP_SUBMIT_SEGMENT_RE = /(?:已補繳|已補交|補繳|補交|狀態改已繳)/;
         const MAKEUP_SIGN_SEGMENT_RE = /(?:已補簽|補簽)/;
+        const POINT_SEGMENT_RE = /(?:已加點|加過點數|加點|\+\d+點)/;
 
         function normalizeRemarkSegment(seg) {
             const s = String(seg || '').trim();
@@ -1057,6 +1145,7 @@
             const effStatus = deriveRecordStatus(lObj, aObj);
             const effSign = deriveRecordSign(lObj, aObj);
             const leave = isRecordLeave(lObj, aObj);
+            const pointsGiven = !!((lObj && lObj.pointsGiven) || (aObj && aObj.pointsGiven));
 
             const aSegs = splitRemarkSegments(aObj ? aObj.remark : '');
             const lSegs = splitRemarkSegments(lObj ? lObj.remark : '');
@@ -1075,13 +1164,19 @@
                 signSeg = lSegs.find(s => MAKEUP_SIGN_SEGMENT_RE.test(s)) || aSegs.find(s => MAKEUP_SIGN_SEGMENT_RE.test(s)) || '';
             }
 
+            let pointSeg = '';
+            const existingPointSeg = lSegs.find(s => POINT_SEGMENT_RE.test(s)) || aSegs.find(s => POINT_SEGMENT_RE.test(s));
+            if (pointsGiven || existingPointSeg) {
+                pointSeg = existingPointSeg || '已加點';
+            }
+
             const others = [];
             [...aSegs, ...lSegs].forEach(s => {
-                if (LEAVE_SEGMENT_RE.test(s) || MAKEUP_SUBMIT_SEGMENT_RE.test(s) || MAKEUP_SIGN_SEGMENT_RE.test(s)) return;
+                if (LEAVE_SEGMENT_RE.test(s) || MAKEUP_SUBMIT_SEGMENT_RE.test(s) || MAKEUP_SIGN_SEGMENT_RE.test(s) || POINT_SEGMENT_RE.test(s)) return;
                 if (!others.includes(s)) others.push(s);
             });
 
-            return [leaveSeg, submitSeg, signSeg, ...others].filter(Boolean).join(' / ');
+            return [leaveSeg, submitSeg, signSeg, pointSeg, ...others].filter(Boolean).join(' / ');
         }
 
         function sanitizeArchiveRecords(records) {
@@ -2524,10 +2619,20 @@
                     const archiveDoc = window.__archiveDocsMap ? window.__archiveDocsMap[aid] : null;
                     const gradeOfPast = sid => {
                         const live = gradingRecs.find(x=>x.studentId===sid && x.assignmentId===aid);
-                        if(live) return live;
+                        const isAwarded = !!(window.__awardedPointsSet && window.__awardedPointsSet.has(`${sid}_${aid}`));
+                        if(live) {
+                            if(isAwarded && !live.pointsGiven) live.pointsGiven = true;
+                            return live;
+                        }
                         if(archiveDoc && archiveDoc.records){
                             const arch = archiveDoc.records.find(x=>x.studentId===sid && x.assignmentId===aid);
-                            if(arch && (arch.correctness || arch.corrected)) return arch;
+                            if(arch) {
+                                if(isAwarded && !arch.pointsGiven) arch.pointsGiven = true;
+                                if(arch.correctness || arch.corrected || isAwarded) return arch;
+                            }
+                        }
+                        if(isAwarded) {
+                            return { studentId: sid, assignmentId: aid, pointsGiven: true, correctness: '全對' };
                         }
                         return null;
                     };
@@ -2599,7 +2704,12 @@
                         const makeupBtn = (dStatus !== '已繳') ? `<button class="btn small outline" data-past-makeup="1">補交</button>` : `<button class="btn small outline" style="visibility:hidden;pointer-events:none;">補交</button>`;
                         
                         const pts = pointsOf(g, st);
-                        const pointsSlot = pastNeedsPoints ? `<span class="row-slot-points" style="visibility:${pts > 0 ? 'visible' : 'hidden'}">${pts > 0 ? (g.pointsGiven ? '已加點' : '尚未加點') : '尚未加點'}</span>` : '';
+                        const isPointsGiven = !!(
+                            (g && g.pointsGiven) ||
+                            (archRec && archRec.pointsGiven) ||
+                            (window.__awardedPointsSet && window.__awardedPointsSet.has(`${s.id}_${aid}`))
+                        );
+                        const pointsSlot = pastNeedsPoints ? `<span class="row-slot-points" style="visibility:${pts > 0 || isPointsGiven ? 'visible' : 'hidden'}">${(pts > 0 || isPointsGiven) ? (isPointsGiven ? '已加點' : '尚未加點') : '尚未加點'}</span>` : '';
                         
                         return `<div class="daily-row ${pastNeedsSign?'':'no-sign'} ${pastNeedsPoints?'has-points':''}" style="grid-template-columns: minmax(70px, 1fr) 140px ${pastNeedsSign?'140px ':''}58px 38px 38px 76px 38px ${pastNeedsPoints?'72px':''}" data-past-student="${s.id}">
                             <span class="student-name">${s.name}</span>
@@ -3265,8 +3375,12 @@
                 const stu = st.students.find(x=>x.id===sid);
                 if(!stu) return;
 
+                const isAwarded = g => !!(
+                    g.pointsGiven ||
+                    (window.__awardedPointsSet && window.__awardedPointsSet.has(`${g.studentId}_${g.assignmentId}`))
+                );
                 const eligible = gradingRecs.filter(g => {
-                    if(g.studentId !== sid || g.pointsGiven || pointsOf(g, st) <= 0) return false;
+                    if(g.studentId !== sid || isAwarded(g) || pointsOf(g, st) <= 0) return false;
                     return true;
                 });
                 if(!eligible.length){
@@ -3285,13 +3399,18 @@
                 if(!ok) return;
 
                 const batch = writeBatch(db);
-                eligible.forEach(g => batch.set(doc(gradingColl, recordDocId(sid, g.assignmentId)), { pointsGiven: true }, { merge: true }));
+                eligible.forEach(g => {
+                    g.pointsGiven = true;
+                    if(window.__awardedPointsSet) window.__awardedPointsSet.add(`${sid}_${g.assignmentId}`);
+                    batch.set(doc(gradingColl, recordDocId(sid, g.assignmentId)), { pointsGiven: true }, { merge: true });
+                });
                 await batch.commit().catch(e=>console.warn(e));
                 await addDoc(pointLogsColl, {
                     studentId: sid, studentName: stu.name,
                     timestamp: Date.now(), dateLabel: todayStr(),
                     totalPoints: total, items
                 }).catch(e=>console.warn(e));
+                renderGradingTab(gradingRecs, recs, st);
                 const resultDateMsg = dateLimit ? `（計算到 ${dateLimit} 的作業）` : '';
                 $('pointsResult').innerHTML = `<p>已幫「${stu.name}」加 <strong>${total}</strong> 點${resultDateMsg}</p>`;
             };
@@ -3313,9 +3432,15 @@
                         const ok2 = await window.askConfirm(`撤銷「${item.studentName} +${item.totalPoints}點」這筆加點紀錄嗎？`);
                         if(!ok2) return;
                         const undoBatch = writeBatch(db);
-                        (item.items||[]).forEach(i => undoBatch.set(doc(gradingColl, recordDocId(item.studentId, i.assignmentId)), { pointsGiven: false }, { merge: true }));
+                        (item.items||[]).forEach(i => {
+                            if(window.__awardedPointsSet) window.__awardedPointsSet.delete(`${item.studentId}_${i.assignmentId}`);
+                            const gObj = gradingRecs.find(x => x.studentId === item.studentId && x.assignmentId === i.assignmentId);
+                            if(gObj) gObj.pointsGiven = false;
+                            undoBatch.set(doc(gradingColl, recordDocId(item.studentId, i.assignmentId)), { pointsGiven: false }, { merge: true });
+                        });
                         undoBatch.delete(doc(db, 'pointLogs', logId));
                         await undoBatch.commit().catch(e=>console.warn(e));
+                        renderGradingTab(gradingRecs, recs, st);
                         $('loadPointLogsBtn').click();
                     });
                 } catch(e){ console.warn(e); $('pointLogsList').innerHTML = '<p class="empty-hint">載入失敗</p>'; }
@@ -4277,9 +4402,16 @@
                                 const isPull = isRecordPulledOut(r, stu, asgSubj, aName);
                                 const collidesWithActiveContact = aName === '聯絡簿每日任務' && activeContactIds.has(r.assignmentId);
                                 const liveRec = !collidesWithActiveContact ? records.find(rx => rx.studentId === r.studentId && rx.assignmentId === r.assignmentId) : null;
+                                const isAwarded = !!(
+                                    (r && r.pointsGiven) ||
+                                    (liveRec && liveRec.pointsGiven) ||
+                                    (window.__awardedPointsSet && window.__awardedPointsSet.has(`${r.studentId}_${r.assignmentId}`))
+                                );
+                                const recordWithPoints = isAwarded ? { ...r, pointsGiven: true } : r;
+                                const liveWithPoints = (isAwarded && liveRec) ? { ...liveRec, pointsGiven: true } : liveRec;
                                 const effStatus = deriveRecordStatus(liveRec, r);
                                 const effSign = deriveRecordSign(liveRec, r);
-                                const effRemark = deriveRecordRemark(liveRec, r);
+                                const effRemark = deriveRecordRemark(liveWithPoints, recordWithPoints);
                                 const effLeave = isRecordLeave(liveRec, r);
                                 const needsSign = !!(asg && (asg.needsSign || asg.signOnly)) || aName === '聯絡簿每日任務';
                                 const isSignOnly = !!(asg && asg.signOnly);

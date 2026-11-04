@@ -420,9 +420,10 @@ export function deriveRecordSign(liveRecord, archiveRecord) {
     return '未簽名';
 }
 
-const LEAVE_SEGMENT_RE = /(?:請假|病假|事假|公假|喪假)/;
-const MAKEUP_SUBMIT_SEGMENT_RE = /(?:已補繳|已補交|補繳|補交|狀態改已繳)/;
-const MAKEUP_SIGN_SEGMENT_RE = /(?:已補簽|補簽)/;
+export const LEAVE_SEGMENT_RE = /(?:請假|病假|事假|公假|喪假)/;
+export const MAKEUP_SUBMIT_SEGMENT_RE = /(?:已補繳|已補交|補繳|補交|狀態改已繳)/;
+export const MAKEUP_SIGN_SEGMENT_RE = /(?:已補簽|補簽)/;
+export const POINT_SEGMENT_RE = /(?:已加點|加過點數|加點|\+\d+點)/;
 
 function normalizeRemarkSegment(seg) {
     const s = String(seg || '').trim();
@@ -554,6 +555,7 @@ export function deriveRecordRemark(liveRecord, archiveRecord) {
     const effStatus = deriveRecordStatus(lObj, aObj);
     const effSign = deriveRecordSign(lObj, aObj);
     const leave = isRecordLeave(lObj, aObj);
+    const pointsGiven = !!((lObj && lObj.pointsGiven) || (aObj && aObj.pointsGiven));
 
     const aSegs = splitRemarkSegments(aObj ? aObj.remark : '');
     const lSegs = splitRemarkSegments(lObj ? lObj.remark : '');
@@ -572,13 +574,19 @@ export function deriveRecordRemark(liveRecord, archiveRecord) {
         signSeg = lSegs.find(s => MAKEUP_SIGN_SEGMENT_RE.test(s)) || aSegs.find(s => MAKEUP_SIGN_SEGMENT_RE.test(s)) || '';
     }
 
+    let pointSeg = '';
+    const existingPointSeg = lSegs.find(s => POINT_SEGMENT_RE.test(s)) || aSegs.find(s => POINT_SEGMENT_RE.test(s));
+    if (pointsGiven || existingPointSeg) {
+        pointSeg = existingPointSeg || '已加點';
+    }
+
     const others = [];
     [...aSegs, ...lSegs].forEach(s => {
-        if (LEAVE_SEGMENT_RE.test(s) || MAKEUP_SUBMIT_SEGMENT_RE.test(s) || MAKEUP_SIGN_SEGMENT_RE.test(s)) return;
+        if (LEAVE_SEGMENT_RE.test(s) || MAKEUP_SUBMIT_SEGMENT_RE.test(s) || MAKEUP_SIGN_SEGMENT_RE.test(s) || POINT_SEGMENT_RE.test(s)) return;
         if (!others.includes(s)) others.push(s);
     });
 
-    return [leaveSeg, submitSeg, signSeg, ...others].filter(Boolean).join(' / ');
+    return [leaveSeg, submitSeg, signSeg, pointSeg, ...others].filter(Boolean).join(' / ');
 }
 
 /**

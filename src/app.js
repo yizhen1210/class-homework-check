@@ -9,6 +9,7 @@ import {
     settingsRef,
     archivesColl,
     gradingColl,
+    pointLogsColl,
     isAuthorized,
     loginWithEmail,
     loginWithGoogle,
@@ -18,6 +19,7 @@ import {
     clearAll,
     clearRecordsForAssignment,
     clearGradingForAssignment,
+    recordDocId,
     ORDER_FIELD,
     ORDER_DIR,
     LOGIN_MODE
@@ -353,9 +355,17 @@ async function renderArchivesList(prefetchedList = null) {
                     const isPull = isRecordPulledOut(r, stu, asgSubj, aName);
                     const collidesWithActiveContact = aName === '聯絡簿每日任務' && activeContactIds.has(r.assignmentId);
                     const liveRec = !collidesWithActiveContact ? (records || []).find(x => x.studentId === r.studentId && x.assignmentId === r.assignmentId) : null;
+                    const isAwarded = !!(
+                        (r && r.pointsGiven) ||
+                        (liveRec && liveRec.pointsGiven) ||
+                        (appState.awardedPointsSet && appState.awardedPointsSet.has(`${r.studentId}_${r.assignmentId}`)) ||
+                        (window.__awardedPointsSet && window.__awardedPointsSet.has(`${r.studentId}_${r.assignmentId}`))
+                    );
+                    const recordWithPoints = isAwarded ? { ...r, pointsGiven: true } : r;
+                    const liveWithPoints = (isAwarded && liveRec) ? { ...liveRec, pointsGiven: true } : liveRec;
                     const effStatus = deriveRecordStatus(liveRec, r);
                     const effSign = deriveRecordSign(liveRec, r);
-                    const effRemark = deriveRecordRemark(liveRec, r);
+                    const effRemark = deriveRecordRemark(liveWithPoints, recordWithPoints);
                     const effLeave = isRecordLeave(liveRec, r);
                     const needsSign = !!(asg && (asg.needsSign || asg.signOnly)) || aName === '聯絡簿每日任務';
                     const isSignOnly = !!(asg && asg.signOnly);
@@ -718,6 +728,7 @@ function stopRecordsListenerIfAny() {
 
 export async function cleanOrphanedAssignmentRecords() {
     if (!isAdmin || !settings || !Array.isArray(settings.assignments)) return;
+    if (!appState.archivesLoaded || !(appState.archiveDocsList || []).length) return;
     const activeIds = new Set(settings.assignments.map(a => a.id));
     const archiveDocs = (appState && appState.archiveDocsList) || [];
     const archivedIds = new Set();
@@ -725,6 +736,13 @@ export async function cleanOrphanedAssignmentRecords() {
         (d.assignments || []).forEach(a => { if (a && a.id) archivedIds.add(a.id); });
         (d.records || []).forEach(r => { if (r && r.assignmentId) archivedIds.add(r.assignmentId); });
     });
+    const awardedAids = new Set();
+    if (appState.awardedPointsSet) {
+        appState.awardedPointsSet.forEach(key => {
+            const parts = key.split('_');
+            if (parts.length >= 2) awardedAids.add(parts.slice(1).join('_'));
+        });
+    }
 
     const orphanAids = new Set();
     (gradingRecords || []).forEach(g => {
@@ -732,7 +750,7 @@ export async function cleanOrphanedAssignmentRecords() {
         const aid = g.assignmentId;
         const name = g.assignmentName || '';
         const isContact = name === '聯絡簿每日任務' || aid.startsWith('daily-');
-        if (name.includes('國複A卷') || (!activeIds.has(aid) && !archivedIds.has(aid) && !isContact)) {
+        if (name.includes('國複A卷') || (!activeIds.has(aid) && !archivedIds.has(aid) && !isContact && !awardedAids.has(aid))) {
             orphanAids.add(aid);
         }
     });
@@ -741,7 +759,7 @@ export async function cleanOrphanedAssignmentRecords() {
         const aid = r.assignmentId;
         const name = r.assignmentName || '';
         const isContact = name === '聯絡簿每日任務' || aid.startsWith('daily-');
-        if (name.includes('國複A卷') || (!activeIds.has(aid) && !archivedIds.has(aid) && !isContact)) {
+        if (name.includes('國複A卷') || (!activeIds.has(aid) && !archivedIds.has(aid) && !isContact && !awardedAids.has(aid))) {
             orphanAids.add(aid);
         }
     });
@@ -758,11 +776,82 @@ export async function cleanOrphanedAssignmentRecords() {
     }
 }
 
+let stopPointLogsListener = null;
+function startPointLogsListener() {
+    if (stopPointLogsListener) return;
+    stopPointLogsListener = onSnapshot(pointLogsColl, snap => {
+        const awardedSet = new Set();
+        const awardedItems = [];
+        snap.docs.forEach(d => {
+            const data = d.data();
+            const sid = data.studentId;
+            (data.items || []).forEach(item => {
+                if (sid && item && item.assignmentId) {
+                    awardedSet.add(`${sid}_${item.assignmentId}`);
+                    awardedItems.push({ studentId: sid, assignmentId: item.assignmentId, assignmentName: item.assignmentName || '' });
+                }
+            });
+        });
+        appState.awardedPointsSet = awardedSet;
+        window.__awardedPointsSet = awardedSet;
+
+        let changedAny = false;
+        const toBatchHeal = [];
+        awardedItems.forEach(({ studentId, assignmentId, assignmentName }) => {
+            let g = (gradingRecords || []).find(x => x.studentId === studentId && x.assignmentId === assignmentId);
+            if (!g) {
+                g = { studentId, assignmentId, assignmentName, pointsGiven: true };
+                gradingRecords.push(g);
+                changedAny = true;
+                toBatchHeal.push({ studentId, assignmentId });
+            } else if (!g.pointsGiven) {
+                g.pointsGiven = true;
+                changedAny = true;
+                toBatchHeal.push({ studentId, assignmentId });
+            }
+        });
+
+        if (toBatchHeal.length > 0 && isAdmin) {
+            try {
+                const batch = writeBatch(db);
+                toBatchHeal.forEach(({ studentId, assignmentId }) => {
+                    batch.set(doc(gradingColl, recordDocId(studentId, assignmentId)), { pointsGiven: true }, { merge: true });
+                });
+                batch.commit().catch(e => logger.warn('AUTO_HEAL_POINTS_GIVEN_FAILED', e));
+            } catch (e) {
+                logger.warn('AUTO_HEAL_BATCH_ERROR', e);
+            }
+        }
+
+        const archiveDocs = (appState && appState.archiveDocsList) || [];
+        archiveDocs.forEach(d => {
+            (d.records || []).forEach(r => {
+                if (r && r.studentId && r.assignmentId && awardedSet.has(`${r.studentId}_${r.assignmentId}`)) {
+                    if (!r.pointsGiven) {
+                        r.pointsGiven = true;
+                        changedAny = true;
+                    }
+                }
+            });
+        });
+
+        if (changedAny) {
+            renderGradingTab(gradingRecords, records, settings, appState);
+        }
+    }, err => logger.warn('POINT_LOGS_LISTENER_ERROR', err));
+}
+
+function stopPointLogsListenerIfAny() {
+    if (stopPointLogsListener) {
+        stopPointLogsListener();
+        stopPointLogsListener = null;
+    }
+}
+
 function startGradingListener() {
     if (stopGradingListener) return;
     stopGradingListener = onSnapshot(gradingColl, snap => {
         gradingRecords = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        if (isAdmin) cleanOrphanedAssignmentRecords();
         renderGradingTab(gradingRecords, records, settings, appState);
         renderContactTab(records, gradingRecords, settings, isAdmin);
     }, err => logger.warn('GRADING_LISTENER_ERROR', err));
@@ -1382,10 +1471,12 @@ function bootstrap() {
         if (isAdmin) {
             startRecordsListener();
             startGradingListener();
+            startPointLogsListener();
             autoLoadArchives();
         } else {
             stopRecordsListenerIfAny();
             stopGradingListenerIfAny();
+            stopPointLogsListenerIfAny();
         }
         maybeLoadEditor();
     });
