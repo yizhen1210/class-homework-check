@@ -1055,7 +1055,7 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
     const sel = $('pointsStudentSelect');
     if (sel) {
         const curSel = sel.value;
-        sel.innerHTML = '<option value="">請選擇學生</option>' + students.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+        sel.innerHTML = '<option value="">請選擇學生</option><option value="ALL">全部加點</option>' + students.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
         sel.value = [...sel.options].some(o => o.value === curSel) ? curSel : '';
     }
 
@@ -1063,18 +1063,103 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
     if (calcPointsBtn) {
         calcPointsBtn.onclick = async () => {
             const sid = sel.value;
-            if (!sid) { showAlert('請先選擇學生'); return; }
-            const stu = st.students.find(x => x.id === sid);
-            if (!stu) return;
+            if (!sid) { showAlert('請先選擇學生或全部加點'); return; }
 
             const isAwarded = (g) => !!(
                 g.pointsGiven ||
                 (state.awardedPointsSet && state.awardedPointsSet.has(`${g.studentId}_${g.assignmentId}`)) ||
                 (window.__awardedPointsSet && window.__awardedPointsSet.has(`${g.studentId}_${g.assignmentId}`))
             );
+
+            // 全部加點模式
+            if (sid === 'ALL') {
+                const studentResults = [];
+                let totalPointsAll = 0;
+                const sortedStudents = sortBySeat(st.students);
+
+                sortedStudents.forEach(stu => {
+                    const eligible = gradingRecs.filter(g => {
+                        if (g.studentId !== stu.id || isAwarded(g)) return false;
+                        const pts = pointsOf(g, st, (state.extraPastAssignments && state.extraPastAssignments[g.assignmentId]));
+                        return pts > 0;
+                    });
+                    if (!eligible.length) return;
+
+                    const items = eligible.map(g => ({
+                        assignmentId: g.assignmentId,
+                        assignmentName: g.assignmentName,
+                        type: g.correctness === '全對' ? '全對' : '訂正完成',
+                        points: pointsOf(g, st, (state.extraPastAssignments && state.extraPastAssignments[g.assignmentId]))
+                    }));
+                    const total = items.reduce((sum, i) => sum + i.points, 0);
+                    const dateLimit = getLatestEligibleAssignmentDate(eligible, st, state.archiveDocsMap, state.extraPastAssignments);
+                    studentResults.push({
+                        student: stu,
+                        eligible,
+                        items,
+                        total,
+                        dateLimit
+                    });
+                    totalPointsAll += total;
+                });
+
+                if (!studentResults.length) {
+                    $('pointsResult').innerHTML = '<p class="empty-hint">全班目前沒有可加點的項目</p>';
+                    return;
+                }
+
+                const summaryLines = studentResults.map(r => `${r.student.name} +${r.total}點${r.dateLimit ? `（至${r.dateLimit}）` : ''}`).join('、');
+                const ok = await askConfirm(`確定要幫全班 ${studentResults.length} 位學生加點嗎？\n共加 ${totalPointsAll} 點。\n\n名單：\n${summaryLines}`);
+                if (!ok) return;
+
+                const batches = [writeBatch(db)];
+                let opCount = 0;
+                const pointLogsToCreate = [];
+
+                studentResults.forEach(r => {
+                    r.eligible.forEach(g => {
+                        g.pointsGiven = true;
+                        if (state.awardedPointsSet) state.awardedPointsSet.add(`${r.student.id}_${g.assignmentId}`);
+                        if (window.__awardedPointsSet) window.__awardedPointsSet.add(`${r.student.id}_${g.assignmentId}`);
+                        let curBatch = batches[batches.length - 1];
+                        curBatch.set(doc(gradingColl, recordDocId(r.student.id, g.assignmentId)), { pointsGiven: true }, { merge: true });
+                        opCount++;
+                        if (opCount % 400 === 0) {
+                            batches.push(writeBatch(db));
+                        }
+                    });
+                    pointLogsToCreate.push({
+                        studentId: r.student.id,
+                        studentName: r.student.name,
+                        timestamp: Date.now(),
+                        dateLabel: todayStr(),
+                        totalPoints: r.total,
+                        items: r.items,
+                        dateLimit: r.dateLimit || ''
+                    });
+                });
+
+                for (const b of batches) {
+                    await b.commit().catch(e => logger.warn('CALC_ALL_POINTS_BATCH_FAILED', e));
+                }
+                for (const logData of pointLogsToCreate) {
+                    await addDoc(pointLogsColl, logData).catch(e => logger.warn('POINT_LOG_WRITE_FAILED', e));
+                }
+
+                renderGradingTab(gradingRecs, recs, st, state);
+                const detailsHtml = studentResults.map(r => `<li><strong>${escapeHtml(r.student.name)}</strong>：+${r.total} 點${r.dateLimit ? `（計算到 ${escapeHtml(r.dateLimit)} 的作業）` : ''}</li>`).join('');
+                $('pointsResult').innerHTML = `<p>已成功為全班 <strong>${studentResults.length}</strong> 位學生加點（共 <strong>${totalPointsAll}</strong> 點）：</p><ul style="margin:8px 0 0 20px;padding:0;line-height:1.6">${detailsHtml}</ul>`;
+                return;
+            }
+
+            // 單一學生加點模式
+            const stu = st.students.find(x => x.id === sid);
+            if (!stu) return;
+
             const eligible = gradingRecs.filter(g => {
-                if (g.studentId !== sid || isAwarded(g) || pointsOf(g, st) <= 0) return false;
-                return true;
+                if (g.studentId !== sid || isAwarded(g)) return false;
+                const pts = pointsOf(g, st, (state.extraPastAssignments && state.extraPastAssignments[g.assignmentId]));
+                return pts > 0;
             });
             if (!eligible.length) {
                 $('pointsResult').innerHTML = `<p class="empty-hint">「${escapeHtml(stu.name)}」目前沒有可加點的項目</p>`;
@@ -1084,7 +1169,7 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 assignmentId: g.assignmentId,
                 assignmentName: g.assignmentName,
                 type: g.correctness === '全對' ? '全對' : '訂正完成',
-                points: pointsOf(g, st)
+                points: pointsOf(g, st, (state.extraPastAssignments && state.extraPastAssignments[g.assignmentId]))
             }));
             const total = items.reduce((sum, i) => sum + i.points, 0);
             const dateLimit = getLatestEligibleAssignmentDate(eligible, st, state.archiveDocsMap, state.extraPastAssignments);
@@ -1106,7 +1191,8 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 timestamp: Date.now(),
                 dateLabel: todayStr(),
                 totalPoints: total,
-                items
+                items,
+                dateLimit: dateLimit || ''
             }).catch(e => logger.warn('POINT_LOG_WRITE_FAILED', e));
             renderGradingTab(gradingRecs, recs, st, state);
             const resultDateMsg = dateLimit ? `（計算到 ${dateLimit} 的作業）` : '';
@@ -1122,11 +1208,15 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
             try {
                 const snap = await getDocs(query(pointLogsColl, orderBy('timestamp', 'desc')));
                 const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                $('pointLogsList').innerHTML = list.length ? list.map(l => `
+                $('pointLogsList').innerHTML = list.length ? list.map(l => {
+                    const targetDate = l.dateLimit || getLatestEligibleAssignmentDate(l.items || [], st, state.archiveDocsMap, state.extraPastAssignments);
+                    const targetDateSuffix = targetDate ? `（計算到 ${escapeHtml(targetDate)} 的作業）` : '';
+                    return `
                     <div class="assignment-row">
-                        <span class="assignment-name">${escapeHtml(l.dateLabel || '')}　${escapeHtml(l.studentName)}　+${l.totalPoints}點</span>
+                        <span class="assignment-name">${escapeHtml(l.dateLabel || '')}　${escapeHtml(l.studentName)}　+${l.totalPoints}點${targetDateSuffix}</span>
                         <button class="btn small outline danger" data-undo-log="${escapeHtml(l.id)}">撤銷</button>
-                    </div>`).join('') : '<p class="empty-hint">尚無加點紀錄</p>';
+                    </div>`;
+                }).join('') : '<p class="empty-hint">尚無加點紀錄</p>';
 
                 $('pointLogsList').querySelectorAll('[data-undo-log]').forEach(btn => {
                     btn.onclick = async () => {
@@ -1165,7 +1255,11 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
                 const list = snap.docs.map(d => d.data()).filter(l => l.dateLabel === today);
                 if (!list.length) { showAlert('今天還沒有任何加點紀錄'); return; }
                 // 修復：調用 formatPointLogItems，絕不產生 [object Object]
-                const text = list.map(l => `${l.studentName} +${l.totalPoints}點（${formatPointLogItems(l.items)}）`).join('\n');
+                const text = list.map(l => {
+                    const targetDate = l.dateLimit || getLatestEligibleAssignmentDate(l.items || [], st, state.archiveDocsMap, state.extraPastAssignments);
+                    const targetDateSuffix = targetDate ? `（計算到 ${targetDate} 的作業）` : '';
+                    return `${l.studentName} +${l.totalPoints}點（${formatPointLogItems(l.items)}）${targetDateSuffix}`;
+                }).join('\n');
                 await navigator.clipboard.writeText(`${today} 加點紀錄\n${text}`);
                 showAlert('今天的加點紀錄已複製');
             } catch (e) {

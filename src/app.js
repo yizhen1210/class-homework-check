@@ -1170,7 +1170,7 @@ function loadEditor() {
             </div>
             <div class="card">
                 <h2>加點</h2>
-                <p class="empty-hint" style="text-align:left;padding:0 0 10px">選學生後按「計算並加點」。</p>
+                <p class="empty-hint" style="text-align:left;padding:0 0 10px">選學生或全部加點後按「計算並加點」。</p>
                 <div class="row">
                     <select id="pointsStudentSelect" style="flex:1"></select>
                     <button class="btn" id="calcPointsBtn">計算並加點</button>

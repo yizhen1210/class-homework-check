@@ -825,6 +825,13 @@ def run_tests():
     t.assert_equal('compoundAids' in grading_text and 'compoundAids' in index_text, True, "應支援複合鍵 docId::aid 去除重複選項")
     t.assert_equal('nextMap[`${data.id}::${a.id}`]' in app_text and 'nextMap[`${data.id}::${a.id}`]' in index_text, True, "應支援封存映射複合鍵隔離跨日期同作業ID")
 
+    # 驗證「全部加點」與「載入加點紀錄標示計算日期」機制
+    t.assert_equal('<option value="ALL">全部加點</option>' in grading_text, True, "src/ui/gradingTab.js 應包含全部加點選項")
+    t.assert_equal('<option value="ALL">全部加點</option>' in index_text, True, "index.html 應包含全部加點選項")
+    t.assert_equal("sid === 'ALL'" in grading_text and "sid === 'ALL'" in index_text, True, "應具備全班全部加點批次處理邏輯")
+    t.assert_equal('targetDateSuffix' in grading_text and 'targetDateSuffix' in index_text, True, "加點紀錄應逐一標示計算到哪一天作業")
+    t.assert_equal('選學生或全部加點後按「計算並加點」。' in app_text and '選學生或全部加點後按「計算並加點」。' in index_text, True, "UI提示文案應更新包含全部加點")
+
     print(f"✓ 恭喜！全數 {t.passes} 項領域業務與結構測試斷言通過！")
 
 if __name__ == '__main__':
