@@ -241,7 +241,17 @@
         .badge.submitted { background: var(--accent); }
         .badge.missing { background: var(--danger); }
         .empty-hint { color: var(--muted); text-align: center; padding: 30px 10px; }
-        .admin-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+        .admin-tabs {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: var(--bg);
+            padding: 10px 0;
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
         .side-by-side { display: flex; gap: 20px; align-items: stretch; }
         .subject-select-group { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
         .subject-select-group select { flex: 1; }

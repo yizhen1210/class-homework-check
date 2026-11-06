@@ -751,6 +751,7 @@ def run_tests():
     grading_text = (root / 'src' / 'ui' / 'gradingTab.js').read_text(encoding='utf-8')
     app_text = (root / 'src' / 'app.js').read_text(encoding='utf-8')
     records_text = (root / 'src' / 'ui' / 'recordsTab.js').read_text(encoding='utf-8')
+    styles_text = (root / 'src' / 'styles.css').read_text(encoding='utf-8')
 
     required_symbols = [
         'computeGlobalPopupLists',
@@ -831,6 +832,12 @@ def run_tests():
     t.assert_equal("sid === 'ALL'" in grading_text and "sid === 'ALL'" in index_text, True, "應具備全班全部加點批次處理邏輯")
     t.assert_equal('targetDateSuffix' in grading_text and 'targetDateSuffix' in index_text, True, "加點紀錄應逐一標示計算到哪一天作業")
     t.assert_equal('選學生或全部加點後按「計算並加點」。' in app_text and '選學生或全部加點後按「計算並加點」。' in index_text, True, "UI提示文案應更新包含全部加點")
+
+    # 驗證頁籤導覽列在頁面滑動時固定置頂（position: sticky; top: 0）
+    t.assert_equal('position: sticky;' in styles_text and 'top: 0;' in styles_text, True, "src/styles.css .admin-tabs 應設定固定置頂")
+    t.assert_equal('position: sticky;' in index_text and 'top: 0;' in index_text, True, "index.html .admin-tabs 應設定固定置頂")
+    t.assert_equal('z-index: 100;' in styles_text and 'z-index: 100;' in index_text, True, ".admin-tabs 應設定 z-index 以免被滾動內容覆蓋")
+    t.assert_equal('background: var(--bg);' in styles_text and 'background: var(--bg);' in index_text, True, ".admin-tabs 應設定背景色以免文字透出")
 
     print(f"✓ 恭喜！全數 {t.passes} 項領域業務與結構測試斷言通過！")
 
