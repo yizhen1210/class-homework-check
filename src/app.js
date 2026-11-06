@@ -1530,6 +1530,7 @@ function bootstrap() {
     // Firebase 驗證狀態監聽
     onAuthStateChanged(auth, user => {
         isAdmin = isAuthorized(user);
+        document.body.classList.toggle('admin-mode', isAdmin);
         document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin));
         $('loginBtn').style.display = isAdmin ? 'none' : '';
         $('content').style.display = isAdmin ? 'none' : '';

@@ -110,6 +110,12 @@
             padding: 30px 20px; 
             border-bottom: 2px solid var(--accent);
         }
+        body.admin-mode header,
+        body:has(#adminArea:not(.hidden)) header {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 16px;
+        }
         
         .header-title { grid-column: 2; justify-self: center; text-align: center; }
         
@@ -246,11 +252,19 @@
             top: 0;
             z-index: 100;
             background: var(--bg);
-            padding: 10px 0;
+            padding: max(20px, calc(env(safe-area-inset-top, 0px) + 14px)) 0 12px;
             display: flex;
             gap: 8px;
             margin-bottom: 16px;
             flex-wrap: wrap;
+        }
+        .admin-tabs::before {
+            content: '';
+            display: block;
+            width: 100%;
+            height: 2px;
+            background: var(--accent);
+            margin-bottom: 4px;
         }
         .side-by-side { display: flex; gap: 20px; align-items: stretch; }
         .subject-select-group { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
@@ -296,6 +310,15 @@
         .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         @media (max-width: 680px) {
             body { font-size: 17px; }
+            body.admin-mode header,
+            body:has(#adminArea:not(.hidden)) header {
+                padding-bottom: 12px;
+                margin-bottom: 0;
+            }
+            .admin-tabs {
+                padding-top: max(16px, calc(env(safe-area-inset-top, 0px) + 10px));
+                padding-bottom: 10px;
+            }
             main, #adminArea { padding: 0 10px 40px; }
             .card { padding: 16px 14px; border-radius: 14px; margin-bottom: 14px; }
             .card h2 { font-size: 1.05em; }
@@ -922,6 +945,7 @@
         }
         onAuthStateChanged(auth, user => {
             isAdmin = isAuthorized(user);
+            document.body.classList.toggle('admin-mode', isAdmin);
             document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin));
             $('loginBtn').style.display = isAdmin ? 'none' : '';
             $('content').style.display = isAdmin ? 'none' : '';

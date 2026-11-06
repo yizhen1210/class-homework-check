@@ -833,11 +833,15 @@ def run_tests():
     t.assert_equal('targetDateSuffix' in grading_text and 'targetDateSuffix' in index_text, True, "加點紀錄應逐一標示計算到哪一天作業")
     t.assert_equal('選學生或全部加點後按「計算並加點」。' in app_text and '選學生或全部加點後按「計算並加點」。' in index_text, True, "UI提示文案應更新包含全部加點")
 
-    # 驗證頁籤導覽列在頁面滑動時固定置頂（position: sticky; top: 0）
+    # 驗證頁籤導覽列在頁面滑動時固定置頂（position: sticky; top: 0）與上方分隔線置頂/霧化區緩衝
     t.assert_equal('position: sticky;' in styles_text and 'top: 0;' in styles_text, True, "src/styles.css .admin-tabs 應設定固定置頂")
     t.assert_equal('position: sticky;' in index_text and 'top: 0;' in index_text, True, "index.html .admin-tabs 應設定固定置頂")
     t.assert_equal('z-index: 100;' in styles_text and 'z-index: 100;' in index_text, True, ".admin-tabs 應設定 z-index 以免被滾動內容覆蓋")
     t.assert_equal('background: var(--bg);' in styles_text and 'background: var(--bg);' in index_text, True, ".admin-tabs 應設定背景色以免文字透出")
+    t.assert_equal('.admin-tabs::before' in styles_text and '.admin-tabs::before' in index_text, True, "置頂導覽列應包含上方分隔線 .admin-tabs::before")
+    t.assert_equal('body.admin-mode header' in styles_text and 'body.admin-mode header' in index_text, True, "管理模式下 header 應調整為不重複底線")
+    t.assert_equal("classList.toggle('admin-mode', isAdmin)" in app_text and "classList.toggle('admin-mode', isAdmin)" in index_text, True, "登入身分切換時應同步切換 admin-mode 類別")
+    t.assert_equal('env(safe-area-inset-top' in styles_text and 'env(safe-area-inset-top' in index_text, True, "導覽列應支援平板 safe-area-inset-top 頂部霧化緩衝")
 
     print(f"✓ 恭喜！全數 {t.passes} 項領域業務與結構測試斷言通過！")
 
