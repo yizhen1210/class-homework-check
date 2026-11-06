@@ -235,7 +235,7 @@ th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line
     top: 0;
     z-index: 100;
     background: var(--bg);
-    padding: max(20px, calc(env(safe-area-inset-top, 0px) + 14px)) 0 12px;
+    padding: max(20px, calc(env(safe-area-inset-top, 0px) + 14px)) 0 10px;
     display: flex;
     gap: 8px;
     margin-bottom: 16px;
@@ -247,7 +247,7 @@ th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line
     width: 100%;
     height: 2px;
     background: var(--accent);
-    margin-bottom: 4px;
+    margin-bottom: 18px;
 }
 .side-by-side { display: flex; gap: 20px; align-items: stretch; }
 .subject-select-group { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
@@ -300,7 +300,10 @@ th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line
     }
     .admin-tabs {
         padding-top: max(16px, calc(env(safe-area-inset-top, 0px) + 10px));
-        padding-bottom: 10px;
+        padding-bottom: 8px;
+    }
+    .admin-tabs::before {
+        margin-bottom: 14px;
     }
     main, #adminArea { padding: 0 10px 40px; }
     .card { padding: 16px 14px; border-radius: 14px; margin-bottom: 14px; }
