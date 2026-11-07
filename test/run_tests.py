@@ -501,8 +501,6 @@ def run_tests():
                 status = derive_record_status(rec, arch_rec.get('status') if arch_rec else '未繳')
                 sign_status = derive_record_sign(rec, arch_rec.get('signStatus') if arch_rec else '未簽名')
                 if info.get('name') == '聯絡簿每日任務':
-                    if status != '已繳':
-                        continue
                     if sign_status != '已簽名':
                         unsigned_names.append(s['name'])
                     continue
@@ -566,11 +564,11 @@ def run_tests():
     t.assert_equal(uncorrected_res[0]['title'], '2026/11/03 聯絡簿每日任務', "未訂正作業名稱應含日期標記")
     t.assert_equal(uncorrected_res[0]['students'], ['學生甲'], "學生甲有錯且未訂正")
 
-    # 驗證未簽名清單包含封存聯絡簿已繳未簽學生
+    # 驗證未簽名清單包含封存聯絡簿未簽學生（包含已繳未簽與未繳未簽）
     unsigned_res = compute_global_unsigned(test_students, test_active_assignments, test_extra_past, [], test_archive_docs_map)
     t.assert_equal(len(unsigned_res), 1, "未簽名清單應有1個作業區塊")
     t.assert_equal(unsigned_res[0]['title'], '2026/11/03 聯絡簿每日任務', "未簽名作業名稱應含日期標記")
-    t.assert_equal(unsigned_res[0]['students'], ['學生甲'], "學生甲已繳但未簽名（學生乙未繳不列入未簽名）")
+    t.assert_equal(unsigned_res[0]['students'], ['學生甲', '學生乙'], "學生甲與學生乙皆未簽名（封存後聯絡簿未簽皆納入未簽名清單）")
 
     # 驗證補交後未繳清單更新
     live_records_after_makeup = [{'studentId': 's2', 'assignmentId': past_contact_id, 'status': '已繳', 'signStatus': '未簽名'}]
@@ -583,9 +581,12 @@ def run_tests():
     t.assert_equal(len(uncorrected_after), 0, "學生甲訂正後未訂正清單應為空")
 
     # 驗證補簽後未簽名清單更新
-    live_records_after_sign = [{'studentId': 's1', 'assignmentId': past_contact_id, 'status': '已繳', 'signStatus': '已簽名'}]
+    live_records_after_sign = [
+        {'studentId': 's1', 'assignmentId': past_contact_id, 'status': '已繳', 'signStatus': '已簽名'},
+        {'studentId': 's2', 'assignmentId': past_contact_id, 'status': '已繳', 'signStatus': '已簽名'}
+    ]
     unsigned_after = compute_global_unsigned(test_students, test_active_assignments, test_extra_past, live_records_after_sign, test_archive_docs_map)
-    t.assert_equal(len(unsigned_after), 0, "學生甲補簽後未簽名清單應為空")
+    t.assert_equal(len(unsigned_after), 0, "學生甲與乙皆補簽後未簽名清單應為空")
 
     # 13. 補繳／補簽／請假備註標準化與合併測試
     LEAVE_RE = re.compile(r'(?:請假|病假|事假|公假|喪假)')
@@ -751,6 +752,7 @@ def run_tests():
     grading_text = (root / 'src' / 'ui' / 'gradingTab.js').read_text(encoding='utf-8')
     app_text = (root / 'src' / 'app.js').read_text(encoding='utf-8')
     records_text = (root / 'src' / 'ui' / 'recordsTab.js').read_text(encoding='utf-8')
+    students_text = (root / 'src' / 'ui' / 'studentsTab.js').read_text(encoding='utf-8')
     styles_text = (root / 'src' / 'styles.css').read_text(encoding='utf-8')
 
     required_symbols = [
@@ -842,6 +844,27 @@ def run_tests():
     t.assert_equal('body.admin-mode header' in styles_text and 'body.admin-mode header' in index_text, True, "管理模式下 header 應調整為不重複底線")
     t.assert_equal("classList.toggle('admin-mode', isAdmin)" in app_text and "classList.toggle('admin-mode', isAdmin)" in index_text, True, "登入身分切換時應同步切換 admin-mode 類別")
     t.assert_equal('env(safe-area-inset-top' in styles_text and 'env(safe-area-inset-top' in index_text, True, "導覽列應支援平板 safe-area-inset-top 頂部霧化緩衝")
+
+    # 驗證需求 1: 未簽名、未補簽納入補繳統計彈窗並使用綠色標籤標示
+    t.assert_equal('signMissing' in rules_text and 'signMakeup' in rules_text, True, "rules.js 應統計未簽名與已補簽")
+    t.assert_equal('signMissing' in index_text and 'signMakeup' in index_text, True, "index.html 應統計未簽名與已補簽")
+    t.assert_equal('color:#2e7d32' in grading_text and 'color:#2e7d32' in index_text, True, "統計彈窗應以綠色標籤標示未簽名/已補簽")
+
+    # 驗證需求 2: 聯絡簿未簽封存後納入未簽名清單
+    t.assert_equal("if (isContact) {\n                    return signStatus !== '已簽名';" in rules_text or "if (isContact) {\n                    if (status !== '已繳') return false;\n" not in rules_text, True, "rules.js 封存聯絡簿未簽應納入未簽名清單")
+
+    # 驗證需求 3: 期中結算清空三項清單，補繳次數統計保留
+    t.assert_equal('midtermCutoffDate' in rules_text and 'midtermCutoffDate' in index_text, True, "應支援期中結算基準日篩選")
+    t.assert_equal('modalMidtermSettleBtn' in index_text and 'saveMidtermCutoffBtn' in students_text, True, "彈窗與學期設定應提供期中結算清空按鈕")
+
+    # 驗證需求 4: 切換分頁從頂部白底框顯示，訂正5個按鈕置中
+    t.assert_equal('justify-content:center' in app_text and 'justify-content:center' in index_text, True, "訂正與加點5個按鈕框應置中對齊")
+    t.assert_equal('cardTop - tabsHeight' in app_text and 'cardTop - tabsHeight' in index_text, True, "切換分頁應精確對齊至當頁最上方框並扣除置頂導覽列高度")
+
+    # 驗證需求 5: 置頂時按鈕下方間距增高至 22px，但維持原本靜態 26px 間距
+    t.assert_equal('padding: max(20px, calc(env(safe-area-inset-top, 0px) + 14px)) 0 22px;' in styles_text, True, "置頂導覽列按鈕下方留白應增高至 22px")
+    t.assert_equal('margin-bottom: 4px;' in styles_text, True, "靜態邊距微調為 4px，維持原本四個按鈕與下方框 26px 總間距不變")
+    t.assert_equal('padding: max(20px, calc(env(safe-area-inset-top, 0px) + 14px)) 0 22px;' in index_text, True, "index.html 導覽列按鈕下方留白應增高至 22px")
 
     print(f"✓ 恭喜！全數 {t.passes} 項領域業務與結構測試斷言通過！")
 

@@ -1132,7 +1132,7 @@ function loadEditor() {
         </div>
         <div id="tabGrading" class="tab-panel" style="display:none">
             <div class="card">
-                <div class="row" style="margin-bottom:0; flex-wrap:wrap">
+                <div class="row" style="margin-bottom:0; flex-wrap:wrap; justify-content:center; align-items:center;">
                     <button class="btn outline" id="globalMissingListBtn">未繳清單</button>
                     <button class="btn outline" id="globalUncorrectedListBtn">未訂正清單</button>
                     <button class="btn outline" id="globalUnsignedListBtn">未簽名清單</button>
@@ -1201,6 +1201,15 @@ function loadEditor() {
                     <button class="btn" id="addHolidayBtn">新增假日</button>
                 </div>
                 <div id="holidayList" class="chip-list"></div>
+                <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--line);">
+                    <label style="font-weight:bold; color:var(--text); margin-bottom:8px; display:block;">期中成績結算（清空未繳／未訂正／未簽名清單）</label>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <input type="date" id="midtermCutoffDateInp" class="txt-input" style="max-width:180px; margin:0; text-align:center;">
+                        <button class="btn small outline" id="saveMidtermCutoffBtn">執行期中結算清空</button>
+                        <button class="btn small outline" id="clearMidtermCutoffBtn" style="color:var(--muted); border-color:var(--line);">恢復顯示全部</button>
+                    </div>
+                    <p style="margin:6px 0 0; font-size:0.85em; color:var(--muted);">💡 結算後，該日期（含）之前的作業不會出現在未繳、未訂正與未簽名清單中；「補繳次數統計」不受影響，仍會永久保留。</p>
+                </div>
             </div>
             <div class="card">
                 <h2>學生管理</h2>
@@ -1212,11 +1221,20 @@ function loadEditor() {
             </div>
         </div>`;
 
-    // 頁籤切換
+    // 頁籤切換：切換分頁時，自動將該分頁最上方內容（白底框）對齊於固定置頂導覽列下方顯示
     $('adminArea').querySelectorAll('.tab-btn').forEach(btn => {
         btn.onclick = () => {
             $('adminArea').querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
             $('adminArea').querySelectorAll('.tab-panel').forEach(p => p.style.display = (p.id === btn.dataset.tab) ? 'block' : 'none');
+            const targetPanel = $(btn.dataset.tab);
+            if (targetPanel) {
+                const adminTabs = document.querySelector('.admin-tabs');
+                const tabsHeight = adminTabs ? adminTabs.offsetHeight : 0;
+                const targetCard = targetPanel.querySelector('.card') || targetPanel;
+                const cardTop = targetCard.getBoundingClientRect().top + window.scrollY;
+                const scrollDest = Math.max(0, cardTop - tabsHeight);
+                window.scrollTo({ top: scrollDest, behavior: 'instant' });
+            }
         };
     });
 

@@ -252,10 +252,10 @@
             top: 0;
             z-index: 100;
             background: var(--bg);
-            padding: max(20px, calc(env(safe-area-inset-top, 0px) + 14px)) 0 10px;
+            padding: max(20px, calc(env(safe-area-inset-top, 0px) + 14px)) 0 22px;
             display: flex;
             gap: 8px;
-            margin-bottom: 16px;
+            margin-bottom: 4px;
             flex-wrap: wrap;
         }
         .admin-tabs::before {
@@ -317,7 +317,8 @@
             }
             .admin-tabs {
                 padding-top: max(16px, calc(env(safe-area-inset-top, 0px) + 10px));
-                padding-bottom: 8px;
+                padding-bottom: 16px;
+                margin-bottom: 6px;
             }
             .admin-tabs::before {
                 margin-bottom: 14px;
@@ -443,7 +444,10 @@
         <div class="modal-content" style="max-width:560px; text-align:left">
             <p class="modal-title" id="missingListTitle" style="text-align:center">今日未繳作業名單</p>
             <div id="missingListBody" style="max-height:60vh; overflow-y:auto; margin-bottom:20px; font-size:1.05em; line-height:1.9"></div>
-            <div class="modal-actions"><button class="btn-ok" onclick="closeMissingList()">關閉</button></div>
+            <div class="modal-actions" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <button type="button" class="btn small outline" id="modalMidtermSettleBtn" style="color:#4e564c; border-color:#b4bab2;">期中成績結算（清空三項清單）</button>
+                <button class="btn-ok" onclick="closeMissingList()">關閉</button>
+            </div>
         </div>
     </div>
 
@@ -1526,6 +1530,7 @@
             extraPastAssignments = {}
         } = {}) {
             const students = sortBySeat((settings && settings.students) || []);
+            const cutoff = (settings && settings.midtermCutoffDate) ? String(settings.midtermCutoffDate).trim() : '';
             const allEntries = collectUnifiedAssignmentEntries({
                 settings,
                 records,
@@ -1533,7 +1538,11 @@
                 archiveDocsList,
                 archiveDocsMap,
                 extraPastAssignments
-            }).filter(e => !e.isActiveContact);
+            }).filter(e => {
+                if (e.isActiveContact) return false;
+                if (cutoff && e.isoDate && e.isoDate <= cutoff) return false;
+                return true;
+            });
 
             const formatDisplayName = entry => {
                 if (!entry.isActive && entry.dateLabel && !entry.name.includes(entry.dateLabel)) {
@@ -1549,7 +1558,7 @@
             allEntries.forEach(entry => {
                 const id = entry.assignmentId;
                 const archDoc = entry.archiveDoc;
-                const isContact = entry.name === '聯絡簿每日任務';
+                const isContact = entry.name === '聯絡簿每日任務' || entry.name.includes('聯絡簿') || entry.subjectName === '聯絡簿';
                 const displayName = formatDisplayName(entry);
 
                 const hasGrading = entry.useLive && (gradingRecords || []).some(g => g.assignmentId === id);
@@ -1604,7 +1613,6 @@
                         const status = deriveRecordStatus(liveRec, archRec ? archRec.status : '未繳');
                         const signStatus = deriveRecordSign(liveRec, archRec ? archRec.signStatus : '未簽名');
                         if (isContact) {
-                            if (status !== '已繳') return false;
                             return signStatus !== '已簽名';
                         }
                         const isExamOrTest = isExamAssignment(entry.name);
@@ -1675,8 +1683,11 @@
             };
 
             const isAllPurpleSubject = (sg) => {
-                const hasBlueOrRed = (sg.regularMakeup && sg.regularMakeup.length > 0) || (sg.regularMissing && sg.regularMissing.length > 0);
-                return !hasBlueOrRed;
+                const hasActive = (sg.regularMakeup && sg.regularMakeup.length > 0) ||
+                                  (sg.regularMissing && sg.regularMissing.length > 0) ||
+                                  (sg.signMissing && sg.signMissing.length > 0) ||
+                                  (sg.signMakeup && sg.signMakeup.length > 0);
+                return !hasActive;
             };
 
             const compareSubjectGroups = (a, b) => {
@@ -1710,6 +1721,8 @@
                 const regularMissing = [];
                 const leaveMakeup = [];
                 const leaveMissing = [];
+                const signMissing = [];
+                const signMakeup = [];
                 const subjectMap = new Map();
 
                 const getOrCreateSubjectGroup = (subjLabel) => {
@@ -1720,8 +1733,11 @@
                             regularMissing: [],
                             leaveMakeup: [],
                             leaveMissing: [],
+                            signMissing: [],
+                            signMakeup: [],
                             totalRegularCount: 0,
-                            totalLeaveCount: 0
+                            totalLeaveCount: 0,
+                            totalSignCount: 0
                         });
                     }
                     return subjectMap.get(subjLabel);
@@ -1736,9 +1752,14 @@
 
                     const liveRec = entry.useLive ? (records || []).find(r => r.studentId === s.id && r.assignmentId === id) : null;
                     const effStatus = deriveRecordStatus(liveRec, archRec);
+                    const effSign = deriveRecordSign(liveRec, archRec);
                     const effRemark = deriveRecordRemark(liveRec, archRec);
                     const leave = isRecordLeave(liveRec, archRec);
                     const makeup = isRecordMakeup(liveRec, archRec, effStatus);
+
+                    const isContact = entry.name === '聯絡簿每日任務' || entry.name.includes('聯絡簿') || entry.subjectName === '聯絡簿';
+                    const requiresSign = !!(entry.needsSign || entry.signOnly || isContact);
+                    const hasSignMakeup = MAKEUP_SIGN_SEGMENT_RE.test(effRemark) || (archRec && MAKEUP_SIGN_SEGMENT_RE.test(archRec.remark || '')) || (liveRec && MAKEUP_SIGN_SEGMENT_RE.test(liveRec.remark || ''));
 
                     const displayName = (!entry.isActive && entry.dateLabel && !entry.name.includes(entry.dateLabel))
                         ? `${entry.dateLabel} ${entry.name}`
@@ -1756,6 +1777,7 @@
                         subjectName: displaySubject,
                         displayName,
                         status: effStatus,
+                        signStatus: effSign,
                         remark: effRemark,
                         isLeave: leave,
                         isMakeup: makeup
@@ -1782,12 +1804,30 @@
                         regularMissing.push(detailItem);
                         sg.regularMissing.push(detailItem);
                     }
+
+                    // 統計簽名：未簽名、未補簽與已補簽（用綠色標籤標示）
+                    if (requiresSign && !leave) {
+                        if (effSign !== '已簽名') {
+                            const sg = getOrCreateSubjectGroup(displaySubject);
+                            sg.totalSignCount++;
+                            const signItem = { ...detailItem, status: effSign || '未簽名', isSign: true };
+                            signMissing.push(signItem);
+                            sg.signMissing.push(signItem);
+                        } else if (hasSignMakeup) {
+                            const sg = getOrCreateSubjectGroup(displaySubject);
+                            sg.totalSignCount++;
+                            const signItem = { ...detailItem, status: '已補簽', isSign: true };
+                            signMakeup.push(signItem);
+                            sg.signMakeup.push(signItem);
+                        }
+                    }
                 });
 
                 const subjectGroups = Array.from(subjectMap.values())
                     .sort(compareSubjectGroups);
                 const totalRegularCount = regularMakeup.length + regularMissing.length;
                 const totalLeaveCount = leaveMakeup.length + leaveMissing.length;
+                const totalSignCount = signMissing.length + signMakeup.length;
                 return {
                     studentId: s.id,
                     studentName: s.name,
@@ -1796,10 +1836,13 @@
                     regularMissing,
                     leaveMakeup,
                     leaveMissing,
+                    signMissing,
+                    signMakeup,
                     subjectGroups,
                     totalRegularCount,
                     totalLeaveCount,
-                    hasAnyRecord: (totalRegularCount + totalLeaveCount) > 0
+                    totalSignCount,
+                    hasAnyRecord: (totalRegularCount + totalLeaveCount + totalSignCount) > 0
                 };
             });
 
@@ -1827,6 +1870,12 @@
                     `已補 ${stItem.regularMakeup.length}`,
                     `未繳 ${stItem.regularMissing.length}`
                 ];
+                if (stItem.signMissing && stItem.signMissing.length > 0) {
+                    summaryParts.push(`未簽 ${stItem.signMissing.length}`);
+                }
+                if (stItem.signMakeup && stItem.signMakeup.length > 0) {
+                    summaryParts.push(`已補簽 ${stItem.signMakeup.length}`);
+                }
                 if (stItem.totalLeaveCount > 0) {
                     summaryParts.push(`請假 ${stItem.totalLeaveCount}（已補 ${stItem.leaveMakeup.length}／未繳 ${stItem.leaveMissing.length}）`);
                 }
@@ -1836,10 +1885,14 @@
                     const sgParts = [];
                     if (sg.regularMakeup.length > 0) sgParts.push(`已補 ${sg.regularMakeup.length}`);
                     if (sg.regularMissing.length > 0) sgParts.push(`未繳 ${sg.regularMissing.length}`);
+                    if (sg.signMissing && sg.signMissing.length > 0) sgParts.push(`未簽 ${sg.signMissing.length}`);
+                    if (sg.signMakeup && sg.signMakeup.length > 0) sgParts.push(`已補簽 ${sg.signMakeup.length}`);
                     if (sg.totalLeaveCount > 0) sgParts.push(`請假 ${sg.totalLeaveCount}（已補 ${sg.leaveMakeup.length}／未繳 ${sg.leaveMissing.length}）`);
                     detailLines.push(`  【${sg.subjectName}】${sgParts.join('｜')}`);
                     if (sg.regularMakeup.length) detailLines.push(`    ・已補：${sg.regularMakeup.map(x => x.displayName).join('、')}`);
                     if (sg.regularMissing.length) detailLines.push(`    ・未繳：${sg.regularMissing.map(x => x.displayName).join('、')}`);
+                    if (sg.signMissing && sg.signMissing.length) detailLines.push(`    ・未簽名：${sg.signMissing.map(x => x.displayName).join('、')}`);
+                    if (sg.signMakeup && sg.signMakeup.length) detailLines.push(`    ・已補簽：${sg.signMakeup.map(x => x.displayName).join('、')}`);
                     if (sg.leaveMakeup.length) detailLines.push(`    ・請假（已補）：${sg.leaveMakeup.map(x => x.displayName).join('、')}`);
                     if (sg.leaveMissing.length) detailLines.push(`    ・請假（未繳）：${sg.leaveMissing.map(x => x.displayName).join('、')}`);
                 });
@@ -3418,6 +3471,24 @@
                 else if(curTitle === '未簽名清單') renderGlobalPopupByType('unsigned');
             }
 
+            const modalMidtermSettleBtn = $('modalMidtermSettleBtn');
+            if (modalMidtermSettleBtn) {
+                modalMidtermSettleBtn.onclick = async () => {
+                    const confirmed = await window.askConfirm('確定要進行期中成績結算嗎？\n\n結算後，期中之前的「未繳清單」、「未訂正清單」、「未簽名清單」將全數清空，但「補繳次數統計」仍會完整保留全學期歷史紀錄。');
+                    if (!confirmed) return;
+                    resyncFromGlobal();
+                    const cutoffDate = todayISODate();
+                    st.midtermCutoffDate = cutoffDate;
+                    await saveSettings({ midtermCutoffDate: cutoffDate });
+                    const curTitle = $('missingListTitle') ? $('missingListTitle').textContent : '';
+                    if (curTitle === '未繳清單') renderGlobalPopupByType('missing');
+                    else if (curTitle === '未訂正清單') renderGlobalPopupByType('uncorrected');
+                    else if (curTitle === '未簽名清單') renderGlobalPopupByType('unsigned');
+                    else if (curTitle === '遺失作業清單') renderMissingLostList();
+                    window.showAlert(`已完成期中成績結算（以 ${cutoffDate} 為結算基準日）！\n期中之前的未繳、未訂正與未簽名清單已全數清空，補繳次數統計已完整保留。`);
+                };
+            }
+
             const thead = $('gradeThead');
             thead.innerHTML = '<tr><th>學生</th>' + assignments.map(a=>`<th>${a.name}</th>`).join('') + '</tr>';
             const tbody = $('gradeTbody');
@@ -3892,17 +3963,24 @@
                     const badges = [];
                     if (stItem.regularMakeup.length > 0) badges.push(`<span class="stats-pill makeup">已補 ${stItem.regularMakeup.length}</span>`);
                     if (stItem.regularMissing.length > 0) badges.push(`<span class="stats-pill missing">未繳 ${stItem.regularMissing.length}</span>`);
-                    if (stItem.totalRegularCount === 0 && stItem.totalLeaveCount === 0) badges.push(`<span class="stats-pill clean">無缺補交</span>`);
+                    if (stItem.signMissing && stItem.signMissing.length > 0) badges.push(`<span class="stats-pill sign" style="background:rgba(46,125,50,0.14); color:#2e7d32; border:1px solid #2e7d32;">未簽 ${stItem.signMissing.length}</span>`);
+                    if (stItem.signMakeup && stItem.signMakeup.length > 0) badges.push(`<span class="stats-pill sign" style="background:rgba(46,125,50,0.14); color:#2e7d32; border:1px solid #2e7d32;">已補簽 ${stItem.signMakeup.length}</span>`);
+                    if (stItem.totalRegularCount === 0 && stItem.totalLeaveCount === 0 && (stItem.totalSignCount || 0) === 0) badges.push(`<span class="stats-pill clean">無缺補交</span>`);
                     if (stItem.totalLeaveCount > 0) badges.push(`<span class="stats-pill leave">請假 ${stItem.totalLeaveCount}（已補 ${stItem.leaveMakeup.length}／未繳 ${stItem.leaveMissing.length}）</span>`);
 
                     const detailsHtml = stItem.hasAnyRecord ? (stItem.subjectGroups || []).map(sg => {
                         const sgBadges = [];
                         if (sg.regularMakeup.length > 0) sgBadges.push(`<span class="stats-pill makeup" style="font-size:0.76em; padding:1px 8px;">已補 ${sg.regularMakeup.length}</span>`);
                         if (sg.regularMissing.length > 0) sgBadges.push(`<span class="stats-pill missing" style="font-size:0.76em; padding:1px 8px;">未繳 ${sg.regularMissing.length}</span>`);
+                        if (sg.signMissing && sg.signMissing.length > 0) sgBadges.push(`<span class="stats-pill sign" style="font-size:0.76em; padding:1px 8px; background:rgba(46,125,50,0.14); color:#2e7d32; border:1px solid #2e7d32;">未簽 ${sg.signMissing.length}</span>`);
+                        if (sg.signMakeup && sg.signMakeup.length > 0) sgBadges.push(`<span class="stats-pill sign" style="font-size:0.76em; padding:1px 8px; background:rgba(46,125,50,0.14); color:#2e7d32; border:1px solid #2e7d32;">已補簽 ${sg.signMakeup.length}</span>`);
                         if (sg.totalLeaveCount > 0) sgBadges.push(`<span class="stats-pill leave" style="font-size:0.76em; padding:1px 8px;">請假 ${sg.totalLeaveCount}（已補 ${sg.leaveMakeup.length}／未繳 ${sg.leaveMissing.length}）</span>`);
+                        const greenTagStyle = 'background:rgba(46,125,50,0.14); color:#2e7d32; border:1px solid #2e7d32;';
                         const sgRows = [
                             ...sg.regularMakeup.map(it => renderDetailRow(stItem.studentId, it, '已補', 'background:rgba(47,111,176,0.14);color:#2f6fb0;border:1px solid #2f6fb0;')),
                             ...sg.regularMissing.map(it => renderDetailRow(stItem.studentId, it, '未繳', 'background:rgba(196,103,79,0.14);color:var(--danger);border:1px solid var(--danger);')),
+                            ...(sg.signMissing || []).map(it => renderDetailRow(stItem.studentId, it, '未簽名', greenTagStyle)),
+                            ...(sg.signMakeup || []).map(it => renderDetailRow(stItem.studentId, it, '已補簽', greenTagStyle)),
                             ...sg.leaveMakeup.map(it => renderDetailRow(stItem.studentId, it, '請假・已補', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;')),
                             ...sg.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;'))
                         ].join('');
@@ -4307,7 +4385,7 @@
                 </div>
                 <div id="tabGrading" class="tab-panel" style="display:none">
                     <div class="card">
-                        <div class="row" style="margin-bottom:14px; flex-wrap:wrap">
+                        <div class="row" style="margin-bottom:0; flex-wrap:wrap; justify-content:center; align-items:center;">
                             <button class="btn outline" id="globalMissingListBtn">未繳清單</button>
                             <button class="btn outline" id="globalUncorrectedListBtn">未訂正清單</button>
                             <button class="btn outline" id="globalUnsignedListBtn">未簽名清單</button>
@@ -4376,6 +4454,15 @@
                             <button class="btn" id="addHolidayBtn">新增假日</button>
                         </div>
                         <div id="holidayList" class="chip-list"></div>
+                        <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--line);">
+                            <label style="font-weight:bold; color:var(--text); margin-bottom:8px; display:block;">期中成績結算（清空未繳／未訂正／未簽名清單）</label>
+                            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                <input type="date" id="midtermCutoffDateInp" class="txt-input" style="max-width:180px; margin:0; text-align:center;">
+                                <button class="btn small outline" id="saveMidtermCutoffBtn">執行期中結算清空</button>
+                                <button class="btn small outline" id="clearMidtermCutoffBtn" style="color:var(--muted); border-color:var(--line);">恢復顯示全部</button>
+                            </div>
+                            <p style="margin:6px 0 0; font-size:0.85em; color:var(--muted);">💡 結算後，該日期（含）之前的作業不會出現在未繳、未訂正與未簽名清單中；「補繳次數統計」不受影響，仍會永久保留。</p>
+                        </div>
                     </div>
                     <div class="card">
                         <h2>學生管理</h2>
@@ -4424,9 +4511,36 @@
             };
             renderHolidayList();
 
+            const midtermCutoffInp = $('midtermCutoffDateInp');
+            if (midtermCutoffInp) midtermCutoffInp.value = st.midtermCutoffDate || '';
+            $('saveMidtermCutoffBtn').onclick = async () => {
+                resyncFromGlobal();
+                const val = (midtermCutoffInp && midtermCutoffInp.value) ? midtermCutoffInp.value : todayISODate();
+                st.midtermCutoffDate = val;
+                if (midtermCutoffInp) midtermCutoffInp.value = val;
+                await saveSettings({ midtermCutoffDate: val });
+                window.showAlert(`已完成期中結算（基準日：${val}）！\n期中之前的未繳、未訂正與未簽名清單已全數清空，補繳次數統計已完整保留。`);
+            };
+            $('clearMidtermCutoffBtn').onclick = async () => {
+                resyncFromGlobal();
+                st.midtermCutoffDate = '';
+                if (midtermCutoffInp) midtermCutoffInp.value = '';
+                await saveSettings({ midtermCutoffDate: '' });
+                window.showAlert('已清除期中結算日，恢復顯示全部作業清單。');
+            };
+
             $('adminArea').querySelectorAll('.tab-btn').forEach(btn => btn.onclick = () => {
                 $('adminArea').querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b===btn));
                 $('adminArea').querySelectorAll('.tab-panel').forEach(p=>p.style.display = (p.id===btn.dataset.tab) ? 'block' : 'none');
+                const targetPanel = $(btn.dataset.tab);
+                if (targetPanel) {
+                    const adminTabs = document.querySelector('.admin-tabs');
+                    const tabsHeight = adminTabs ? adminTabs.offsetHeight : 0;
+                    const targetCard = targetPanel.querySelector('.card') || targetPanel;
+                    const cardTop = targetCard.getBoundingClientRect().top + window.scrollY;
+                    const scrollDest = Math.max(0, cardTop - tabsHeight);
+                    window.scrollTo({ top: scrollDest, behavior: 'instant' });
+                }
             });
 
             $('quickAddAssignmentBtn').onclick = () => {

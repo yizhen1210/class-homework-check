@@ -6,7 +6,8 @@ import {
     sortBySeat,
     pulloutLabel,
     nextPullout,
-    escapeHtml
+    escapeHtml,
+    todayISODate
 } from '../domain/rules.js';
 
 import { saveSettings } from '../services/firebase.js';
@@ -73,6 +74,32 @@ export function renderStudentsTab(settings, isAdmin, onSettingsChange) {
         };
     }
     renderHolidayList();
+
+    // 期中成績結算設定
+    const midtermCutoffInp = $('midtermCutoffDateInp');
+    const saveMidtermCutoffBtn = $('saveMidtermCutoffBtn');
+    const clearMidtermCutoffBtn = $('clearMidtermCutoffBtn');
+
+    if (midtermCutoffInp) midtermCutoffInp.value = st.midtermCutoffDate || '';
+    if (saveMidtermCutoffBtn) {
+        saveMidtermCutoffBtn.onclick = async () => {
+            const val = (midtermCutoffInp && midtermCutoffInp.value) ? midtermCutoffInp.value : todayISODate();
+            st.midtermCutoffDate = val;
+            if (midtermCutoffInp) midtermCutoffInp.value = val;
+            await saveSettings({ midtermCutoffDate: val }, isAdmin);
+            if (onSettingsChange) onSettingsChange();
+            showAlert(`已完成期中結算（基準日：${val}）！\n期中之前的未繳、未訂正與未簽名清單已全數清空，補繳次數統計已完整保留。`);
+        };
+    }
+    if (clearMidtermCutoffBtn) {
+        clearMidtermCutoffBtn.onclick = async () => {
+            st.midtermCutoffDate = '';
+            if (midtermCutoffInp) midtermCutoffInp.value = '';
+            await saveSettings({ midtermCutoffDate: '' }, isAdmin);
+            if (onSettingsChange) onSettingsChange();
+            showAlert('已清除期中結算日，恢復顯示全部作業清單。');
+        };
+    }
 
     // 2. 組別與學生清單
     function renderGroups() {

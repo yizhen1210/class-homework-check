@@ -852,6 +852,7 @@ export function computeGlobalPopupLists({
     extraPastAssignments = {}
 } = {}) {
     const students = sortBySeat((settings && settings.students) || []);
+    const cutoff = (settings && settings.midtermCutoffDate) ? String(settings.midtermCutoffDate).trim() : '';
     const allEntries = collectUnifiedAssignmentEntries({
         settings,
         records,
@@ -859,7 +860,11 @@ export function computeGlobalPopupLists({
         archiveDocsList,
         archiveDocsMap,
         extraPastAssignments
-    }).filter(e => !e.isActiveContact); // 今日尚未封存的聯絡簿在聯絡簿分頁即時處理；封存後的聯絡簿全部納入
+    }).filter(e => {
+        if (e.isActiveContact) return false; // 今日尚未封存的聯絡簿在聯絡簿分頁即時處理；封存後的聯絡簿全部納入
+        if (cutoff && e.isoDate && e.isoDate <= cutoff) return false;
+        return true;
+    });
 
     const formatDisplayName = entry => {
         if (!entry.isActive && entry.dateLabel && !entry.name.includes(entry.dateLabel)) {
@@ -875,7 +880,7 @@ export function computeGlobalPopupLists({
     allEntries.forEach(entry => {
         const id = entry.assignmentId;
         const archDoc = entry.archiveDoc;
-        const isContact = entry.name === '聯絡簿每日任務';
+        const isContact = entry.name === '聯絡簿每日任務' || entry.name.includes('聯絡簿') || entry.subjectName === '聯絡簿';
         const displayName = formatDisplayName(entry);
 
         const hasGrading = entry.useLive && (gradingRecords || []).some(g => g.assignmentId === id);
@@ -940,7 +945,6 @@ export function computeGlobalPopupLists({
                 const status = deriveRecordStatus(liveRec, archRec ? archRec.status : '未繳');
                 const signStatus = deriveRecordSign(liveRec, archRec ? archRec.signStatus : '未簽名');
                 if (isContact) {
-                    if (status !== '已繳') return false;
                     return signStatus !== '已簽名';
                 }
                 const isExamOrTest = isExamAssignment(entry.name);
@@ -1019,8 +1023,11 @@ export function computeMakeupAndLeaveStats({
     };
 
     const isAllPurpleSubject = (sg) => {
-        const hasBlueOrRed = (sg.regularMakeup && sg.regularMakeup.length > 0) || (sg.regularMissing && sg.regularMissing.length > 0);
-        return !hasBlueOrRed;
+        const hasActive = (sg.regularMakeup && sg.regularMakeup.length > 0) ||
+                          (sg.regularMissing && sg.regularMissing.length > 0) ||
+                          (sg.signMissing && sg.signMissing.length > 0) ||
+                          (sg.signMakeup && sg.signMakeup.length > 0);
+        return !hasActive;
     };
 
     const compareSubjectGroups = (a, b) => {
@@ -1056,6 +1063,8 @@ export function computeMakeupAndLeaveStats({
         const regularMissing = [];
         const leaveMakeup = [];
         const leaveMissing = [];
+        const signMissing = [];
+        const signMakeup = [];
         const subjectMap = new Map();
 
         const getOrCreateSubjectGroup = (subjLabel) => {
@@ -1066,8 +1075,11 @@ export function computeMakeupAndLeaveStats({
                     regularMissing: [],
                     leaveMakeup: [],
                     leaveMissing: [],
+                    signMissing: [],
+                    signMakeup: [],
                     totalRegularCount: 0,
-                    totalLeaveCount: 0
+                    totalLeaveCount: 0,
+                    totalSignCount: 0
                 });
             }
             return subjectMap.get(subjLabel);
@@ -1082,9 +1094,14 @@ export function computeMakeupAndLeaveStats({
 
             const liveRec = entry.useLive ? (records || []).find(r => r.studentId === s.id && r.assignmentId === id) : null;
             const effStatus = deriveRecordStatus(liveRec, archRec);
+            const effSign = deriveRecordSign(liveRec, archRec);
             const effRemark = deriveRecordRemark(liveRec, archRec);
             const leave = isRecordLeave(liveRec, archRec);
             const makeup = isRecordMakeup(liveRec, archRec, effStatus);
+
+            const isContact = entry.name === '聯絡簿每日任務' || entry.name.includes('聯絡簿') || entry.subjectName === '聯絡簿';
+            const requiresSign = !!(entry.needsSign || entry.signOnly || isContact);
+            const hasSignMakeup = MAKEUP_SIGN_SEGMENT_RE.test(effRemark) || (archRec && MAKEUP_SIGN_SEGMENT_RE.test(archRec.remark || '')) || (liveRec && MAKEUP_SIGN_SEGMENT_RE.test(liveRec.remark || ''));
 
             const displayName = (!entry.isActive && entry.dateLabel && !entry.name.includes(entry.dateLabel))
                 ? `${entry.dateLabel} ${entry.name}`
@@ -1102,6 +1119,7 @@ export function computeMakeupAndLeaveStats({
                 subjectName: displaySubject,
                 displayName,
                 status: effStatus,
+                signStatus: effSign,
                 remark: effRemark,
                 isLeave: leave,
                 isMakeup: makeup
@@ -1128,12 +1146,30 @@ export function computeMakeupAndLeaveStats({
                 regularMissing.push(detailItem);
                 sg.regularMissing.push(detailItem);
             }
+
+            // 統計簽名：未簽名、未補簽與已補簽（用綠色標籤標示）
+            if (requiresSign && !leave) {
+                if (effSign !== '已簽名') {
+                    const sg = getOrCreateSubjectGroup(displaySubject);
+                    sg.totalSignCount++;
+                    const signItem = { ...detailItem, status: effSign || '未簽名', isSign: true };
+                    signMissing.push(signItem);
+                    sg.signMissing.push(signItem);
+                } else if (hasSignMakeup) {
+                    const sg = getOrCreateSubjectGroup(displaySubject);
+                    sg.totalSignCount++;
+                    const signItem = { ...detailItem, status: '已補簽', isSign: true };
+                    signMakeup.push(signItem);
+                    sg.signMakeup.push(signItem);
+                }
+            }
         });
 
         const subjectGroups = Array.from(subjectMap.values())
             .sort(compareSubjectGroups);
         const totalRegularCount = regularMakeup.length + regularMissing.length;
         const totalLeaveCount = leaveMakeup.length + leaveMissing.length;
+        const totalSignCount = signMissing.length + signMakeup.length;
 
         return {
             studentId: s.id,
@@ -1143,10 +1179,13 @@ export function computeMakeupAndLeaveStats({
             regularMissing,
             leaveMakeup,
             leaveMissing,
+            signMissing,
+            signMakeup,
             subjectGroups,
             totalRegularCount,
             totalLeaveCount,
-            hasAnyRecord: (totalRegularCount + totalLeaveCount) > 0
+            totalSignCount,
+            hasAnyRecord: (totalRegularCount + totalLeaveCount + totalSignCount) > 0
         };
     });
 
@@ -1182,6 +1221,12 @@ export function formatMakeupAndLeaveReport(statsResult, { className = '', startD
             `已補 ${stItem.regularMakeup.length}`,
             `未繳 ${stItem.regularMissing.length}`
         ];
+        if (stItem.signMissing && stItem.signMissing.length > 0) {
+            summaryParts.push(`未簽 ${stItem.signMissing.length}`);
+        }
+        if (stItem.signMakeup && stItem.signMakeup.length > 0) {
+            summaryParts.push(`已補簽 ${stItem.signMakeup.length}`);
+        }
         if (stItem.totalLeaveCount > 0) {
             summaryParts.push(`請假 ${stItem.totalLeaveCount}（已補 ${stItem.leaveMakeup.length}／未繳 ${stItem.leaveMissing.length}）`);
         }
@@ -1191,6 +1236,8 @@ export function formatMakeupAndLeaveReport(statsResult, { className = '', startD
             const sgParts = [];
             if (sg.regularMakeup.length > 0) sgParts.push(`已補 ${sg.regularMakeup.length}`);
             if (sg.regularMissing.length > 0) sgParts.push(`未繳 ${sg.regularMissing.length}`);
+            if (sg.signMissing && sg.signMissing.length > 0) sgParts.push(`未簽 ${sg.signMissing.length}`);
+            if (sg.signMakeup && sg.signMakeup.length > 0) sgParts.push(`已補簽 ${sg.signMakeup.length}`);
             if (sg.totalLeaveCount > 0) sgParts.push(`請假 ${sg.totalLeaveCount}（已補 ${sg.leaveMakeup.length}／未繳 ${sg.leaveMissing.length}）`);
             detailLines.push(`  【${sg.subjectName}】${sgParts.join('｜')}`);
             if (sg.regularMakeup.length) {
@@ -1198,6 +1245,12 @@ export function formatMakeupAndLeaveReport(statsResult, { className = '', startD
             }
             if (sg.regularMissing.length) {
                 detailLines.push(`    ・未繳：${sg.regularMissing.map(x => x.displayName).join('、')}`);
+            }
+            if (sg.signMissing && sg.signMissing.length) {
+                detailLines.push(`    ・未簽名：${sg.signMissing.map(x => x.displayName).join('、')}`);
+            }
+            if (sg.signMakeup && sg.signMakeup.length) {
+                detailLines.push(`    ・已補簽：${sg.signMakeup.map(x => x.displayName).join('、')}`);
             }
             if (sg.leaveMakeup.length) {
                 detailLines.push(`    ・請假（已補）：${sg.leaveMakeup.map(x => x.displayName).join('、')}`);
