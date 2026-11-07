@@ -62,6 +62,7 @@ body:not(.ready) [data-gated] { visibility: hidden; }
 .btn.btn-stats:hover { background: #deded7; border-color: #9fa69d; color: #384036; }
 .btn.btn-leave { border-color: #d5c38d; background: #fbf7ee; color: #5e4a1a; }
 .btn.btn-leave:hover { background: #f4ecd6; border-color: #bfa96d; color: #4b3b13; }
+#clearMidtermCutoffBtn:hover { background: #717971 !important; border-color: #717971 !important; color: #ffffff !important; }
 
 .admin-only.hidden { display: none !important; }
 

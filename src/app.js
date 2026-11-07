@@ -1050,7 +1050,7 @@ function loadEditor() {
         </div>
         <div id="tabRecords" class="tab-panel">
             <div class="card">
-                <div class="row" style="flex-wrap:wrap">
+                <div class="row" style="flex-wrap:wrap; align-items:center;">
                     <div class="subject-select-group">
                         <select id="quickAssignmentSubject" style="max-width:160px"></select>
                         <button type="button" id="renameSubjectBtn" class="icon-btn" title="修改選取科目的名稱" style="width:26px;height:26px">

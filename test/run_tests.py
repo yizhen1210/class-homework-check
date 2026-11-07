@@ -753,6 +753,7 @@ def run_tests():
     app_text = (root / 'src' / 'app.js').read_text(encoding='utf-8')
     records_text = (root / 'src' / 'ui' / 'recordsTab.js').read_text(encoding='utf-8')
     students_text = (root / 'src' / 'ui' / 'studentsTab.js').read_text(encoding='utf-8')
+    contact_text = (root / 'src' / 'ui' / 'contactTab.js').read_text(encoding='utf-8')
     styles_text = (root / 'src' / 'styles.css').read_text(encoding='utf-8')
 
     required_symbols = [
@@ -853,9 +854,27 @@ def run_tests():
     # 驗證需求 2: 聯絡簿未簽封存後納入未簽名清單
     t.assert_equal("if (isContact) {\n                    return signStatus !== '已簽名';" in rules_text or "if (isContact) {\n                    if (status !== '已繳') return false;\n" not in rules_text, True, "rules.js 封存聯絡簿未簽應納入未簽名清單")
 
-    # 驗證需求 3: 期中結算清空三項清單，補繳次數統計保留
+    # 驗證需求 3: 期中結算清空三項清單，補繳次數統計保留；所有統計數量清單按鈕拿掉結算按鈕，只保留學生管理頁
     t.assert_equal('midtermCutoffDate' in rules_text and 'midtermCutoffDate' in index_text, True, "應支援期中結算基準日篩選")
-    t.assert_equal('modalMidtermSettleBtn' in index_text and 'saveMidtermCutoffBtn' in students_text, True, "彈窗與學期設定應提供期中結算清空按鈕")
+    t.assert_equal('modalMidtermSettleBtn' not in index_text and 'modalMidtermSettleBtn' not in grading_text, True, "統計清單彈窗應拿掉期中結算按鈕")
+    t.assert_equal('saveMidtermCutoffBtn' in students_text and 'saveMidtermCutoffBtn' in index_text, True, "學生管理頁應保留期中成績結算設定按鈕")
+
+    # 驗證最新需求 2: 新增作業框垂直置中 & 未繳/未簽名彈窗標題為清單
+    t.assert_equal('style="flex-wrap:wrap; align-items:center;"' in app_text and 'style="flex-wrap:wrap; align-items:center;"' in index_text, True, "查看繳交紀錄頁新增作業框元件應垂直置中")
+    t.assert_equal("textContent = '未繳清單'" in records_text and "textContent = '未繳清單'" in index_text, True, "未繳彈窗標題應為未繳清單")
+    t.assert_equal("textContent = '未簽名清單'" in records_text and "textContent = '未簽名清單'" in index_text, True, "未簽名彈窗標題應為未簽名清單")
+
+    # 驗證最新需求 3: 聯絡簿頁上方四個按鈕彈窗標題把詳情改成清單
+    t.assert_equal("`聯絡簿${label}清單`" in contact_text and "`聯絡簿${label}清單`" in index_text, True, "聯絡簿上方統計彈窗標題應為清單")
+
+    # 驗證最新需求 4: 期中／期末補繳統計彈窗未簽橘黃色、明細只顯示未簽、科目排序國數聯暑、標籤排序未繳/已補/未簽/已簽/請假
+    t.assert_equal("color:#b86b00" in grading_text and "color:#b86b00" in index_text, True, "未簽標籤應以橘黃色標示")
+    t.assert_equal("renderDetailRow(stItem.studentId, it, '未簽'," in grading_text and "renderDetailRow(stItem.studentId, it, '未簽'," in index_text, True, "明細中應只顯示未簽而非未簽名")
+    t.assert_equal("n.includes('暑作') || n.includes('暑假')" in rules_text and "n.includes('暑作') || n.includes('暑假')" in index_text, True, "科目排序應支援國語、數學、聯絡簿、暑作")
+    t.assert_equal("sg.regularMissing.map" in grading_text and "sg.regularMissing.map" in index_text, True, "明細列標籤排序應以未繳優先於已補")
+
+    # 驗證最新需求 5: 學生管理頁恢復顯示全部按鈕 hover 灰色背景與白色文字
+    t.assert_equal('#clearMidtermCutoffBtn:hover { background: #717971 !important;' in styles_text and '#clearMidtermCutoffBtn:hover { background: #717971 !important;' in index_text, True, "恢復顯示全部按鈕 hover 應為灰色背景與白色文字")
 
     # 驗證需求 4: 切換分頁從頂部白底框顯示，訂正5個按鈕置中
     t.assert_equal('justify-content:center' in app_text and 'justify-content:center' in index_text, True, "訂正與加點5個按鈕框應置中對齊")

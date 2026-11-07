@@ -1013,11 +1013,12 @@ export function computeMakeupAndLeaveStats({
         const n = String(name || '').trim();
         if (n.includes('國')) return 1;
         if (n.includes('數')) return 2;
+        if (n === '聯絡簿' || n.includes('聯絡簿')) return 3;
+        if (n.includes('暑作') || n.includes('暑假')) return 4;
         if (configuredSubjectOrder.has(n)) return 10 + configuredSubjectOrder.get(n);
         if (n.includes('社')) return 40;
         if (n.includes('自')) return 50;
         if (n.includes('英')) return 60;
-        if (n === '聯絡簿' || n.includes('聯絡簿')) return 100;
         if (n === '未分類' || n === '其他') return 200;
         return 80;
     };
@@ -1218,8 +1219,8 @@ export function formatMakeupAndLeaveReport(statsResult, { className = '', startD
         const hasSeatPrefix = stItem.seat != null && stItem.seat !== '' && !sName.startsWith(String(stItem.seat));
         const prefix = hasSeatPrefix ? `${stItem.seat}號 ${sName}` : sName;
         const summaryParts = [
-            `已補 ${stItem.regularMakeup.length}`,
-            `未繳 ${stItem.regularMissing.length}`
+            `未繳 ${stItem.regularMissing.length}`,
+            `已補 ${stItem.regularMakeup.length}`
         ];
         if (stItem.signMissing && stItem.signMissing.length > 0) {
             summaryParts.push(`未簽 ${stItem.signMissing.length}`);
@@ -1234,20 +1235,20 @@ export function formatMakeupAndLeaveReport(statsResult, { className = '', startD
         const groups = Array.isArray(stItem.subjectGroups) ? stItem.subjectGroups : [];
         groups.forEach(sg => {
             const sgParts = [];
-            if (sg.regularMakeup.length > 0) sgParts.push(`已補 ${sg.regularMakeup.length}`);
             if (sg.regularMissing.length > 0) sgParts.push(`未繳 ${sg.regularMissing.length}`);
+            if (sg.regularMakeup.length > 0) sgParts.push(`已補 ${sg.regularMakeup.length}`);
             if (sg.signMissing && sg.signMissing.length > 0) sgParts.push(`未簽 ${sg.signMissing.length}`);
             if (sg.signMakeup && sg.signMakeup.length > 0) sgParts.push(`已補簽 ${sg.signMakeup.length}`);
             if (sg.totalLeaveCount > 0) sgParts.push(`請假 ${sg.totalLeaveCount}（已補 ${sg.leaveMakeup.length}／未繳 ${sg.leaveMissing.length}）`);
             detailLines.push(`  【${sg.subjectName}】${sgParts.join('｜')}`);
-            if (sg.regularMakeup.length) {
-                detailLines.push(`    ・已補：${sg.regularMakeup.map(x => x.displayName).join('、')}`);
-            }
             if (sg.regularMissing.length) {
                 detailLines.push(`    ・未繳：${sg.regularMissing.map(x => x.displayName).join('、')}`);
             }
+            if (sg.regularMakeup.length) {
+                detailLines.push(`    ・已補：${sg.regularMakeup.map(x => x.displayName).join('、')}`);
+            }
             if (sg.signMissing && sg.signMissing.length) {
-                detailLines.push(`    ・未簽名：${sg.signMissing.map(x => x.displayName).join('、')}`);
+                detailLines.push(`    ・未簽：${sg.signMissing.map(x => x.displayName).join('、')}`);
             }
             if (sg.signMakeup && sg.signMakeup.length) {
                 detailLines.push(`    ・已補簽：${sg.signMakeup.map(x => x.displayName).join('、')}`);

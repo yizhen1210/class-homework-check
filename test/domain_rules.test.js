@@ -453,7 +453,7 @@ export function runAllDomainTests(assert) {
 
         const report = formatMakeupAndLeaveReport(stats, { className: '608', startDate: '2026-09-01', endDate: '2026-11-05' });
         assert.strictEqual(report.includes('期中／期末 作業補繳與未繳統計'), true);
-        assert.strictEqual(report.includes('已補 1｜未繳 1'), true);
+        assert.strictEqual(report.includes('未繳 1｜已補 1'), true);
         assert.strictEqual(report.includes('請假 2（已補 1／未繳 1）'), true);
         assert.strictEqual(report.includes('【國語】未繳 1'), true);
         assert.strictEqual(report.includes('【數學】已補 1'), true);

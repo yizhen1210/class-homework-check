@@ -913,23 +913,6 @@ export function renderGradingTab(gradingRecords, records, settings, state = {}) 
         else if (curTitle === '未簽名清單') renderGlobalPopupByType('unsigned');
     }
 
-    const modalMidtermSettleBtn = $('modalMidtermSettleBtn');
-    if (modalMidtermSettleBtn) {
-        modalMidtermSettleBtn.onclick = async () => {
-            const confirmed = await askConfirm('確定要進行期中成績結算嗎？\n\n結算後，期中之前的「未繳清單」、「未訂正清單」、「未簽名清單」將全數清空，但「補繳次數統計」仍會完整保留全學期歷史紀錄。');
-            if (!confirmed) return;
-            const cutoffDate = todayISODate();
-            st.midtermCutoffDate = cutoffDate;
-            await saveSettings({ midtermCutoffDate: cutoffDate }, isAdmin);
-            const curTitle = $('missingListTitle') ? $('missingListTitle').textContent : '';
-            if (curTitle === '未繳清單') renderGlobalPopupByType('missing');
-            else if (curTitle === '未訂正清單') renderGlobalPopupByType('uncorrected');
-            else if (curTitle === '未簽名清單') renderGlobalPopupByType('unsigned');
-            else if (curTitle === '遺失作業清單') renderMissingLostList();
-            showAlert(`已完成期中成績結算（以 ${cutoffDate} 為結算基準日）！\n期中之前的未繳、未訂正與未簽名清單已全數清空，補繳次數統計已完整保留。`);
-        };
-    }
-
     // 4. 今日作業批改矩陣 (座號模式 / 小組模式)
     const thead = $('gradeThead');
     if (thead) {
@@ -1418,14 +1401,14 @@ export function openMakeupStatsModal({ settings, records, gradingRecords, state 
             const isExp = makeupStatsExpanded.has(stItem.studentId);
 
             const badges = [];
-            if (stItem.regularMakeup.length > 0) {
-                badges.push(`<span class="stats-pill makeup">已補 ${stItem.regularMakeup.length}</span>`);
-            }
             if (stItem.regularMissing.length > 0) {
                 badges.push(`<span class="stats-pill missing">未繳 ${stItem.regularMissing.length}</span>`);
             }
+            if (stItem.regularMakeup.length > 0) {
+                badges.push(`<span class="stats-pill makeup">已補 ${stItem.regularMakeup.length}</span>`);
+            }
             if (stItem.signMissing && stItem.signMissing.length > 0) {
-                badges.push(`<span class="stats-pill sign" style="background:rgba(46,125,50,0.14); color:#2e7d32; border:1px solid #2e7d32;">未簽 ${stItem.signMissing.length}</span>`);
+                badges.push(`<span class="stats-pill sign-missing" style="background:rgba(213,133,18,0.15); color:#b86b00; border:1px solid #d58512;">未簽 ${stItem.signMissing.length}</span>`);
             }
             if (stItem.signMakeup && stItem.signMakeup.length > 0) {
                 badges.push(`<span class="stats-pill sign" style="background:rgba(46,125,50,0.14); color:#2e7d32; border:1px solid #2e7d32;">已補簽 ${stItem.signMakeup.length}</span>`);
@@ -1439,16 +1422,17 @@ export function openMakeupStatsModal({ settings, records, gradingRecords, state 
 
             const detailsHtml = stItem.hasAnyRecord ? (stItem.subjectGroups || []).map(sg => {
                 const sgBadges = [];
-                if (sg.regularMakeup.length > 0) sgBadges.push(`<span class="stats-pill makeup" style="font-size:0.76em; padding:1px 8px;">已補 ${sg.regularMakeup.length}</span>`);
                 if (sg.regularMissing.length > 0) sgBadges.push(`<span class="stats-pill missing" style="font-size:0.76em; padding:1px 8px;">未繳 ${sg.regularMissing.length}</span>`);
-                if (sg.signMissing && sg.signMissing.length > 0) sgBadges.push(`<span class="stats-pill sign" style="font-size:0.76em; padding:1px 8px; background:rgba(46,125,50,0.14); color:#2e7d32; border:1px solid #2e7d32;">未簽 ${sg.signMissing.length}</span>`);
+                if (sg.regularMakeup.length > 0) sgBadges.push(`<span class="stats-pill makeup" style="font-size:0.76em; padding:1px 8px;">已補 ${sg.regularMakeup.length}</span>`);
+                if (sg.signMissing && sg.signMissing.length > 0) sgBadges.push(`<span class="stats-pill sign-missing" style="font-size:0.76em; padding:1px 8px; background:rgba(213,133,18,0.15); color:#b86b00; border:1px solid #d58512;">未簽 ${sg.signMissing.length}</span>`);
                 if (sg.signMakeup && sg.signMakeup.length > 0) sgBadges.push(`<span class="stats-pill sign" style="font-size:0.76em; padding:1px 8px; background:rgba(46,125,50,0.14); color:#2e7d32; border:1px solid #2e7d32;">已補簽 ${sg.signMakeup.length}</span>`);
                 if (sg.totalLeaveCount > 0) sgBadges.push(`<span class="stats-pill leave" style="font-size:0.76em; padding:1px 8px;">請假 ${sg.totalLeaveCount}（已補 ${sg.leaveMakeup.length}／未繳 ${sg.leaveMissing.length}）</span>`);
+                const orangeTagStyle = 'background:rgba(213,133,18,0.15); color:#b86b00; border:1px solid #d58512;';
                 const greenTagStyle = 'background:rgba(46,125,50,0.14); color:#2e7d32; border:1px solid #2e7d32;';
                 const sgRows = [
-                    ...sg.regularMakeup.map(it => renderDetailRow(stItem.studentId, it, '已補', 'background:rgba(47,111,176,0.14);color:#2f6fb0;border:1px solid #2f6fb0;')),
                     ...sg.regularMissing.map(it => renderDetailRow(stItem.studentId, it, '未繳', 'background:rgba(196,103,79,0.14);color:var(--danger);border:1px solid var(--danger);')),
-                    ...(sg.signMissing || []).map(it => renderDetailRow(stItem.studentId, it, '未簽名', greenTagStyle)),
+                    ...sg.regularMakeup.map(it => renderDetailRow(stItem.studentId, it, '已補', 'background:rgba(47,111,176,0.14);color:#2f6fb0;border:1px solid #2f6fb0;')),
+                    ...(sg.signMissing || []).map(it => renderDetailRow(stItem.studentId, it, '未簽', orangeTagStyle)),
                     ...(sg.signMakeup || []).map(it => renderDetailRow(stItem.studentId, it, '已補簽', greenTagStyle)),
                     ...sg.leaveMakeup.map(it => renderDetailRow(stItem.studentId, it, '請假・已補', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;')),
                     ...sg.leaveMissing.map(it => renderDetailRow(stItem.studentId, it, '請假・未繳', 'background:rgba(123,94,167,0.15);color:#7b5ea7;border:1px solid #7b5ea7;'))

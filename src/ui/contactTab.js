@@ -124,7 +124,7 @@ export function renderContactTab(records, gradingRecords, settings, isAdmin = fa
             el.onclick = () => {
                 const label = el.getAttribute('data-contact-stat');
                 const d = contactStatDefs.find(x => x.label === label);
-                $('missingListTitle').textContent = `聯絡簿${label}詳情`;
+                $('missingListTitle').textContent = `聯絡簿${label}清單`;
                 $('missingListBody').innerHTML = `<p>${d.list.length ? d.list.map(n => escapeHtml(n)).join('、') : '無'}</p>`;
                 $('missingListModal').style.display = 'flex';
             };

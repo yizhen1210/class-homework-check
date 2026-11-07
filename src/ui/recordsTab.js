@@ -157,7 +157,7 @@ export function renderRecordsTab(records, settings, isAdmin, callbacks = {}) {
             el.onclick = () => {
                 const type = el.getAttribute('data-stat');
                 if (type === 'missing') {
-                    $('missingListTitle').textContent = '未繳詳情';
+                    $('missingListTitle').textContent = '未繳清單';
                     $('missingListBody').innerHTML = assignments.length ? assignments.map(a => {
                         const applicable = students.filter(s => !isPulledOut(s, subjNameOf(a)));
                         const missing = applicable.filter(s => statusOf(s.id, a.id) !== '已繳');
@@ -165,7 +165,7 @@ export function renderRecordsTab(records, settings, isAdmin, callbacks = {}) {
                     }).join('') : '<p>目前尚無作業</p>';
                 } else {
                     const signAssignments = assignments.filter(a => a.needsSign || a.signOnly);
-                    $('missingListTitle').textContent = '未簽名詳情';
+                    $('missingListTitle').textContent = '未簽名清單';
                     $('missingListBody').innerHTML = signAssignments.length ? signAssignments.map(a => {
                         const applicable = students.filter(s => !isPulledOut(s, subjNameOf(a)));
                         const unsigned = applicable.filter(s => {
